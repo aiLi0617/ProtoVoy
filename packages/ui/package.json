@@ -18,7 +18,7 @@
     "@apivoy/import-export": "workspace:*",
     "@apivoy/request-model": "workspace:*",
     "@monaco-editor/react": "^4.7.0",
-    "@tanstack/react-query": "^5.102.8",
+    "@tanstack/react-query": "^5.103.1",
     "monaco-editor": "^0.56.0",
     "typescript": "^5.8.3",
     "zustand": "^5.0.15"
@@ -28,7 +28,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.20.2",
+    "@types/node": "^22.20.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "react": "^19.3.0",
