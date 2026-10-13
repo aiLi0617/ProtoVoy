@@ -12,7 +12,7 @@ test("resource tree distinguishes HTTP request methods by color", async ({ page 
       await route.fulfill({
         headers,
         json: {
-          service: "apivoy-agent",
+          service: "protovoy-agent",
           version: "0.2.0",
           agentVersion: "0.2.0",
           protocolApiVersion: "1",

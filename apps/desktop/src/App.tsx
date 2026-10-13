@@ -1,4 +1,4 @@
-import { amqpRequestEnvelope, kafkaRequestEnvelope, mqttRequestEnvelope, redisRequestEnvelope, sqlRequestEnvelope } from "@apivoy/ui";
+import { amqpRequestEnvelope, kafkaRequestEnvelope, mqttRequestEnvelope, redisRequestEnvelope, sqlRequestEnvelope } from "@protovoy/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -39,7 +39,7 @@ import {
   type PluginManifest,
   type MockRule,
   type MockServerStatus,
-} from "@apivoy/ui";
+} from "@protovoy/ui";
 import {
   CLIENT_VERSION,
   selectResponsePreview,
@@ -48,40 +48,37 @@ import {
   type ExecutionEvent,
   type RequestEnvelope,
   type ResponseMeta,
-} from "@apivoy/request-model";
+} from "@protovoy/request-model";
+import { persistAgentToken, resolveAgentToken, resolveAgentUrl } from "@protovoy/app-wiring";
 import { useEffect, useState } from "react";
 
 function agentBaseUrl(): string {
-  try {
-    const override = localStorage.getItem("apivoy:agent-url")?.trim();
-    if (override) return override;
-  } catch { /* ignore */ }
-  return (import.meta.env.VITE_APIVOY_AGENT_URL as string | undefined) ?? "http://127.0.0.1:39217";
+  return resolveAgentUrl({
+    envUrl: import.meta.env.VITE_PROTOVOY_AGENT_URL as string | undefined,
+  });
 }
 
 function configuredAgentToken(): string | undefined {
-  try {
-    const override = localStorage.getItem("apivoy-agent-token");
-    if (override) return override;
-  } catch { /* ignore */ }
-  return import.meta.env.VITE_APIVOY_AGENT_TOKEN as string | undefined;
+  return resolveAgentToken({
+    envToken: import.meta.env.VITE_PROTOVOY_AGENT_TOKEN as string | undefined,
+  });
 }
 
 let activeAgentToken = configuredAgentToken();
 let agentSessionPromise: Promise<void> | null = null;
 const bootstrapToken = configuredAgentToken();
 if (bootstrapToken) {
-  try { localStorage.setItem("apivoy-agent-token", bootstrapToken); } catch { /* ignore */ }
+  persistAgentToken(bootstrapToken);
 }
 
 function agentHeaders(): Headers {
-  const headers = new Headers({ "Content-Type": "application/json", "X-ApiVoy-Protocol-Api-Version": "1", "X-ApiVoy-Client": "desktop", "X-ApiVoy-Client-Version": CLIENT_VERSION });
+  const headers = new Headers({ "Content-Type": "application/json", "X-ProtoVoy-Protocol-Api-Version": "1", "X-ProtoVoy-Client": "desktop", "X-ProtoVoy-Client-Version": CLIENT_VERSION });
   if (activeAgentToken) headers.set("Authorization", `Bearer ${activeAgentToken}`);
   return headers;
 }
 
 async function agentJson<T>(path: string, init?: RequestInit): Promise<T> {
-  if (bootstrapToken && !agentSessionPromise) agentSessionPromise = (async () => { const response = await fetch(`${agentBaseUrl()}/v1/session`, { method: "POST", headers: { Authorization: `Bearer ${bootstrapToken}`, "X-ApiVoy-Protocol-Api-Version": "1" } }); if (!response.ok) throw new Error(`Local Agent session ${response.status}`); const session = await response.json() as { token: string }; activeAgentToken = session.token; localStorage.setItem("apivoy-agent-token", session.token); })();
+  if (bootstrapToken && !agentSessionPromise) agentSessionPromise = (async () => { const response = await fetch(`${agentBaseUrl()}/v1/session`, { method: "POST", headers: { Authorization: `Bearer ${bootstrapToken}`, "X-ProtoVoy-Protocol-Api-Version": "1" } }); if (!response.ok) throw new Error(`Local Agent session ${response.status}`); const session = await response.json() as { token: string }; activeAgentToken = session.token; persistAgentToken(session.token); })();
   await agentSessionPromise;
   const response = await fetch(`${agentBaseUrl()}${path}`, { ...init, headers: agentHeaders() });
   if (!response.ok) throw new Error(`Local Agent ${response.status}: ${await response.text()}`);
@@ -96,7 +93,7 @@ async function tcpSessionConnection(target: string) {
   });
   return {
     url: `${agentBaseUrl().replace(/^http/, "ws")}/v1/tcp-session`,
-    protocols: ["apivoy", `apivoy-ticket.${ticket}`],
+    protocols: ["protovoy", `protovoy-ticket.${ticket}`],
   };
 }
 
@@ -213,8 +210,8 @@ export function App() {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   useEffect(() => {
     const reset = () => { setSelectedRequestId(null); };
-    window.addEventListener("apivoy-new-workbench", reset);
-    return () => window.removeEventListener("apivoy-new-workbench", reset);
+    window.addEventListener("protovoy-new-workbench", reset);
+    return () => window.removeEventListener("protovoy-new-workbench", reset);
   }, []);
 
   async function refreshTree() {
@@ -305,7 +302,7 @@ export function App() {
     <AppShell
       channelLabel="Desktop ↔ Rust Core"
       projectContext={{ projects: tree?.projects ?? [], selectedProjectId, onSelectProject: (projectId) => { setSelectedProjectId(projectId); setSelectedCollectionId(tree?.collections.find((item) => item.projectId === projectId)?.id ?? ""); setSelectedRequestId(null); } }}
-      requestHistory={{ onList: listRequestHistory, onReplay: replayRequestHistory, requestEditor: { onSend: executeHistoryRequest, onSendEnvelope: executeHistoryEnvelope, onCancel: async (executionId) => { await invoke<boolean>("cancel_execution", { id: executionId }); }, onSaveInterface: async (request, collectionId) => { await invoke("save_request", { request: toInvokeRequest(request), projectId: selectedProjectId, collectionId }); await refreshTree(); }, onSaveEnvelopeInterface: async (request, collectionId) => { await invoke("save_envelope", { request, projectId: selectedProjectId, collectionId }); await refreshTree(); }, onSaveDebugCase: async (request, parent) => { await invoke("save_request", { request: toInvokeRequest(request), projectId: parent.projectId, collectionId: parent.collectionId }); await refreshTree(); }, onSaveEnvelopeDebugCase: async (request, parent) => { await invoke("save_envelope", { request, projectId: parent.projectId, collectionId: parent.collectionId }); await refreshTree(); }, onOpenInterface: async (id) => { const record = tree?.requests.find((request) => request.id === id); if (record) { setSelectedProjectId(record.projectId); setSelectedCollectionId(record.collectionId); setSelectedRequestId(id); } const stored = await invoke<StoredRequest | null>("get_request", { id }); if (stored) window.dispatchEvent(new CustomEvent("apivoy-open-request", { detail: stored.envelope })); }, interfaces: (tree?.requests ?? []).filter((request) => !request.envelope?.variables?.__apivoyCaseOf).map((request) => ({ id: request.id, name: request.name, projectId: request.projectId, collectionId: request.collectionId, method: request.method, protocolId: request.protocolId, target: request.target })), saveCollections: (tree?.collections ?? []).filter((collection) => collection.projectId === selectedProjectId), saveModules: tree?.modules ?? [], defaultSaveCollectionId: selectedCollectionId } }}
+      requestHistory={{ onList: listRequestHistory, onReplay: replayRequestHistory, requestEditor: { onSend: executeHistoryRequest, onSendEnvelope: executeHistoryEnvelope, onCancel: async (executionId) => { await invoke<boolean>("cancel_execution", { id: executionId }); }, onSaveInterface: async (request, collectionId) => { await invoke("save_request", { request: toInvokeRequest(request), projectId: selectedProjectId, collectionId }); await refreshTree(); }, onSaveEnvelopeInterface: async (request, collectionId) => { await invoke("save_envelope", { request, projectId: selectedProjectId, collectionId }); await refreshTree(); }, onSaveDebugCase: async (request, parent) => { await invoke("save_request", { request: toInvokeRequest(request), projectId: parent.projectId, collectionId: parent.collectionId }); await refreshTree(); }, onSaveEnvelopeDebugCase: async (request, parent) => { await invoke("save_envelope", { request, projectId: parent.projectId, collectionId: parent.collectionId }); await refreshTree(); }, onOpenInterface: async (id) => { const record = tree?.requests.find((request) => request.id === id); if (record) { setSelectedProjectId(record.projectId); setSelectedCollectionId(record.collectionId); setSelectedRequestId(id); } const stored = await invoke<StoredRequest | null>("get_request", { id }); if (stored) window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: stored.envelope })); }, interfaces: (tree?.requests ?? []).filter((request) => !request.envelope?.variables?.__protovoyCaseOf).map((request) => ({ id: request.id, name: request.name, projectId: request.projectId, collectionId: request.collectionId, method: request.method, protocolId: request.protocolId, target: request.target })), saveCollections: (tree?.collections ?? []).filter((collection) => collection.projectId === selectedProjectId), saveModules: tree?.modules ?? [], defaultSaveCollectionId: selectedCollectionId } }}
       connectionStatus={null}
       environment={{
         onLoad: async () => invoke<{ variables: Record<string, string>; secretRefs?: string[] }>("get_environment", { id: "default-env" }),
@@ -319,7 +316,7 @@ export function App() {
       }}
       explorer={<WorkspaceExplorer tree={tree} selectedProjectId={selectedProjectId} selectedCollectionId={selectedCollectionId} selectedRequestId={selectedRequestId}
       onSelectCollection={(projectId, collectionId) => { setSelectedProjectId(projectId); setSelectedCollectionId(collectionId); }}
-      onOpenRequest={async (id) => { const stored = await invoke<StoredRequest | null>("get_request", { id }); setSelectedRequestId(id); if (!stored) return; const parentId = stored.envelope.variables?.__apivoyCaseOf; const parent = parentId ? await invoke<StoredRequest | null>("get_request", { id: parentId }) : null; const detail = parent ? { ...stored.envelope, metadata: { ...(stored.envelope.metadata ?? {}), __apivoyCaseInterfaceName: parent.envelope.name } } : stored.envelope; window.dispatchEvent(new CustomEvent("apivoy-open-request", { detail })); }}
+      onOpenRequest={async (id) => { const stored = await invoke<StoredRequest | null>("get_request", { id }); setSelectedRequestId(id); if (!stored) return; const parentId = stored.envelope.variables?.__protovoyCaseOf; const parent = parentId ? await invoke<StoredRequest | null>("get_request", { id: parentId }) : null; const detail = parent ? { ...stored.envelope, metadata: { ...(stored.envelope.metadata ?? {}), __protovoyCaseInterfaceName: parent.envelope.name } } : stored.envelope; window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail })); }}
       onCreateWorkspace={async (name) => { await invoke("create_workspace", { name, rootPath: null }); await refreshTree(); }}
       onRenameWorkspace={async (id, name) => { await invoke("rename_workspace", { id, name }); await refreshTree(); }}
       onArchiveWorkspace={async (id, archived) => { await invoke("archive_workspace", { id, archived }); await refreshTree(); }}
@@ -338,7 +335,7 @@ export function App() {
       onMoveRequest={async (id, projectId, collectionId) => { await invoke("move_request", { id, projectId, collectionId }); await refreshTree(); }}
       onImportRequests={async (projectId, collectionId, requests) => { const paths = new Map<string, string>(); for (const request of requests) { let parentId = collectionId; let key = collectionId; for (const segment of request.collectionPath ?? []) { key += `/${segment}`; let id = paths.get(key); if (!id) { const existing = tree?.collections.find((item) => item.projectId === projectId && (item.parentId ?? null) === parentId && item.name === segment); const created = existing ?? await invoke<WorkspaceTree["collections"][number]>("create_collection", { projectId, parentId, name: segment }); id = created.id; paths.set(key, id); } parentId = id; } await invoke("save_request", { request: toInvokeRequest({ name: request.name, url: request.url, method: request.method, headers: Object.entries(request.headers), body: request.body, timeoutMs: 30000, variables: request.variables ?? {}, assertions: [], auth: null, followRedirects: true, retryMax: 0, retryBackoffMs: 250, proxy: null, tlsVerify: true }), projectId, collectionId: parentId }); } await refreshTree(); }}
       onExportProject={async (project) => { const items = tree?.requests.filter((item) => item.projectId === project.id) ?? []; return Promise.all(items.map(async (item) => { const stored = await invoke<StoredRequest | null>("get_request", { id: item.id }); const request = stored ? fromEnvelope(stored.envelope, stored.target) : null; return { name: item.name, method: request?.method ?? item.method ?? "GET", url: request?.url ?? item.target, headers: Object.fromEntries(request?.headers ?? []), body: request?.body }; })); }}
-      onDeleteRequest={async (id) => { await invoke("delete_request", { id }); window.dispatchEvent(new CustomEvent("apivoy-request-deleted", { detail: { requestId: id } })); if (selectedRequestId === id) setSelectedRequestId(null); await refreshTree(); }}
+      onDeleteRequest={async (id) => { await invoke("delete_request", { id }); window.dispatchEvent(new CustomEvent("protovoy-request-deleted", { detail: { requestId: id } })); if (selectedRequestId === id) setSelectedRequestId(null); await refreshTree(); }}
     />}>
       <WorkbenchDeck saveCollections={tree?.collections ?? []} saveModules={tree?.modules ?? []} onCreateSaveCollection={async (projectId, parentId, name, moduleId) => { const created = await invoke<WorkspaceTree["collections"][number]>("create_collection", { projectId, parentId, name, moduleId }); await refreshTree(); return created; }} definitionClient={{ list: (projectId) => invoke("list_api_definitions", { projectId }), save: (input) => invoke("save_api_definition", { request: input }), binding: (requestId) => invoke("get_request_definition_binding", { requestId }), bind: (requestId, definitionId, operationRef) => invoke("bind_request_definition", { requestId, definitionId, operationRef }), unbind: (requestId) => invoke("unbind_request_definition", { requestId }) }} tabs={buildWorkbenchTabs({ runner: false })} projects={(tree?.projects ?? []).map((project) => { const requests = tree?.requests.filter((request) => request.projectId === project.id) ?? []; return { id: project.id, name: project.name, resourceCount: requests.length, protocols: Array.from(new Set(requests.map((request) => request.protocolId ?? request.method ?? "http"))) }; })} selectedProjectId={selectedProjectId} onSelectProject={(projectId) => { setSelectedProjectId(projectId); setSelectedCollectionId(tree?.collections.find((item) => item.projectId === projectId)?.id ?? ""); setSelectedRequestId(null); }} onCreateProject={async (name) => { const created = await invoke<WorkspaceTree["projects"][number]>("create_project", { workspaceId: tree?.workspaces[0]?.id ?? "default-workspace", name }); setSelectedProjectId(created.id); setSelectedCollectionId(""); await refreshTree(); }} onRenameProject={async (id, name) => { await invoke("rename_project", { id, name }); await refreshTree(); }} onCloneProject={cloneProject} onDeleteProject={async (id) => { await invoke("delete_project", { id }); if (selectedProjectId === id) { const fallback = tree?.projects.find((project) => project.id !== id); setSelectedProjectId(fallback?.id ?? ""); setSelectedCollectionId(fallback ? tree?.collections.find((item) => item.projectId === fallback.id)?.id ?? "" : ""); setSelectedRequestId(null); } await refreshTree(); }} saveTargetLabel={`${selectedProjectId} / ${selectedCollectionId}`}>
       <HttpWorkbench

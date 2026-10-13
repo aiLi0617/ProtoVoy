@@ -34,4 +34,4 @@ When touching Cargo.lock / UI parsers / Agent health / workflows, also confirm:
 
 - [ ] `cargo audit -D warnings` if Rust lockfile changed
 - [ ] No new CodeQL-prone patterns (DOMParser validation, chained HTML unescape, path `__proto__` writes, unbounded template regex) — see checklist §2
-- [ ] Installer/smoke health asserts `service: "apivoy-agent"` if Agent contract changed — see checklist §3
+- [ ] Installer/smoke health asserts `service: "protovoy-agent"` if Agent contract changed — see checklist §3

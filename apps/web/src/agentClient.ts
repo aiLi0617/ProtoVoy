@@ -8,8 +8,8 @@ import {
   type ResponseMeta,
   reduceCompletedResponsePreview,
   selectResponsePreview,
-} from "@apivoy/request-model";
-import type { AssertionResultEvent } from "@apivoy/request-model";
+} from "@protovoy/request-model";
+import type { AssertionResultEvent } from "@protovoy/request-model";
 import type {
   HistoryFilter,
   HistoryItem,
@@ -26,31 +26,33 @@ import type {
   CapturedExchange,
   CollectionRunCase,
   TcpSessionConnection,
-} from "@apivoy/ui";
+} from "@protovoy/ui";
+import { resolveAgentToken, resolveAgentUrl } from "@protovoy/app-wiring";
 
-const runtime = (window as Window & { __APIVOY_CONFIG__?: { agentUrl?: string; agentToken?: string } }).__APIVOY_CONFIG__;
+const runtime = (window as Window & {
+  __PROTOVOY_CONFIG__?: { agentUrl?: string; agentToken?: string };
+}).__PROTOVOY_CONFIG__;
 
 function agentBase(): string {
-  try {
-    const override = localStorage.getItem("apivoy:agent-url")?.trim();
-    if (override) return override;
-  } catch { /* ignore */ }
-  return runtime?.agentUrl ?? (import.meta.env.VITE_APIVOY_AGENT_URL as string | undefined) ?? "http://127.0.0.1:39217";
+  return resolveAgentUrl({
+    runtime,
+    envUrl: import.meta.env.VITE_PROTOVOY_AGENT_URL as string | undefined,
+  });
 }
 
 function configuredAgentToken(): string | undefined {
-  try {
-    const override = localStorage.getItem("apivoy-agent-token");
-    if (override) return override;
-  } catch { /* ignore */ }
-  return runtime?.agentToken ?? (import.meta.env.VITE_APIVOY_AGENT_TOKEN as string | undefined);
+  return resolveAgentToken({
+    runtime,
+    envToken: import.meta.env.VITE_PROTOVOY_AGENT_TOKEN as string | undefined,
+  });
 }
 
 let activeAgentToken = configuredAgentToken();
 let sessionPromise: Promise<void> | null = null;
+let legacyAgentHeaders = false;
 const bootstrapToken = configuredAgentToken();
 if (bootstrapToken) {
-  try { localStorage.setItem("apivoy-agent-token", bootstrapToken); } catch { /* ignore */ }
+  try { localStorage.setItem("protovoy:agent-token", bootstrapToken); } catch { /* ignore */ }
 }
 
 export interface AgentHealth {
@@ -100,17 +102,20 @@ export async function getRequestDefinitionBindingViaAgent(requestId: string): Pr
 export async function bindRequestDefinitionViaAgent(requestId: string, definitionId: string, operationRef?: string): Promise<RequestDefinitionBindingRecord> { await checkAgentHandshake(); const response = await fetch(`${agentBase()}/v1/requests/${requestId}/definition-binding`, { method: "PUT", headers: agentHeaders(), body: JSON.stringify({ definitionId, operationRef }) }); if (!response.ok) throw new Error(await response.text()); return response.json(); }
 export async function unbindRequestDefinitionViaAgent(requestId: string): Promise<void> { await checkAgentHandshake(); const response = await fetch(`${agentBase()}/v1/requests/${requestId}/definition-binding`, { method: "DELETE", headers: agentHeaders() }); if (!response.ok) throw new Error(await response.text()); }
 
-function agentHeaders(extra?: HeadersInit): Headers {
+export function agentRequestHeaders(extra?: HeadersInit): Headers {
   const headers = new Headers(extra);
+  const product = legacyAgentHeaders ? "ApiVoy" : "ProtoVoy";
   headers.set("Content-Type", "application/json");
-  headers.set("X-ApiVoy-Protocol-Api-Version", PROTOCOL_API_VERSION);
-  headers.set("X-ApiVoy-Client", "web");
-  headers.set("X-ApiVoy-Client-Version", CLIENT_VERSION);
+  headers.set(`X-${product}-Protocol-Api-Version`, PROTOCOL_API_VERSION);
+  headers.set(`X-${product}-Client`, "web");
+  headers.set(`X-${product}-Client-Version`, CLIENT_VERSION);
   if (activeAgentToken) {
     headers.set("Authorization", `Bearer ${activeAgentToken}`);
   }
   return headers;
 }
+
+const agentHeaders = agentRequestHeaders;
 
 export async function checkAgentHandshake(): Promise<AgentHealth> {
   const res = await fetch(`${agentBase()}/health`);
@@ -118,6 +123,7 @@ export async function checkAgentHandshake(): Promise<AgentHealth> {
     throw new Error(`Agent health check failed: ${res.status}`);
   }
   const health = (await res.json()) as AgentHealth;
+  legacyAgentHeaders = health.service === "apivoy-agent";
   if (health.protocolApiVersion !== PROTOCOL_API_VERSION) {
     throw new Error(
       `协议版本不兼容：Web=${PROTOCOL_API_VERSION}，Agent=${health.protocolApiVersion}。请升级客户端或 Agent。`,
@@ -125,7 +131,7 @@ export async function checkAgentHandshake(): Promise<AgentHealth> {
   }
   if (bootstrapToken && !sessionPromise) {
     sessionPromise = (async () => {
-      const response = await fetch(`${agentBase()}/v1/session`, { method: "POST", headers: { "Authorization": `Bearer ${bootstrapToken}`, "X-ApiVoy-Protocol-Api-Version": PROTOCOL_API_VERSION } });
+      const response = await fetch(`${agentBase()}/v1/session`, { method: "POST", headers: agentRequestHeaders({ Authorization: `Bearer ${bootstrapToken}` }) });
       if (!response.ok) throw new Error(`Agent session exchange failed: ${response.status}`);
       const session = await response.json() as { token: string };
       activeAgentToken = session.token;
@@ -436,7 +442,7 @@ export async function tcpSessionConnectionViaAgent(target: string): Promise<TcpS
   const { ticket } = await response.json() as { ticket: string };
   return {
     url: `${agentBase().replace(/^http/, "ws")}/v1/tcp-session`,
-    protocols: ["apivoy", `apivoy-ticket.${ticket}`],
+    protocols: ["protovoy", `protovoy-ticket.${ticket}`],
   };
 }
 export async function listPluginsViaAgent(): Promise<InstalledPlugin[]> { await checkAgentHandshake(); const res = await fetch(`${agentBase()}/v1/plugins`, { headers: agentHeaders() }); if (!res.ok) throw new Error(await res.text()); return res.json(); }

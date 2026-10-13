@@ -11,10 +11,10 @@ const ROW_VALUE_TYPES: Array<{ value: RowValueType; label: string }> = [
 ];
 
 const INPUT_STYLE: CSSProperties = {
-  flex: 1, minWidth: 220, fontFamily: "var(--apivoy-mono)", fontSize: 12,
-  color: "var(--apivoy-text)", background: "var(--apivoy-control-bg)",
-  border: "1px solid var(--apivoy-control-border)", borderRadius: "var(--apivoy-control-radius)",
-  minHeight: "var(--apivoy-control-height)", padding: "0 var(--apivoy-control-padding-x)", outline: "none",
+  flex: 1, minWidth: 220, fontFamily: "var(--protovoy-mono)", fontSize: 12,
+  color: "var(--protovoy-text)", background: "var(--protovoy-control-bg)",
+  border: "1px solid var(--protovoy-control-border)", borderRadius: "var(--protovoy-control-radius)",
+  minHeight: "var(--protovoy-control-height)", padding: "0 var(--protovoy-control-padding-x)", outline: "none",
 };
 
 export interface HeaderRow {

@@ -27,7 +27,7 @@ type MonacoRuntime = typeof globalThis & { MonacoEnvironment?: { getWorker: (_mo
 
 loader.config({ monaco });
 
-monaco.editor.defineTheme("apivoy-dark", {
+monaco.editor.defineTheme("protovoy-dark", {
   base: "vs-dark",
   inherit: true,
   rules: [
@@ -52,7 +52,7 @@ monaco.editor.defineTheme("apivoy-dark", {
   },
 });
 
-monaco.editor.defineTheme("apivoy-light", {
+monaco.editor.defineTheme("protovoy-light", {
   base: "vs",
   inherit: true,
   rules: [

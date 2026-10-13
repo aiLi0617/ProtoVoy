@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ApiVoy 图标库选型对比</title>
+  <title>ProtoVoy 图标库选型对比</title>
   <style>
     :root {
       color-scheme: dark;
@@ -85,12 +85,12 @@
 </head>
 <body>
   <main class="page">
-    <p class="eyebrow">APIVOY · ICON SYSTEM STUDY</p>
+    <p class="eyebrow">PROTOVOY · ICON SYSTEM STUDY</p>
     <h1>四套图标库，放进同一个开发者工具里看。</h1>
-    <p class="lead">这份样张用五个高频动作比较 Lucide、Tabler、Heroicons 与 Phosphor。观察轮廓密度、圆角、留白和小尺寸清晰度，比单看图库首页更容易判断哪套适合 ApiVoy。</p>
+    <p class="lead">这份样张用五个高频动作比较 Lucide、Tabler、Heroicons 与 Phosphor。观察轮廓密度、圆角、留白和小尺寸清晰度，比单看图库首页更容易判断哪套适合 ProtoVoy。</p>
     <div class="verdict">
       <div class="verdict-mark">L</div>
-      <div><strong>ApiVoy 推荐：Lucide 作为唯一 UI 图标源</strong><span>现有 24×24、currentColor、1.8px 描边组件可以平滑迁移；协议和厂商品牌标志另用 Simple Icons 或官方 SVG。</span></div>
+      <div><strong>ProtoVoy 推荐：Lucide 作为唯一 UI 图标源</strong><span>现有 24×24、currentColor、1.8px 描边组件可以平滑迁移；协议和厂商品牌标志另用 Simple Icons 或官方 SVG。</span></div>
     </div>
 
     <div class="section-head"><h2>同一动作横向对比</h2><p>真实图标由 Iconify 仅用于本地选型预览</p></div>
@@ -137,7 +137,7 @@
       <article><h3>Phosphor</h3><dl><dt>气质</dt><dd>友好、鲜明、表现力丰富</dd><dt>覆盖</dt><dd>广，且每个图标有多种 weight</dd><dt>优势</dt><dd>regular/bold/fill/duotone 可表达状态</dd><dt>限制</dt><dd>若权重不受控，很容易混成多套风格</dd></dl><p class="fit">适合：消费产品、教育、内容工具、需要插画感的界面。</p></article>
     </section>
 
-    <div class="section-head"><h2>ApiVoy 落地方式</h2><p>先统一规则，再替换路径</p></div>
+    <div class="section-head"><h2>ProtoVoy 落地方式</h2><p>先统一规则，再替换路径</p></div>
     <section class="decision">
       <article><h3>主图标系统</h3><ul><li>使用 <code>lucide-react</code>，保留现有 <code>&lt;Icon name="…" /&gt;</code> 包装层。</li><li>工具栏 16–18px，导航 18px，空状态 24px。</li><li>全局固定 1.8px 或 2px 描边，只选一种。</li><li>使用 <code>currentColor</code>，由按钮和状态组件控制颜色。</li></ul></article>
       <article><h3>例外与边界</h3><ul><li>GraphQL、GitHub、Kafka 等品牌只用官方 SVG 或 Simple Icons。</li><li>不要在同一区域混入 Tabler 或 Phosphor 补缺口。</li><li>缺少协议图标时，优先使用语义隐喻，再绘制同网格自定义图标。</li><li>字符按钮 <code>••• ↑ ↓ × ✓</code> 逐步替换为统一 SVG。</li></ul></article>

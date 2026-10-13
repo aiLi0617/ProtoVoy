@@ -1,6 +1,6 @@
 # Mock 服务
 
-ApiVoy 的 Mock 数据面由独立的 `apivoy-mock` 进程提供。它与 Local Agent 使用同一仓库和配置目录，但拥有独立端口；一个进程同时承载所有项目和服务，不会为每个项目启动后端。
+ProtoVoy 的 Mock 数据面由独立的 `protovoy-mock` 进程提供。它与 Local Agent 使用同一仓库和配置目录，但拥有独立端口；一个进程同时承载所有项目和服务，不会为每个项目启动后端。
 
 ## 生命周期与安全
 
@@ -13,9 +13,9 @@ ApiVoy 的 Mock 数据面由独立的 `apivoy-mock` 进程提供。它与 Local 
 
 - 路径模式：`/m1/{projectKey}/{serviceKey}/{path}`
 - ID 模式：`/m2/{projectKey}/{serviceKey}/{mockOperationId}`
-- 可选选择参数：`apivoyApiId`、`apivoyResponseId`、`apivoyScenarioId`
+- 可选选择参数：`protovoyApiId`、`protovoyResponseId`、`protovoyScenarioId`
 
-旧的 `/mock` 和 `/mock-ws` 地址不再兼容。路径模式若同时对应多个接口会返回 `409 Conflict`，调用方应改用 ID 模式或传入 `apivoyApiId`。
+旧的 `/mock` 和 `/mock-ws` 地址不再兼容。路径模式若同时对应多个接口会返回 `409 Conflict`，调用方应改用 ID 模式或传入 `protovoyApiId`。
 
 ## 响应与场景
 

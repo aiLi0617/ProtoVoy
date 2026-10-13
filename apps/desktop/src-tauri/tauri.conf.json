@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ApiVoy",
+  "productName": "ProtoVoy",
   "version": "0.2.0",
-  "identifier": "com.apivoy.desktop",
+  "identifier": "com.protovoy.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ApiVoy",
+        "title": "ProtoVoy",
         "width": 1280,
         "height": 840,
         "resizable": true,

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ExecutionEvent, ResponseMeta } from "@apivoy/request-model";
+import type { ExecutionEvent, ResponseMeta } from "@protovoy/request-model";
 import { requestNameFromUrl, type HttpRunResult, type HttpSendHooks, type HttpWorkbenchRequest } from "./HttpWorkbench";
 import { KeyValueRows, createQueryRow, queryRowsFromUrl, urlWithQueryRows, type HeaderRow } from "./KeyValueEditor";
 import { ProtocolCodeGenerator } from "./ProtocolCodeGenerator";
@@ -42,7 +42,7 @@ export function SseWorkbench({onConnect,onCancel,onSave,externalRequest}:SseWork
   const [detailFormat,setDetailFormat]=useState<"pretty"|"raw">("pretty"),[detailContentType,setDetailContentType]=useState<"auto"|"json"|"xml"|"html"|"javascript"|"text">("auto"),[detailWordWrap,setDetailWordWrap]=useState(true);
   const eventBufferRef=useRef("");
   const detailEditorRef=useRef<CodeEditorHandle|null>(null);
-  useMessageDetailResize("apivoy-sse-event-list-ratio",Boolean(selectedEventId),".sse-event-inspector.has-detail");
+  useMessageDetailResize("protovoy-sse-event-list-ratio",Boolean(selectedEventId),".sse-event-inspector.has-detail");
   useEffect(()=>{const apply=(value:SseWorkbenchRequest)=>{const target=normalizeUrl(value.url);setName(value.name===`SSE ${value.url}`?"":value.name??"");setUrl(target);setQueryRows(queryRowsFromUrl(target));setHeaderRows(rowsFromPairs(value.headers));setLastEventId(value.lastEventId??"");setReconnectMax(value.reconnectMax);setReconnectDelayMs(value.reconnectDelayMs)};if(externalRequest)apply(externalRequest);else{const draft=readWorkbenchDraft<SseWorkbenchRequest>("sse");if(draft)apply(draft)}},[externalRequest]);
   useWorkbenchHydration("sse",(envelope)=>{const detail=envelope as {name?:string;target?:string;payload?:{type?:string;headers?:Array<[string,string]>;lastEventId?:string|null;reconnectMax?:number;reconnectDelayMs?:number}};if(detail?.payload?.type!=="sse")return;const target=normalizeUrl(detail.target);setName(detail.name===`SSE ${detail.target}`?"":detail.name??"");setUrl(target);setQueryRows(queryRowsFromUrl(target));setHeaderRows(rowsFromPairs(detail.payload.headers??[]));setLastEventId(detail.payload.lastEventId??"");setReconnectMax(detail.payload.reconnectMax??3);setReconnectDelayMs(detail.payload.reconnectDelayMs??1000)});
   const request=():SseWorkbenchRequest=>{const target=urlWithQueryRows(url,queryRows);return {name:name.trim()||requestNameFromUrl(target),url:target,headers:enabledPairs(headerRows),lastEventId:lastEventId||undefined,reconnectMax,reconnectDelayMs,timeoutMs:0}};

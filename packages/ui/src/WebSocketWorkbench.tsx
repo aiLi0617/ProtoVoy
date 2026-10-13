@@ -45,7 +45,7 @@ export function WebSocketWorkbench({ onSave, externalRequest, onTitleChange }: W
   const [selectedFrameId, setSelectedFrameId] = useState<string | null>(null);
   const [messageListRatio, setMessageListRatio] = useState(() => {
     if (typeof window === "undefined") return 46;
-    const saved = Number(window.localStorage.getItem("apivoy-websocket-message-list-ratio"));
+    const saved = Number(window.localStorage.getItem("protovoy-websocket-message-list-ratio"));
     return Number.isFinite(saved) && saved >= 5 && saved <= 95 ? saved : 46;
   });
   const [detailFormat, setDetailFormat] = useState<"pretty" | "hexdump" | "raw">("pretty");
@@ -65,7 +65,7 @@ export function WebSocketWorkbench({ onSave, externalRequest, onTitleChange }: W
   const [compactResponseDetails, setCompactResponseDetails] = useState(false);
   const responseDetailsStackedByLayout = useAppStore((state) => state.splitDirection === "horizontal");
   const responseDetailsStacked = responseDetailsStackedByLayout || compactResponseDetails;
-  useEffect(() => { window.localStorage.setItem("apivoy-websocket-message-list-ratio", String(messageListRatio)); }, [messageListRatio]);
+  useEffect(() => { window.localStorage.setItem("protovoy-websocket-message-list-ratio", String(messageListRatio)); }, [messageListRatio]);
   useEffect(() => {
     const browser = messageBrowserRef.current;
     if (!browser || !selectedFrameId) return;

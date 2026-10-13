@@ -11,7 +11,7 @@ test("restores the live request detail layout", async ({ page }, testInfo) => {
       return;
     }
     if (pathname === "/health") {
-      await route.fulfill({ headers: cors, json: { service: "apivoy-agent", version: "test", agentVersion: "test", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } });
+      await route.fulfill({ headers: cors, json: { service: "protovoy-agent", version: "test", agentVersion: "test", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } });
       return;
     }
     if (pathname === "/v1/session" && request.method() === "POST") {

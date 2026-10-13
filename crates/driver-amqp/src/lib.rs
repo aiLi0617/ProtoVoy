@@ -300,7 +300,7 @@ impl ProtocolDriver for AmqpDriver {
             let mut consumer = channel
                 .basic_consume(
                     payload.queue.as_str().into(),
-                    format!("apivoy-{}", execution_id.0).into(),
+                    format!("protovoy-{}", execution_id.0).into(),
                     BasicConsumeOptions {
                         no_ack: payload.auto_ack,
                         ..Default::default()
@@ -331,7 +331,7 @@ impl ProtocolDriver for AmqpDriver {
                     .await;
             }
         }
-        let _ = connection.close(200, "ApiVoy completed".into()).await;
+        let _ = connection.close(200, "ProtoVoy completed".into()).await;
         let summary = ExecutionSummary {
             execution_id,
             request_id: request.id.0,

@@ -19,9 +19,9 @@ export interface MqttWorkbenchProps {
 
 export function MqttWorkbench({ onSend, onSave, onCancel }: MqttWorkbenchProps) {
   const [name,setName]=useState("MQTT request"), [target,setTarget]=useState("mqtt://127.0.0.1:1883");
-  const [mode,setMode]=useState<"publish"|"subscribe">("publish"), [clientId,setClientId]=useState(`apivoy-${crypto.randomUUID().slice(0,8)}`);
+  const [mode,setMode]=useState<"publish"|"subscribe">("publish"), [clientId,setClientId]=useState(`protovoy-${crypto.randomUUID().slice(0,8)}`);
   const [username,setUsername]=useState(""), [passwordRef,setPasswordRef]=useState(""), [cleanSession,setCleanSession]=useState(true), [keepAliveSeconds,setKeepAliveSeconds]=useState(30);
-  const [topic,setTopic]=useState("apivoy/demo"), [payload,setPayload]=useState('{"hello":"mqtt"}'), [encoding,setEncoding]=useState<"text"|"base64">("text");
+  const [topic,setTopic]=useState("protovoy/demo"), [payload,setPayload]=useState('{"hello":"mqtt"}'), [encoding,setEncoding]=useState<"text"|"base64">("text");
   const [qos,setQos]=useState<0|1|2>(0), [retain,setRetain]=useState(false), [receiveLimit,setReceiveLimit]=useState(1);
   const [caPemRef,setCaPemRef]=useState(""), [serverName,setServerName]=useState("");
   const [result,setResult]=useState<HttpRunResult|null>(null), [message,setMessage]=useState(""), [loading,setLoading]=useState(false), [executionId,setExecutionId]=useState<string|null>(null);

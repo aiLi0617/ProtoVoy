@@ -32,9 +32,9 @@ export function CollaborationHub({ open, onClose, team, comments, sso, initialTa
       const next = (event as CustomEvent<CollaborationTab>).detail;
       if (next === "team" || next === "comments" || next === "sso") setTab(next);
     };
-    window.addEventListener("apivoy-collaboration-tab", onSelectTab);
+    window.addEventListener("protovoy-collaboration-tab", onSelectTab);
     return () => {
-      window.removeEventListener("apivoy-collaboration-tab", onSelectTab);
+      window.removeEventListener("protovoy-collaboration-tab", onSelectTab);
     };
   }, [open]);
   const tabs: CollaborationTab[] = ["team", "comments", "sso"];
@@ -62,5 +62,5 @@ export function CollaborationHub({ open, onClose, team, comments, sso, initialTa
 }
 
 export function openCollaborationHub(tab: CollaborationTab = "team"): void {
-  window.dispatchEvent(new CustomEvent("apivoy-open-collaboration", { detail: tab }));
+  window.dispatchEvent(new CustomEvent("protovoy-open-collaboration", { detail: tab }));
 }

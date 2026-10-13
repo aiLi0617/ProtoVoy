@@ -1,4 +1,4 @@
-use axum::{
+﻿use axum::{
     extract::{Path as AxumPath, Request, State},
     http::{header, HeaderMap, StatusCode},
     middleware::{self, Next},
@@ -39,7 +39,7 @@ use uuid::Uuid;
 
 const API_VERSION: &str = "1";
 const MAX_RESULTS: usize = 500;
-const DEFAULT_GATEWAY_BIND: &str = "127.0.0.1:39218";
+const DEFAULT_GATEWAY_BIND: &str = "127.0.0.1:39219";
 
 #[derive(Clone)]
 struct AppState {
@@ -121,30 +121,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     spawn_scheduler(state.clone());
     let app = app(state);
     let bind = gateway_bind()?;
-    info!(%bind, "ApiVoy Protocol Gateway listening");
+    info!(%bind, "ProtoVoy Protocol Gateway listening");
     axum::serve(tokio::net::TcpListener::bind(bind).await?, app).await?;
     Ok(())
 }
 
 fn gateway_bind() -> Result<SocketAddr, std::net::AddrParseError> {
-    std::env::var("APIVOY_GATEWAY_BIND")
+    std::env::var("PROTOVOY_GATEWAY_BIND")
         .unwrap_or_else(|_| DEFAULT_GATEWAY_BIND.into())
         .parse()
 }
 
 fn build_state() -> Result<AppState, Box<dyn std::error::Error>> {
-    let api_key = std::env::var("APIVOY_GATEWAY_API_KEY")
-        .map_err(|_| "APIVOY_GATEWAY_API_KEY is required")?;
+    let api_key = std::env::var("PROTOVOY_GATEWAY_API_KEY")
+        .map_err(|_| "PROTOVOY_GATEWAY_API_KEY is required")?;
     if api_key.len() < 24 {
-        return Err("APIVOY_GATEWAY_API_KEY must contain at least 24 characters".into());
+        return Err("PROTOVOY_GATEWAY_API_KEY must contain at least 24 characters".into());
     }
     let data_dir = PathBuf::from(
-        std::env::var("APIVOY_GATEWAY_DATA_DIR").unwrap_or_else(|_| ".apivoy-gateway".into()),
+        std::env::var("PROTOVOY_GATEWAY_DATA_DIR")
+            .unwrap_or_else(|_| ".protovoy-gateway".into()),
     );
     fs::create_dir_all(&data_dir)?;
     let jobs_path = data_dir.join("jobs.json");
     let jobs = load_jobs(&jobs_path)?;
-    let max_concurrency = std::env::var("APIVOY_GATEWAY_MAX_CONCURRENCY")
+    let max_concurrency = std::env::var("PROTOVOY_GATEWAY_MAX_CONCURRENCY")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(16usize)
@@ -196,7 +197,7 @@ fn app(state: AppState) -> Router {
 
 async fn health() -> Json<Value> {
     Json(
-        json!({"service":"apivoy-protocol-gateway","version":env!("CARGO_PKG_VERSION"),"status":"ok","apiVersion":API_VERSION}),
+        json!({"service":"protovoy-protocol-gateway","version":env!("CARGO_PKG_VERSION"),"status":"ok","apiVersion":API_VERSION}),
     )
 }
 async fn capabilities(State(state): State<AppState>) -> Json<Value> {
@@ -516,7 +517,7 @@ mod tests {
     use super::*;
     #[test]
     fn jobs_round_trip() {
-        let dir = std::env::temp_dir().join(format!("apivoy-gateway-test-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("protovoy-gateway-test-{}", Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("jobs.json");
         let request = execution_engine::sample_http_get("https://example.com");
@@ -559,7 +560,7 @@ mod tests {
     }
     #[test]
     fn existing_inline_credentials_block_startup() {
-        let dir = std::env::temp_dir().join(format!("apivoy-gateway-test-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("protovoy-gateway-test-{}", Uuid::new_v4()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("jobs.json");
         let job = ScheduledJob {

@@ -57,9 +57,9 @@ pub async fn run_ai_assistant(
     }
     let url = completion_url(&request.endpoint)?;
     let system=match request.task {
-        AiTask::GenerateRequest => "Generate one ApiVoy HTTP request. Return JSON only with keys name, method, url, headers (array of [name,value]), body, assertions (string array), variables (object). Never include credentials or invented secrets.",
+        AiTask::GenerateRequest => "Generate one ProtoVoy HTTP request. Return JSON only with keys name, method, url, headers (array of [name,value]), body, assertions (string array), variables (object). Never include credentials or invented secrets.",
         AiTask::ExplainResponse => "Explain the supplied API response concisely. Identify status semantics, important headers/body fields, likely errors, and concrete next checks. Do not invent unseen data.",
-        AiTask::GenerateAssertions => "Generate robust ApiVoy assertions for the supplied request/response. Return a newline-delimited list using status == N, duration < N, size < N, header NAME == VALUE, body contains TEXT, or jsonpath PATH == VALUE.",
+        AiTask::GenerateAssertions => "Generate robust ProtoVoy assertions for the supplied request/response. Return a newline-delimited list using status == N, duration < N, size < N, header NAME == VALUE, body contains TEXT, or jsonpath PATH == VALUE.",
         AiTask::GenerateDocumentation => "Write concise API documentation from the supplied request context: purpose, request, authentication references, parameters, response, errors, and example usage. Never reveal secret values.",
     };
     let user = match request

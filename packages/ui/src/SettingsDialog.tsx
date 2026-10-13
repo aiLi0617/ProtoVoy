@@ -77,7 +77,7 @@ export function SettingsDialog({ open, onClose, channelLabel }: SettingsDialogPr
           <div>
             <span className="settings-scope-label">{locale === "zh-CN" ? "软件级" : "Application-wide"}</span>
             <h2 id={titleId}>{locale === "zh-CN" ? "软件设置" : "Application settings"}</h2>
-            <p>{locale === "zh-CN" ? "应用于 ApiVoy 软件和当前设备，不随项目切换，也不会写入项目文件。" : "Applies to ApiVoy on this device. These values do not change with projects or enter project files."}</p>
+            <p>{locale === "zh-CN" ? "应用于 ProtoVoy 软件和当前设备，不随项目切换，也不会写入项目文件。" : "Applies to ProtoVoy on this device. These values do not change with projects or enter project files."}</p>
           </div>
           <IconButton ref={closeRef} label={t("action.close")} icon="close" onClick={onClose} />
         </header>
@@ -162,7 +162,7 @@ export function SettingsDialog({ open, onClose, channelLabel }: SettingsDialogPr
                 spellCheck={false}
               />
             </label>
-            <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("apivoy-open-collaboration", { detail: "team" })); }}>
+            <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("protovoy-open-collaboration", { detail: "team" })); }}>
               {t("collaboration.open")}
             </Button>
           </section>
@@ -203,7 +203,7 @@ export function SettingsDialog({ open, onClose, channelLabel }: SettingsDialogPr
               />
             </label>
             <p className="settings-hint">{t("settings.ai.keyHint")}</p>
-            <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("apivoy-select-workbench", { detail: "ai" })); }}>{t("settings.openWorkbench", { name: "AI" })}</Button>
+            <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "ai" })); }}>{t("settings.openWorkbench", { name: "AI" })}</Button>
           </section>
 
           <section className="settings-section category-connection">
@@ -231,15 +231,15 @@ export function SettingsDialog({ open, onClose, channelLabel }: SettingsDialogPr
                 autoComplete="off"
               />
             </label>
-            <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("apivoy-select-workbench", { detail: "gateway" })); }}>{t("settings.openWorkbench", { name: "Gateway" })}</Button>
+            <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "gateway" })); }}>{t("settings.openWorkbench", { name: "Gateway" })}</Button>
           </section>
 
           <section className="settings-section category-plugins">
             <h3>{t("settings.section.plugins")}</h3>
             <p className="settings-hint">{t("settings.plugins.hint")}</p>
             <div className="environment-editor-actions">
-              <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("apivoy-select-workbench", { detail: "plugins" })); }}>{t("settings.openWorkbench", { name: "Plugins" })}</Button>
-              <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("apivoy-select-workbench", { detail: "ai" })); }}>{t("settings.openWorkbench", { name: "AI" })}</Button>
+              <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "plugins" })); }}>{t("settings.openWorkbench", { name: "Plugins" })}</Button>
+              <Button variant="secondary" onClick={() => { onClose(); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "ai" })); }}>{t("settings.openWorkbench", { name: "AI" })}</Button>
             </div>
           </section>
           <section className="settings-section category-shortcuts">
@@ -248,7 +248,7 @@ export function SettingsDialog({ open, onClose, channelLabel }: SettingsDialogPr
             <dl className="shortcut-list"><div><dt>发送请求</dt><dd><kbd>Ctrl/⌘</kbd> + <kbd>Enter</kbd></dd></div><div><dt>命令面板</dt><dd><kbd>Ctrl/⌘</kbd> + <kbd>K</kbd></dd></div><div><dt>打开设置</dt><dd><kbd>Ctrl/⌘</kbd> + <kbd>,</kbd></dd></div><div><dt>关闭弹窗或面板</dt><dd><kbd>Esc</kbd></dd></div></dl>
           </section>
           <section className="settings-section category-about">
-            <h3>关于 ApiVoy</h3><p className="settings-hint">ApiVoy · Explore Every Protocol.</p><p className="settings-hint">本地优先的多协议 API 调试与协作工具。</p>
+            <h3>关于 ProtoVoy</h3><p className="settings-hint">ProtoVoy · Explore Every Protocol.</p><p className="settings-hint">本地优先的多协议 API 调试与协作工具。</p>
           </section>
           </div>
         </div>

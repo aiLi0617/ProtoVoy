@@ -135,7 +135,7 @@ export function buildMockResponseBody(response: MockSeedResponse | undefined, so
 
 export function mockPathFromUrl(value: string): string {
   try {
-    const parsed = new URL(value || "/", "http://apivoy.local");
+    const parsed = new URL(value || "/", "http://protovoy.local");
     return parsed.pathname.startsWith("/") ? parsed.pathname : `/${parsed.pathname}`;
   } catch { return "/"; }
 }

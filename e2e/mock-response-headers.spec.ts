@@ -85,7 +85,7 @@ test("does not infer response headers from an interface response definition", as
   test.setTimeout(60_000);
   await page.route("http://127.0.0.1:39217/**", (route) => route.abort());
   await page.goto("/#workbench=mock");
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("apivoy-create-mock-rule", { detail: { seed: {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-create-mock-rule", { detail: { seed: {
     interfaceName: "查询用户",
     method: "GET",
     path: "/v1/users/10001",

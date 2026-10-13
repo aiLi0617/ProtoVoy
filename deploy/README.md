@@ -1,4 +1,4 @@
-# ApiVoy private deployment
+﻿# ProtoVoy private deployment
 
 This deployment runs the complete Web stack behind one Nginx entry point:
 
@@ -20,11 +20,11 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml up --build -d
 docker compose --env-file deploy/.env -f deploy/compose.yaml ps
 ```
 
-Open `http://localhost:8080` (or `APIVOY_PUBLIC_ORIGIN`). Bootstrap the first Owner from Team with `APIVOY_BOOTSTRAP_TOKEN`. The browser uses runtime `config.js`, so changing the public paths or Agent token only requires recreating the Web container, not rebuilding its image.
+Open `http://localhost:8080` (or `PROTOVOY_PUBLIC_ORIGIN`). Bootstrap the first Owner from Team with `PROTOVOY_BOOTSTRAP_TOKEN`. The browser uses runtime `config.js`, so changing the public paths or Agent token only requires recreating the Web container, not rebuilding its image.
 
 ## Production requirements
 
-- Put the Web port behind an HTTPS ingress or load balancer and set `APIVOY_PUBLIC_ORIGIN` to the exact external origin.
+- Put the Web port behind an HTTPS ingress or load balancer and set `PROTOVOY_PUBLIC_ORIGIN` to the exact external origin.
 - Use independently generated high-entropy values for the database password, bootstrap token, Agent token, and Gateway API key.
 - Restrict ingress access: the runtime Agent token is delivered to authenticated users' browsers and should be treated as an internal deployment credential.
 - Back up `postgres-data`, `agent-data`, and `gateway-data`; test restore before upgrades.
@@ -37,7 +37,7 @@ curl --fail http://localhost:8080/healthz
 curl --fail http://localhost:8080/agent/health
 curl --fail http://localhost:8080/collaboration/actuator/health
 curl --fail http://localhost:8080/gateway/health
-curl --fail -H "Authorization: Bearer $APIVOY_GATEWAY_API_KEY" http://localhost:8080/gateway/v1/capabilities
+curl --fail -H "Authorization: Bearer $PROTOVOY_GATEWAY_API_KEY" http://localhost:8080/gateway/v1/capabilities
 docker compose --env-file deploy/.env -f deploy/compose.yaml down
 ```
 
@@ -50,4 +50,4 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml down
 - `GET/POST /gateway/v1/jobs` and `DELETE /gateway/v1/jobs/{id}` manage persistent interval schedules (minimum 10 seconds).
 - `GET /gateway/v1/executions` exposes the latest 500 in-memory summaries; response bodies, logs, extracted variables, and response headers are removed from retained history.
 
-All `/v1` endpoints require `Authorization: Bearer <APIVOY_GATEWAY_API_KEY>`. The standalone Gateway binds to `127.0.0.1:39218` by default; Compose explicitly binds it to all container interfaces. Scheduled requests are persisted in `gateway-data`. The Gateway rejects recognizable inline credentials in scheduled requests, including sensitive headers, URL query keys, and structured fields. It does not currently resolve secret references, so credentialed schedules are unsupported. Keep sensitive values out of free-form bodies and scripts. If an older `jobs.json` contains inline credentials, startup fails until the affected jobs are removed; rotate those credentials before restarting. The capability endpoint describes request routing and retention behavior.
+All `/v1` endpoints require `Authorization: Bearer <PROTOVOY_GATEWAY_API_KEY>`. The standalone Gateway binds to `127.0.0.1:39219` by default; Compose explicitly binds it to all container interfaces. Scheduled requests are persisted in `gateway-data`. The Gateway rejects recognizable inline credentials in scheduled requests, including sensitive headers, URL query keys, and structured fields. It does not currently resolve secret references, so credentialed schedules are unsupported. Keep sensitive values out of free-form bodies and scripts. If an older `jobs.json` contains inline credentials, startup fails until the affected jobs are removed; rotate those credentials before restarting. The capability endpoint describes request routing and retention behavior.

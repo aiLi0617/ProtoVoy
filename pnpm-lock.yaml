@@ -18,10 +18,13 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@apivoy/request-model':
+      '@protovoy/app-wiring':
+        specifier: workspace:*
+        version: link:../../packages/app-wiring
+      '@protovoy/request-model':
         specifier: workspace:*
         version: link:../../packages/request-model
-      '@apivoy/ui':
+      '@protovoy/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@tauri-apps/api':
@@ -55,10 +58,13 @@ importers:
 
   apps/web:
     dependencies:
-      '@apivoy/request-model':
+      '@protovoy/app-wiring':
+        specifier: workspace:*
+        version: link:../../packages/app-wiring
+      '@protovoy/request-model':
         specifier: workspace:*
         version: link:../../packages/request-model
-      '@apivoy/ui':
+      '@protovoy/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       react:
@@ -84,6 +90,40 @@ importers:
         specifier: ^6.3.3
         version: 6.4.3(@types/node@22.20.1)(tsx@4.23.12)(yaml@2.9.0)
 
+  packages/app-wiring:
+    devDependencies:
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/design-system:
+    dependencies:
+      lucide-react:
+        specifier: ^0.525.0
+        version: 0.525.0(react@19.2.8)
+    devDependencies:
+      '@types/react':
+        specifier: ^19.1.2
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.1.2
+        version: 19.2.4(@types/react@19.2.18)
+      react:
+        specifier: ^19.1.0
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.1.0
+        version: 19.2.8(react@19.2.8)
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+
   packages/import-export:
     dependencies:
       yaml:
@@ -101,6 +141,10 @@ importers:
         version: 5.9.3
 
   packages/protocol-ui-sdk:
+    dependencies:
+      '@protovoy/design-system':
+        specifier: workspace:*
+        version: link:../design-system
     devDependencies:
       '@types/node':
         specifier: ^22.15.3
@@ -126,15 +170,18 @@ importers:
 
   packages/ui:
     dependencies:
-      '@apivoy/import-export':
-        specifier: workspace:*
-        version: link:../import-export
-      '@apivoy/request-model':
-        specifier: workspace:*
-        version: link:../request-model
       '@monaco-editor/react':
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.56.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@protovoy/design-system':
+        specifier: workspace:*
+        version: link:../design-system
+      '@protovoy/import-export':
+        specifier: workspace:*
+        version: link:../import-export
+      '@protovoy/request-model':
+        specifier: workspace:*
+        version: link:../request-model
       '@tanstack/react-query':
         specifier: ^5.101.4
         version: 5.101.4(react@19.2.8)
@@ -933,6 +980,11 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
+  lucide-react@0.525.0:
+    resolution: {integrity: sha512-Tm1txJ2OkymCGkvwoHt33Y2JpN5xucVq1slHcgE6Lk0WjDfjgKWor5CdVER8U6DvcfMwh4M8XxmpTiyzfmfDYQ==}
+    peerDependencies:
+      react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   marked@14.0.0:
     resolution: {integrity: sha512-uIj4+faQ+MgHgwUW1l2PsPglZLOLOT1uErt06dAPtx2kjteLAkbsd/0FiYg/MGS+i7ZKLb7w2WClxHkzOOuryQ==}
     engines: {node: '>= 18'}
@@ -1692,6 +1744,10 @@ snapshots:
   lru-cache@5.1.1:
     dependencies:
       yallist: 3.1.1
+
+  lucide-react@0.525.0(react@19.2.8):
+    dependencies:
+      react: 19.2.8
 
   marked@14.0.0: {}
 

@@ -1,9 +1,9 @@
 {
-  "name": "@apivoy/protocol-ui-sdk",
+  "name": "@protovoy/protocol-ui-sdk",
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "ApiVoy protocol UI schema and plugin SDK",
+  "description": "Re-exports protocol UI schema from @protovoy/design-system (compat shim).",
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
@@ -12,6 +12,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "test": "tsx src/index.test.ts"
+  },
+  "dependencies": {
+    "@protovoy/design-system": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.15.3",

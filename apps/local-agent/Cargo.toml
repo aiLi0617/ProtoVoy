@@ -1,12 +1,12 @@
 [package]
-name = "apivoy-local-agent"
+name = "protovoy-local-agent"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "ApiVoy Local Agent — Web → Rust core bridge"
+description = "ProtoVoy Local Agent — Web → Rust core bridge"
 
 [[bin]]
-name = "apivoy-agent"
+name = "protovoy-agent"
 path = "src/main.rs"
 
 [dependencies]

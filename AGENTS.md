@@ -2,7 +2,7 @@
 
 ## Repository goals
 
-ApiVoy is a local-first multi-protocol API debugging client.
+ProtoVoy is a local-first multi-protocol API debugging client.
 
 ## Validation strategy
 
@@ -44,10 +44,10 @@ Before completing the task, run the applicable full validation once:
 
 ## UI icon rules
 
-- Use Lucide through the shared `@apivoy/ui` icon abstraction for product UI;
+- Use Lucide through the shared `@protovoy/design-system` (re-exported by `@protovoy/ui`) icon abstraction for product UI;
   do not add another general-purpose icon library or page-local SVG copy.
 - Use official SVG assets or Simple Icons only for third-party brand marks. Keep
-  the ApiVoy product mark in the repository-owned brand assets.
+  the ProtoVoy product mark in the repository-owned brand assets.
 - Do not use emoji or font glyphs such as `•••`, `↑`, `×`, or `✓` as interactive
   control icons. Protocol payload or traffic-direction symbols may remain text
   when they are data rather than controls.

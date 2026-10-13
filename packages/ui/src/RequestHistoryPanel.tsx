@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import type { RequestEnvelope } from "@apivoy/request-model";
+import type { RequestEnvelope } from "@protovoy/request-model";
 import { Icon } from "./Icons";
 import { Button, IconButton } from "./Components";
 import { ClosableTabStrip } from "./ClosableTabStrip";
@@ -255,18 +255,18 @@ export function RequestHistoryPanel({ onList, onReplay, requestEditor }: Request
     setError("");
     try {
       const metadata: Record<string, unknown> = { ...(caseDraft.request.metadata ?? {}) };
-      delete metadata.__apivoySavedResponse;
-      delete metadata.__apivoySavedActualRequest;
+      delete metadata.__protovoySavedResponse;
+      delete metadata.__protovoySavedActualRequest;
       if (caseSaveResponse && caseDraft.result) {
-        metadata.__apivoySavedResponse = { status: caseDraft.result.summary.status ?? null, durationMs: caseDraft.result.summary.durationMs, body: caseDraft.result.preview ?? null, headers: caseDraft.result.responseMeta?.headers ?? [], contentType: caseDraft.result.responseMeta?.contentType ?? null };
-        metadata.__apivoySavedActualRequest = { ...caseDraft.request, metadata: {} };
+        metadata.__protovoySavedResponse = { status: caseDraft.result.summary.status ?? null, durationMs: caseDraft.result.summary.durationMs, body: caseDraft.result.preview ?? null, headers: caseDraft.result.responseMeta?.headers ?? [], contentType: caseDraft.result.responseMeta?.contentType ?? null };
+        metadata.__protovoySavedActualRequest = { ...caseDraft.request, metadata: {} };
       }
       const nextRequest = {
         ...caseDraft.request,
         id: crypto.randomUUID(),
         name: caseName.trim(),
-        variables: { ...(caseDraft.request.variables ?? {}), __apivoyCaseOf: caseDraft.parent.id, __apivoyCaseInterfaceName: caseDraft.parent.name },
-        metadata: { ...metadata, __apivoyCaseType: "debug" },
+        variables: { ...(caseDraft.request.variables ?? {}), __protovoyCaseOf: caseDraft.parent.id, __protovoyCaseInterfaceName: caseDraft.parent.name },
+        metadata: { ...metadata, __protovoyCaseType: "debug" },
       };
       if (isHttpRequest(nextRequest)) await requestEditor.onSaveDebugCase(nextRequest, caseDraft.parent);
       else if (requestEditor.onSaveEnvelopeDebugCase) await requestEditor.onSaveEnvelopeDebugCase(nextRequest, caseDraft.parent);

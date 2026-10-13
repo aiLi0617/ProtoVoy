@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("creates a contract-driven draft and edits the response status", async ({ page }, testInfo) => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("apivoy-create-mock-rule", { detail: { seed: {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-create-mock-rule", { detail: { seed: {
     interfaceName: "查询用户",
     method: "GET",
     path: "/v1/users/10001",

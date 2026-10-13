@@ -1,4 +1,4 @@
-//! ApiVoy Local Agent.
+//! ProtoVoy Local Agent.
 //!
 //! Listens on 127.0.0.1 by default. Container deployments may explicitly override the bind address.
 //! Shares the same protocol-core crates as Desktop; ships as an independent binary.
@@ -62,11 +62,11 @@ use tracing_subscriber::EnvFilter;
 use uuid::Uuid;
 
 const PROTOCOL_API_VERSION: &str = "1";
-const HEADER_PROTOCOL_API_VERSION: &str = "x-apivoy-protocol-api-version";
-const HEADER_CLIENT: &str = "x-apivoy-client";
-const HEADER_CLIENT_VERSION: &str = "x-apivoy-client-version";
+const HEADER_PROTOCOL_API_VERSION: &str = "x-protovoy-protocol-api-version";
+const HEADER_CLIENT: &str = "x-protovoy-client";
+const HEADER_CLIENT_VERSION: &str = "x-protovoy-client-version";
 const MAX_PERSISTED_RESPONSE_BYTES: usize = 64 * 1024 * 1024;
-const TCP_SESSION_TICKET_PREFIX: &str = "apivoy-ticket.";
+const TCP_SESSION_TICKET_PREFIX: &str = "protovoy-ticket.";
 const TCP_SESSION_TICKET_LIFETIME_SECONDS: u64 = 30;
 const MAX_PENDING_TCP_SESSION_TICKETS: usize = 256;
 
@@ -455,7 +455,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let token = Arc::new(load_or_create_pairing_token()?);
-    let db_path = config_dir().join("apivoy-local.db");
+    let db_path = config_dir().join("protovoy-local.db");
     let store = LocalStore::open(&db_path)?;
     info!(path = %db_path.display(), "opened local store");
 
@@ -644,36 +644,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(state);
 
     let addr = agent_bind_addr()?;
-    info!("ApiVoy Local Agent listening on http://{addr}");
+    info!("ProtoVoy Local Agent listening on http://{addr}");
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
 }
 
 fn config_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("APIVOY_CONFIG_DIR") {
+    if let Ok(dir) = std::env::var("PROTOVOY_CONFIG_DIR") {
         return PathBuf::from(dir);
     }
     if let Ok(appdata) = std::env::var("APPDATA") {
-        return PathBuf::from(appdata).join("apivoy");
+        return PathBuf::from(&appdata).join("protovoy");
     }
     if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        return PathBuf::from(xdg).join("apivoy");
+        return PathBuf::from(&xdg).join("protovoy");
     }
     if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".config").join("apivoy");
+        return PathBuf::from(&home).join(".config").join("protovoy");
     }
-    PathBuf::from(".apivoy")
+    PathBuf::from(".protovoy")
 }
 
 fn agent_bind_addr() -> Result<SocketAddr, Box<dyn std::error::Error>> {
-    Ok(std::env::var("APIVOY_AGENT_BIND")
+    Ok(std::env::var("PROTOVOY_AGENT_BIND")
         .unwrap_or_else(|_| "127.0.0.1:39217".to_string())
         .parse()?)
 }
 
 fn allowed_origins() -> Result<Vec<HeaderValue>, Box<dyn std::error::Error>> {
-    std::env::var("APIVOY_ALLOWED_ORIGINS")
+    std::env::var("PROTOVOY_ALLOWED_ORIGINS")
         .unwrap_or_else(|_| {
             "http://localhost:5180,http://tauri.localhost,tauri://localhost".to_string()
         })
@@ -685,7 +685,7 @@ fn allowed_origins() -> Result<Vec<HeaderValue>, Box<dyn std::error::Error>> {
 }
 
 fn plugin_permission_grants() -> Vec<PluginPermission> {
-    std::env::var("APIVOY_PLUGIN_PERMISSIONS")
+    std::env::var("PROTOVOY_PLUGIN_PERMISSIONS")
         .unwrap_or_default()
         .split(',')
         .filter_map(|value| match value.trim() {
@@ -699,9 +699,9 @@ fn plugin_permission_grants() -> Vec<PluginPermission> {
 }
 
 fn load_or_create_pairing_token() -> Result<String, Box<dyn std::error::Error>> {
-    if let Ok(token) = std::env::var("APIVOY_AGENT_TOKEN") {
+    if let Ok(token) = std::env::var("PROTOVOY_AGENT_TOKEN") {
         if !token.is_empty() {
-            info!("using pairing token from APIVOY_AGENT_TOKEN");
+            info!("using pairing token from PROTOVOY_AGENT_TOKEN");
             return Ok(token);
         }
     }
@@ -720,19 +720,20 @@ fn load_or_create_pairing_token() -> Result<String, Box<dyn std::error::Error>> 
     let token = Uuid::new_v4().simple().to_string();
     fs::write(&path, format!("{token}\n"))?;
     info!(path = %path.display(), "created pairing token file");
-    eprintln!("ApiVoy Local Agent pairing token (save for Web/Desktop): {token}");
+    eprintln!("ProtoVoy Local Agent pairing token (save for Web/Desktop): {token}");
     eprintln!("Token file: {}", path.display());
     Ok(token)
 }
 
 fn check_protocol_version(headers: &HeaderMap) -> Result<(), (StatusCode, String)> {
-    let Some(value) = headers.get(HEADER_PROTOCOL_API_VERSION) else {
+    let value = headers.get(HEADER_PROTOCOL_API_VERSION);
+    let Some(value) = value else {
         return Ok(());
     };
     let Ok(version) = value.to_str() else {
         return Err((
             StatusCode::BAD_REQUEST,
-            "invalid X-ApiVoy-Protocol-Api-Version header".into(),
+            "invalid X-ProtoVoy-Protocol-Api-Version header".into(),
         ));
     };
     if version != PROTOCOL_API_VERSION {
@@ -823,10 +824,10 @@ async fn create_tcp_session_ticket(
 
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse {
-        service: "apivoy-agent",
+        service: "protovoy-agent",
         version: env!("CARGO_PKG_VERSION"),
         agent_version: env!("CARGO_PKG_VERSION"),
-        bind: std::env::var("APIVOY_AGENT_BIND").unwrap_or_else(|_| "127.0.0.1:39217".into()),
+        bind: std::env::var("PROTOVOY_AGENT_BIND").unwrap_or_else(|_| "127.0.0.1:39217".into()),
         protocol_api_version: PROTOCOL_API_VERSION,
         min_protocol_api_version: PROTOCOL_API_VERSION,
         max_protocol_api_version: PROTOCOL_API_VERSION,
@@ -1157,8 +1158,8 @@ async fn start_mock_server(
         .map_err(|error| (StatusCode::CONFLICT, format!("Mock 端口无法监听：{error}")))?;
     let mut command = tokio::process::Command::new(mock_server_binary());
     command
-        .env("APIVOY_MOCK_BIND", bind.to_string())
-        .env("APIVOY_MOCK_RULES_PATH", state.mock_rules_path.as_ref())
+        .env("PROTOVOY_MOCK_BIND", bind.to_string())
+        .env("PROTOVOY_MOCK_RULES_PATH", state.mock_rules_path.as_ref())
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -1172,7 +1173,7 @@ async fn start_mock_server(
     let child = command.spawn().map_err(|error| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
-            format!("无法启动 apivoy-mock：{error}"),
+            format!("无法启动 protovoy-mock：{error}"),
         )
     })?;
     {
@@ -1223,18 +1224,18 @@ async fn stop_mock_server(
 }
 
 fn mock_server_binary() -> PathBuf {
-    if let Some(path) = std::env::var_os("APIVOY_MOCK_BIN") {
+    if let Some(path) = std::env::var_os("PROTOVOY_MOCK_BIN") {
         return PathBuf::from(path);
     }
     let file_name = if cfg!(windows) {
-        "apivoy-mock.exe"
+        "protovoy-mock.exe"
     } else {
-        "apivoy-mock"
+        "protovoy-mock"
     };
     if let Ok(current) = std::env::current_exe() {
         if let Some(parent) = current.parent() {
             if let Some(current_name) = current.file_name().and_then(|name| name.to_str()) {
-                let packaged_name = current_name.replacen("apivoy-agent", "apivoy-mock", 1);
+                let packaged_name = current_name.replacen("protovoy-agent", "protovoy-mock", 1);
                 let packaged = parent.join(packaged_name);
                 if packaged.is_file() {
                     return packaged;
@@ -1297,7 +1298,7 @@ async fn tcp_session(
         )
             .into_response();
     };
-    ws.protocols(["apivoy"])
+    ws.protocols(["protovoy"])
         .on_upgrade(move |socket| relay_tcp_session(socket, target))
         .into_response()
 }
@@ -1427,7 +1428,7 @@ async fn start_capture(
 ) -> Result<Json<CaptureStatus>, (StatusCode, String)> {
     let bind = body
         .bind
-        .unwrap_or_else(|| "127.0.0.1:39219".into())
+        .unwrap_or_else(|| "127.0.0.1:39220".into())
         .parse()
         .map_err(|error: std::net::AddrParseError| (StatusCode::BAD_REQUEST, error.to_string()))?;
     state
@@ -2008,12 +2009,12 @@ async fn sync_design_mock_rules(
     };
     let responses = parse_definition_extension::<Vec<MockDesignResponse>>(
         &definition.content,
-        "x-apivoy-responses:",
+        "x-protovoy-responses:",
     )
     .unwrap_or_default();
     let fields = parse_definition_extension::<Vec<MockDesignField>>(
         &definition.content,
-        "x-apivoy-visual-fields:",
+        "x-protovoy-visual-fields:",
     )
     .unwrap_or_default();
     let method = match &request.envelope.payload {
@@ -2829,7 +2830,7 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(
             header::SEC_WEBSOCKET_PROTOCOL,
-            HeaderValue::from_static("apivoy, apivoy-ticket.abc123"),
+            HeaderValue::from_static("protovoy, protovoy-ticket.abc123"),
         );
         assert_eq!(tcp_session_ticket_from_headers(&headers), Some("abc123"));
     }

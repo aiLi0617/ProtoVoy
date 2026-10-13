@@ -112,10 +112,10 @@ function initialWorkbenchSessions(tabs: WorkbenchTab[], sessionId: string): Work
 function resolveCasePresentation(detail: unknown): { title: string; interfaceName: string; parentId: string; icon: IconName } | null {
   if (!detail || typeof detail !== "object") return null;
   const value = detail as { name?: unknown; variables?: Record<string, string>; metadata?: Record<string, unknown> };
-  if (!value.variables?.__apivoyCaseOf) return null;
-  const interfaceName = typeof value.metadata?.__apivoyCaseInterfaceName === "string" ? value.metadata.__apivoyCaseInterfaceName.trim() : "";
+  if (!value.variables?.__protovoyCaseOf) return null;
+  const interfaceName = typeof value.metadata?.__protovoyCaseInterfaceName === "string" ? value.metadata.__protovoyCaseInterfaceName.trim() : "";
   const status = typeof value.name === "string" ? value.name.trim() : "";
-  return { title: interfaceName && status ? `${interfaceName}（${status}）` : interfaceName || status || "接口用例", interfaceName, parentId: value.variables.__apivoyCaseOf, icon: "bolt" };
+  return { title: interfaceName && status ? `${interfaceName}（${status}）` : interfaceName || status || "接口用例", interfaceName, parentId: value.variables.__protovoyCaseOf, icon: "bolt" };
 }
 
 function resolveOpenProtocol(detail: unknown): string | undefined {
@@ -131,7 +131,7 @@ function resolveOpenProtocol(detail: unknown): string | undefined {
 }
 
 function openDebugTab(sessionId: string) {
-  queueMicrotask(() => window.dispatchEvent(new CustomEvent("apivoy-open-lifecycle-tab", {
+  queueMicrotask(() => window.dispatchEvent(new CustomEvent("protovoy-open-lifecycle-tab", {
     detail: { sessionId, tab: "debug" },
   })));
 }
@@ -176,7 +176,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
     const request = detail.requestId && onLoadHttpInterface
       ? await onLoadHttpInterface(detail.requestId).catch(() => null)
       : null;
-    let responses = mockResponsesFromMetadata(request?.metadata?.__apivoyResponseDefinitions);
+    let responses = mockResponsesFromMetadata(request?.metadata?.__protovoyResponseDefinitions);
     let resolvedServiceKey: string | undefined;
     let resolvedOperationId: string | undefined;
     if (detail.projectId && detail.requestId && definitionClient) {
@@ -216,8 +216,8 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
         ? { ...session, requestId: undefined }
         : session));
     };
-    window.addEventListener("apivoy-request-deleted", markRequestDeleted);
-    return () => window.removeEventListener("apivoy-request-deleted", markRequestDeleted);
+    window.addEventListener("protovoy-request-deleted", markRequestDeleted);
+    return () => window.removeEventListener("protovoy-request-deleted", markRequestDeleted);
   }, []);
 
   function activateSession(session: WorkbenchSession, writeHash = true) {
@@ -237,7 +237,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
     if (!tabMap.has(id)) return null;
     if (resetDraft) {
       clearWorkbenchDraft(id);
-      window.dispatchEvent(new CustomEvent("apivoy-new-workbench", { detail: { workbenchId: id } }));
+      window.dispatchEvent(new CustomEvent("protovoy-new-workbench", { detail: { workbenchId: id } }));
     }
     const sameTypeCount = sessions.filter((session) => session.workbenchId === id).length;
     const label = translateWorkbench(id, tabMap.get(id)?.label ?? id);
@@ -304,7 +304,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
         const hydrate = { workbenchId: match.id, sessionId: match.id === "http" ? restored.id : undefined, protocolId: protocol, envelope: detail };
         stashHydrate(hydrate);
         openDebugTab(restored.id);
-        queueMicrotask(() => window.dispatchEvent(new CustomEvent("apivoy-hydrate-request", { detail: hydrate })));
+        queueMicrotask(() => window.dispatchEvent(new CustomEvent("protovoy-hydrate-request", { detail: hydrate })));
         return;
       }
       const session = createWorkbench(match.id, true, false, { id: opened?.id, name: opened?.name, title: casePresentation?.title, icon: casePresentation?.icon, caseInterfaceName: casePresentation?.interfaceName, caseParentId: casePresentation?.parentId });
@@ -312,7 +312,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
       const hydrate = { workbenchId: match.id, sessionId: match.id === "http" ? session.id : undefined, protocolId: protocol, envelope: detail };
       stashHydrate(hydrate);
       openDebugTab(session.id);
-      queueMicrotask(() => window.dispatchEvent(new CustomEvent("apivoy-hydrate-request", { detail: hydrate })));
+      queueMicrotask(() => window.dispatchEvent(new CustomEvent("protovoy-hydrate-request", { detail: hydrate })));
     };
     const selectWorkbench = (event: Event) => activate((event as CustomEvent<string>).detail);
     const createWorkbenchEvent = (event: Event) => createWorkbench((event as CustomEvent<string>).detail);
@@ -323,7 +323,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
         const request = detail.requestId && onLoadHttpInterface
           ? await onLoadHttpInterface(detail.requestId).catch(() => null)
           : null;
-        let responses = mockResponsesFromMetadata(request?.metadata?.__apivoyResponseDefinitions);
+        let responses = mockResponsesFromMetadata(request?.metadata?.__protovoyResponseDefinitions);
         let resolvedServiceKey: string | undefined;
         let resolvedOperationId: string | undefined;
         if (detail.projectId && detail.requestId && definitionClient) {
@@ -359,7 +359,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
           path: mockPathFromUrl(request?.url || "/"),
           responses,
         };
-        window.setTimeout(() => window.dispatchEvent(new CustomEvent("apivoy-create-mock-rule", { detail: { ...detail, seed } })), 0);
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("protovoy-create-mock-rule", { detail: { ...detail, seed } })), 0);
       })();
     };
     const openProjectHome = () => {
@@ -373,22 +373,22 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
       }
       if (hashWorkbench()) clearInvalidWorkbenchHash();
     };
-    window.addEventListener("apivoy-open-request", openRequest);
-    window.addEventListener("apivoy-select-workbench", selectWorkbench);
-    window.addEventListener("apivoy-create-workbench", createWorkbenchEvent);
-    window.addEventListener("apivoy-create-interface-mock", createInterfaceMock);
-    window.addEventListener("apivoy-open-script-library", openScriptLibrary);
-    window.addEventListener("apivoy-project-home", openProjectHome);
+    window.addEventListener("protovoy-open-request", openRequest);
+    window.addEventListener("protovoy-select-workbench", selectWorkbench);
+    window.addEventListener("protovoy-create-workbench", createWorkbenchEvent);
+    window.addEventListener("protovoy-create-interface-mock", createInterfaceMock);
+    window.addEventListener("protovoy-open-script-library", openScriptLibrary);
+    window.addEventListener("protovoy-project-home", openProjectHome);
     const openCurlImport = (event: Event) => { setCurlImportTarget(((event as CustomEvent<{ projectId?: string; collectionId?: string }>).detail) ?? {}); setCurlImportOpen(true); };
-    window.addEventListener("apivoy-open-curl-import", openCurlImport);
+    window.addEventListener("protovoy-open-curl-import", openCurlImport);
     return () => {
-      window.removeEventListener("apivoy-open-request", openRequest);
-      window.removeEventListener("apivoy-select-workbench", selectWorkbench);
-      window.removeEventListener("apivoy-create-workbench", createWorkbenchEvent);
-      window.removeEventListener("apivoy-create-interface-mock", createInterfaceMock);
-      window.removeEventListener("apivoy-open-script-library", openScriptLibrary);
-      window.removeEventListener("apivoy-project-home", openProjectHome);
-      window.removeEventListener("apivoy-open-curl-import", openCurlImport);
+      window.removeEventListener("protovoy-open-request", openRequest);
+      window.removeEventListener("protovoy-select-workbench", selectWorkbench);
+      window.removeEventListener("protovoy-create-workbench", createWorkbenchEvent);
+      window.removeEventListener("protovoy-create-interface-mock", createInterfaceMock);
+      window.removeEventListener("protovoy-open-script-library", openScriptLibrary);
+      window.removeEventListener("protovoy-project-home", openProjectHome);
+      window.removeEventListener("protovoy-open-curl-import", openCurlImport);
     };
   }, [tabs, setActive, sessions]);
   useEffect(() => {
@@ -457,7 +457,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
   const toolbar = showCode && selected !== "http" ? (
     <button type="button" className="ui-button secondary" onClick={() => {
       setCodeOpen((value) => !value);
-      window.dispatchEvent(new CustomEvent("apivoy-toggle-codegen", { detail: { workbenchId: selected } }));
+      window.dispatchEvent(new CustomEvent("protovoy-toggle-codegen", { detail: { workbenchId: selected } }));
     }}>{t("codegen.title")}</button>
   ) : null;
   const homeActions = [
@@ -488,10 +488,10 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
     const hydrate = { workbenchId: "http", sessionId: session.id, protocolId: "http", envelope: { request: saved } };
     stashHydrate(hydrate);
     setCurlImportOpen(false);
-    queueMicrotask(() => window.dispatchEvent(new CustomEvent("apivoy-hydrate-request", { detail: hydrate })));
+    queueMicrotask(() => window.dispatchEvent(new CustomEvent("protovoy-hydrate-request", { detail: hydrate })));
   }
   function enterProjectEmptySession() {
-    window.dispatchEvent(new CustomEvent("apivoy-project-resources"));
+    window.dispatchEvent(new CustomEvent("protovoy-project-resources"));
     setSessions([]);
     setActiveSessionId("");
     setPickerOpen(false);
@@ -519,7 +519,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
       finally { setProjectActionBusy(false); }
     };
     return <main className="project-launcher" aria-labelledby={`project-launcher-title-${sessionId}`}>
-      <header className="project-launcher-header"><div><h1 id={`project-launcher-title-${sessionId}`}>项目</h1><p>管理主窗口中的项目、环境与扩展能力</p></div><div className="project-launcher-actions"><label><Icon name="search"/><input aria-label="搜索项目" value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} placeholder="搜索项目"/></label><button type="button" className="ui-button secondary" onClick={() => window.dispatchEvent(new CustomEvent("apivoy-import-requests"))}>导入</button><button type="button" className="ui-button primary" onClick={openCreateProject}>新建项目</button></div></header>
+      <header className="project-launcher-header"><div><h1 id={`project-launcher-title-${sessionId}`}>项目</h1><p>管理主窗口中的项目、环境与扩展能力</p></div><div className="project-launcher-actions"><label><Icon name="search"/><input aria-label="搜索项目" value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} placeholder="搜索项目"/></label><button type="button" className="ui-button secondary" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-import-requests"))}>导入</button><button type="button" className="ui-button primary" onClick={openCreateProject}>新建项目</button></div></header>
       <div className="project-launcher-section-title">我的项目 <span>{projects.length}</span></div>
       <div className="project-card-grid">
         {visibleProjects.map((project) => <article className={`project-card-wrap${project.id === selectedProjectId ? " is-current" : ""}`} key={project.id}>
@@ -536,7 +536,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
     const primaryActions = homeActions.slice(0, 2);
     const moreActions = homeActions.slice(2);
     return <main className="workbench-home" aria-labelledby={`workbench-home-title-${sessionId}`}>
-      <div className="workbench-home-copy"><span>APIVOY WORKSPACE</span><h1 id={`workbench-home-title-${sessionId}`}>从这里开始探索接口</h1><p>{saveTargetLabel ? `当前保存位置：${saveTargetLabel}` : "选择一种工作台，或从左侧资源树打开已有请求。"}</p></div>
+      <div className="workbench-home-copy"><span>PROTOVOY WORKSPACE</span><h1 id={`workbench-home-title-${sessionId}`}>从这里开始探索接口</h1><p>{saveTargetLabel ? `当前保存位置：${saveTargetLabel}` : "选择一种工作台，或从左侧资源树打开已有请求。"}</p></div>
       <div className="workbench-home-actions">{primaryActions.map((action) => <button key={action.id} type="button" onClick={() => runHomeAction(action.id)}><span className={`workbench-home-action-icon tone-${action.id}`}><Icon name={action.icon}/></span><strong>{action.title}</strong><small>{action.description}</small></button>)}</div>
       {moreActions.length ? <div className="workbench-home-more"><button type="button" className="workbench-home-more-trigger" aria-haspopup="menu" aria-expanded={homeMoreOpen} onClick={() => setHomeMoreOpen((open) => !open)}>更多功能 <Icon name="chevron"/></button>{homeMoreOpen ? <div className="workbench-home-more-menu" role="menu" aria-label="更多功能">{moreActions.map((action) => <button key={action.id} type="button" role="menuitem" onClick={() => runHomeAction(action.id)}><span className={`workbench-home-action-icon tone-${action.id}`}><Icon name={action.icon}/></span><span><strong>{action.title}</strong><small>{action.description}</small></span></button>)}</div> : null}</div> : null}
     </main>;
@@ -559,16 +559,16 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
       const caseName = session.caseInterfaceName && session.title.startsWith(`${session.caseInterfaceName}（`)
         ? session.title.slice(session.caseInterfaceName.length + 1).replace(/）$/, "")
         : session.title;
-      const cases = session.requestId ? interfaceCases.filter((item) => item.parentId === session.requestId && item.metadata?.__apivoyCaseType === "test") : [];
+      const cases = session.requestId ? interfaceCases.filter((item) => item.parentId === session.requestId && item.metadata?.__protovoyCaseType === "test") : [];
       const openCase = onLoadHttpInterface ? async (caseId: string) => {
         const detail = await onLoadHttpInterface(caseId);
-        if (detail) window.dispatchEvent(new CustomEvent("apivoy-open-request", { detail: { ...detail, protocolId: "http", metadata: { ...(detail.metadata ?? {}), __apivoyCaseInterfaceName: session.title } } }));
+        if (detail) window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: { ...detail, protocolId: "http", metadata: { ...(detail.metadata ?? {}), __protovoyCaseInterfaceName: session.title } } }));
       } : undefined;
       const saveCase = onLoadHttpInterface && onCreateHttpInterface ? async (caseId: string | null, input: { name: string; group: string; tags: string[]; request?: HttpWorkbenchRequest }) => {
         const source = input.request ?? await onLoadHttpInterface(caseId ?? session.requestId ?? ""); if (!source) return;
         const summary = caseId ? interfaceCases.find((item) => item.id === caseId) : undefined;
         const [fallbackProject = selectedProjectId ?? "", fallbackCollection = ""] = (saveTargetLabel ?? "").split(" / ");
-        await onCreateHttpInterface({ ...source, id: caseId ?? crypto.randomUUID(), name: input.name, variables: { ...(source.variables ?? {}), __apivoyCaseOf: session.requestId ?? source.id ?? "", __apivoyCaseInterfaceName: session.title }, metadata: { ...(source.metadata ?? {}), __apivoyCaseType: "test", __apivoyCaseGroup: input.group, __apivoyCaseTags: input.tags } }, summary?.projectId ?? fallbackProject, summary?.collectionId ?? fallbackCollection);
+        await onCreateHttpInterface({ ...source, id: caseId ?? crypto.randomUUID(), name: input.name, variables: { ...(source.variables ?? {}), __protovoyCaseOf: session.requestId ?? source.id ?? "", __protovoyCaseInterfaceName: session.title }, metadata: { ...(source.metadata ?? {}), __protovoyCaseType: "test", __protovoyCaseGroup: input.group, __protovoyCaseTags: input.tags } }, summary?.projectId ?? fallbackProject, summary?.collectionId ?? fallbackCollection);
       } : undefined;
       const duplicateCase = onLoadHttpInterface && onCreateHttpInterface ? async (caseId: string) => { const source = await onLoadHttpInterface(caseId); const summary = interfaceCases.find((item) => item.id === caseId); if (!source || !summary) return; const [fallbackProject = selectedProjectId ?? "", fallbackCollection = ""] = (saveTargetLabel ?? "").split(" / "); await onCreateHttpInterface({ ...source, id: crypto.randomUUID(), name: `${source.name ?? "测试用例"} 副本` }, summary.projectId ?? fallbackProject, summary.collectionId ?? fallbackCollection); } : undefined;
       const copyCurl = onLoadHttpInterface ? async (caseId: string) => { const source = await onLoadHttpInterface(caseId); if (!source) return ""; const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`; return [`curl --location --request ${source.method} ${quote(source.url)}`, ...source.headers.map(([key,value]) => `  --header ${quote(`${key}: ${value}`)}`), ...(source.body ? [`  --data-raw ${quote(source.body)}`] : [])].join(" \\\n"); } : undefined;
@@ -580,14 +580,14 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
           const request = await onLoadHttpInterface(id);
           if (!request) return [id, { passed: false, error: "用例不存在" }] as const;
           const result = await sendCase(validationEnabled ? request : { ...request, assertions: [] });
-          const definitions = Array.isArray(request.metadata?.__apivoyResponseDefinitions) ? request.metadata.__apivoyResponseDefinitions as DesignedResponse[] : [];
+          const definitions = Array.isArray(request.metadata?.__protovoyResponseDefinitions) ? request.metadata.__protovoyResponseDefinitions as DesignedResponse[] : [];
           const definition = definitions[0];
           const designedAssertions = validationEnabled && definition ? validateDesignedResponse(definition, result, settings) : [];
           const failedAssertions = [...(validationEnabled ? result.assertions ?? [] : []), ...designedAssertions].filter((assertion) => !assertion.passed).map((assertion) => assertion.name);
           return [id, { passed: !result.error && failedAssertions.length === 0, error: result.error ?? (failedAssertions.length ? failedAssertions.join("；") : undefined), status: result.summary.status ?? null, durationMs: result.summary.durationMs, body: result.preview, headers: result.responseMeta?.headers ?? [] }] as const;
         })));
       } : undefined;
-      const deleteCase = onDeleteHttpInterface ?? (async (caseId: string) => { window.dispatchEvent(new CustomEvent("apivoy-delete-test-case", { detail: { caseId } })); });
+      const deleteCase = onDeleteHttpInterface ?? (async (caseId: string) => { window.dispatchEvent(new CustomEvent("protovoy-delete-test-case", { detail: { caseId } })); });
       return <InterfaceLifecycleShell workbenchId={session.workbenchId} sessionId={session.id} title={session.title} projectId={selectedProjectId} requestId={session.requestId ?? session.id} isSaved={Boolean(session.requestId)} definitionClient={definitionClient} caseMode={Boolean(session.caseParentId)} caseInterfaceName={session.caseInterfaceName} caseName={caseName} cases={cases} onOpenCase={openCase} onSaveCase={saveCase} onDeleteCase={deleteCase} onDuplicateCase={duplicateCase} onRunCases={runCases} onRunRequest={sendCase} onCopyCurl={copyCurl} onLoadCase={onLoadHttpInterface} mockClient={mockClient} onLoadMockSeed={() => loadInterfaceMockSeed({ workbenchId: session.workbenchId, sessionId: session.id, projectId: selectedProjectId, requestId: session.requestId ?? session.id, title: session.title })}>{content}</InterfaceLifecycleShell>;
     };
     const sourceWithSaveIdentity = isValidElement(source) ? (() => {
@@ -595,7 +595,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
       const onSave = element.props.onSave;
       if (!onSave) return element;
       const requestId = session.requestId ?? session.id;
-      return cloneElement(element, { onSave: async (request) => { await onSave({ ...request, id: requestId }); setSessions((current) => current.map((item) => item.id === session.id ? { ...item, requestId } : item)); }, onSaveAsCase: (request) => onSave({ ...request, id: crypto.randomUUID(), name: String(request.name || session.title + " - 成功用例"), variables: { ...((request.variables as Record<string, string> | undefined) ?? {}), __apivoyCaseOf: requestId, __apivoyCaseInterfaceName: session.title.replace(/^[A-Z]+\s+/, "") } }), onUpdateInterface: session.caseParentId ? (request) => onSave({ ...request, id: session.caseParentId }) : undefined });
+      return cloneElement(element, { onSave: async (request) => { await onSave({ ...request, id: requestId }); setSessions((current) => current.map((item) => item.id === session.id ? { ...item, requestId } : item)); }, onSaveAsCase: (request) => onSave({ ...request, id: crypto.randomUUID(), name: String(request.name || session.title + " - 成功用例"), variables: { ...((request.variables as Record<string, string> | undefined) ?? {}), __protovoyCaseOf: requestId, __protovoyCaseInterfaceName: session.title.replace(/^[A-Z]+\s+/, "") } }), onUpdateInterface: session.caseParentId ? (request) => onSave({ ...request, id: session.caseParentId }) : undefined });
     })() : source;
     if (session.workbenchId === "http" && isValidElement(source)) {
       const item = cloneElement(sourceWithSaveIdentity as ReactElement<HttpWorkbenchProps>, { key: session.id, workbenchSessionId: session.id, toolbarTargetId: `workbench-context-${session.id}`, commandbarTargetId: `interface-commandbar-${session.id}`, saveCollections: saveCollections?.filter((collection) => collection.projectId === selectedProjectId), saveModules: saveModules?.filter((module) => module.projectId === selectedProjectId), defaultSaveCollectionId: (saveTargetLabel ?? "").split(" / ")[1] ?? "", onSaveToCollection: onCreateHttpInterface && selectedProjectId ? async (request, collectionId) => { const requestId = session.requestId ?? session.id; await onCreateHttpInterface({ ...request, id: requestId }, selectedProjectId, collectionId); setSessions((current) => current.map((item) => item.id === session.id ? { ...item, requestId } : item)); return requestId; } : undefined, onCreateCollection: onCreateSaveCollection && selectedProjectId ? (parentId, name, moduleId) => onCreateSaveCollection(selectedProjectId, parentId, name, moduleId) : undefined, onTitleChange: (title: string) => updateSessionTitle(session.id, session.caseInterfaceName ? `${session.caseInterfaceName}（${title.replace(/^[A-Z]+\s+/, "")}）` : title) });

@@ -49,7 +49,7 @@ export function CommentsWorkbench({ contextCollectionId, contextRequestId, conte
   const roots = comments.filter(comment => !comment.parentId);
 
   if (!auth) {
-    return <EmptyState title="需要登录团队空间" description="评论挂在当前选中的集合/请求上下文。请先在账户与协作中登录。" action={<Button variant="primary" onClick={() => window.dispatchEvent(new CustomEvent("apivoy-collaboration-tab", { detail: "team" }))}>前往团队登录</Button>} />;
+    return <EmptyState title="需要登录团队空间" description="评论挂在当前选中的集合/请求上下文。请先在账户与协作中登录。" action={<Button variant="primary" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-collaboration-tab", { detail: "team" }))}>前往团队登录</Button>} />;
   }
   return <section className="comments-workbench">
     <header className="comments-header"><div><h2>工作区评论</h2><p>{contextLabel ? `当前上下文：${contextLabel}` : "围绕当前集合/请求进行异步评审。"}</p></div><StatusBadge tone="success">{comments.filter(c => !c.resolvedAt && !c.parentId).length} OPEN</StatusBadge></header>
@@ -65,4 +65,4 @@ function CommentCard({ comment, currentUserId, canResolve, onReply, onEdit, onTo
   return <div className="comment-card"><div className="comment-avatar">{comment.actorName.slice(0, 1).toUpperCase()}</div><div className="comment-content"><div className="comment-meta"><b>{comment.actorName}</b><time>{new Date(comment.createdAt).toLocaleString()}</time>{comment.updatedAt !== comment.createdAt && <span>已编辑</span>}{comment.resolvedAt && <span className="comment-resolved-badge">RESOLVED</span>}</div><p>{comment.body}</p><div className="comment-actions"><button onClick={() => onReply(comment)}>回复</button>{comment.actorId === currentUserId && <button onClick={() => void onEdit(comment)}>编辑</button>}{canResolve && <button onClick={() => void onToggle(comment)}>{comment.resolvedAt ? "重新打开" : "标记解决"}</button>}</div></div></div>;
 }
 
-function readAuth(): Auth | null { try { return JSON.parse(localStorage.getItem("apivoy:collaboration-auth") ?? "null") as Auth | null; } catch { return null; } }
+function readAuth(): Auth | null { try { return JSON.parse(localStorage.getItem("protovoy:collaboration-auth") ?? "null") as Auth | null; } catch { return null; } }

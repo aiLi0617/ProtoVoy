@@ -9,7 +9,7 @@ export interface PortableRequest {
 }
 
 export interface ImportResult {
-  source: "openapi" | "postman" | "har" | "apivoy";
+  source: "openapi" | "postman" | "har" | "protovoy";
   name: string;
   requests: PortableRequest[];
   warnings: string[];
@@ -335,11 +335,11 @@ function importObject(root: Record<string, unknown>, budget: ImportBudget): Impo
   if (typeof root.openapi === "string" || typeof root.swagger === "string") return importOpenApi(root, budget);
   if (root.log && typeof root.log === "object") return importHar(root, budget);
   if (root.info && typeof root.info === "object" && String(object(root.info).schema ?? "").includes("postman")) return importPostman(root, budget);
-  if (root.format === "apivoy-project" && Array.isArray(root.requests)) {
+  if (root.format === "protovoy-project" && Array.isArray(root.requests)) {
     for (const _request of root.requests) consumeRequest(budget);
-    return { source: "apivoy", name: String(root.name ?? "ApiVoy Import"), requests: root.requests as PortableRequest[], warnings: [] };
+    return { source: "protovoy", name: String(root.name ?? "ProtoVoy Import"), requests: root.requests as PortableRequest[], warnings: [] };
   }
-  throw new Error("无法识别文件格式；支持 OpenAPI JSON、Postman Collection v2、HAR 和 ApiVoy 项目包");
+  throw new Error("无法识别文件格式；支持 OpenAPI JSON、Postman Collection v2、HAR 和 ProtoVoy 项目包");
 }
 
 export function importJson(text: string): ImportResult {
@@ -371,8 +371,8 @@ export function scanSensitiveData(requests: PortableRequest[]): SensitiveFinding
   return findings;
 }
 
-export function exportApiVoyProject(name: string, requests: PortableRequest[], allowSensitive = false): string {
+export function exportProtoVoyProject(name: string, requests: PortableRequest[], allowSensitive = false): string {
   const findings = scanSensitiveData(requests);
   if (findings.length && !allowSensitive) throw new Error(`检测到 ${findings.length} 处可能的敏感信息，请清理或明确允许导出`);
-  return JSON.stringify({ format: "apivoy-project", version: 1, name, exportedAt: new Date().toISOString(), requests }, null, 2);
+  return JSON.stringify({ format: "protovoy-project", version: 1, name, exportedAt: new Date().toISOString(), requests }, null, 2);
 }

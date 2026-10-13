@@ -1,6 +1,6 @@
 # Environments and variables
 
-ApiVoy supports scoped variables resolved at execution time with `{{name}}` syntax.
+ProtoVoy supports scoped variables resolved at execution time with `{{name}}` syntax.
 
 ## Scopes
 
@@ -31,4 +31,4 @@ Built-in helpers include `$uuid`, `$timestamp`, and `$isoTimestamp` (see executi
 
 ## Git-friendly exports
 
-Environment definitions can be exported in ApiVoy project packages (`*.apivoy.json`). Use `secret_ref` for sensitive values — see [secrets.md](./secrets.md).
+Environment definitions can be exported in ProtoVoy project packages (`*.protovoy.json`). Use `secret_ref` for sensitive values — see [secrets.md](./secrets.md).

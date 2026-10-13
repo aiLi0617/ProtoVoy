@@ -34,7 +34,7 @@ impl HttpDriver {
     pub fn new() -> Self {
         let cookie_jar = Arc::new(Jar::default());
         let client = Client::builder()
-            .user_agent(concat!("ApiVoy/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("ProtoVoy/", env!("CARGO_PKG_VERSION")))
             .cookie_provider(Arc::clone(&cookie_jar))
             .no_proxy()
             .build()
@@ -118,7 +118,7 @@ impl HttpDriver {
         }
 
         let mut builder = Client::builder()
-            .user_agent(concat!("ApiVoy/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("ProtoVoy/", env!("CARGO_PKG_VERSION")))
             .cookie_provider(Arc::clone(&self.cookie_jar))
             .no_proxy()
             .danger_accept_invalid_certs(!request.tls.verify)
@@ -632,7 +632,7 @@ mod tests {
     #[test]
     fn accepts_combined_pem_client_identity_from_runtime_secret() {
         let key = rcgen::KeyPair::generate().unwrap();
-        let certificate = rcgen::CertificateParams::new(vec!["client.apivoy.local".into()])
+        let certificate = rcgen::CertificateParams::new(vec!["client.protovoy.local".into()])
             .unwrap()
             .self_signed(&key)
             .unwrap();
@@ -645,7 +645,7 @@ mod tests {
         assert!(driver.client_for(&request, true).is_ok());
         let serialized = serde_json::to_string(&request).unwrap();
         assert!(!serialized.contains("BEGIN PRIVATE KEY"));
-        assert!(!serialized.contains("client.apivoy.local"));
+        assert!(!serialized.contains("client.protovoy.local"));
     }
 
     #[tokio::test]
@@ -696,7 +696,7 @@ mod tests {
                 let size = stream.read(&mut request).await.unwrap();
                 let text = String::from_utf8_lossy(&request[..size]).into_owned();
                 if index == 0 {
-                    stream.write_all(b"HTTP/1.1 200 OK\r\nSet-Cookie: session=apivoy; Path=/; HttpOnly\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
+                    stream.write_all(b"HTTP/1.1 200 OK\r\nSet-Cookie: session=protovoy; Path=/; HttpOnly\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await.unwrap();
                 } else {
                     let _ = cookie_tx.take().unwrap().send(text);
                     stream
@@ -720,7 +720,7 @@ mod tests {
             .await
             .unwrap();
         let second_request = cookie_rx.await.unwrap().to_ascii_lowercase();
-        assert!(second_request.contains("cookie: session=apivoy"));
+        assert!(second_request.contains("cookie: session=protovoy"));
         server.await.unwrap();
     }
 
@@ -823,7 +823,7 @@ mod tests {
             payload.multipart = vec![
                 MultipartPart {
                     name: "title".into(),
-                    value: "ApiVoy".into(),
+                    value: "ProtoVoy".into(),
                     file_name: None,
                     content_type: None,
                     base64: false,
@@ -843,7 +843,7 @@ mod tests {
             .to_ascii_lowercase()
             .contains("content-type: multipart/form-data; boundary="));
         assert!(wire.contains("name=\"title\""));
-        assert!(wire.contains("ApiVoy"));
+        assert!(wire.contains("ProtoVoy"));
         assert!(wire.contains("filename=\"sample.bin\""));
         assert!(wire.contains("binary-data"));
         server.await.unwrap();

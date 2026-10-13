@@ -1,6 +1,6 @@
-ApiVoy 首个公开发布：本地优先的多协议接口调试客户端。Windows、macOS、Linux 桌面端，以及 CLI 与 Local Agent。
+ProtoVoy 首个公开发布：本地优先的多协议接口调试客户端。Windows、macOS、Linux 桌面端，以及 CLI 与 Local Agent。
 
-ApiVoy’s first public release: a local-first, multi-protocol API debugging client for desktop, CLI, and Local Agent.
+ProtoVoy’s first public release: a local-first, multi-protocol API debugging client for desktop, CLI, and Local Agent.
 
 ## 亮点 / Highlights
 
@@ -24,7 +24,7 @@ ApiVoy’s first public release: a local-first, multi-protocol API debugging cli
 - Windows：`.msi`
 - macOS：`.dmg`
 - Linux：`.deb`
-- 各平台 **ApiVoy CLI** 与 **ApiVoy Local Agent** 压缩包
+- 各平台 **ProtoVoy CLI** 与 **ProtoVoy Local Agent** 压缩包
 - `SHA256SUMS.txt`
 
 Choose the installer for your OS and verify with `SHA256SUMS.txt` on this release.
@@ -50,6 +50,6 @@ This is an early public release. Some protocol workbenches remain experimental, 
 
 ## 安全 / Security
 
-请勿通过公开 GitHub Issues 报告安全漏洞。见 [SECURITY.md](https://github.com/aiLi0617/ApiVoy/blob/main/SECURITY.md)。
+请勿通过公开 GitHub Issues 报告安全漏洞。见 [SECURITY.md](https://github.com/aiLi0617/ProtoVoy/blob/main/SECURITY.md)。
 
-Do not report security vulnerabilities through public GitHub Issues. See [SECURITY.md](https://github.com/aiLi0617/ApiVoy/blob/main/SECURITY.md).
+Do not report security vulnerabilities through public GitHub Issues. See [SECURITY.md](https://github.com/aiLi0617/ProtoVoy/blob/main/SECURITY.md).

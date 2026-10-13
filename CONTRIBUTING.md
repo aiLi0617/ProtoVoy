@@ -1,10 +1,10 @@
-# Contributing to ApiVoy
+# Contributing to ProtoVoy
 
-Thank you for your interest in contributing to ApiVoy.
+Thank you for your interest in contributing to ProtoVoy.
 
 ## Before contributing
 
-- Search existing [issues](https://github.com/aiLi0617/ApiVoy/issues) and pull requests.
+- Search existing [issues](https://github.com/aiLi0617/ProtoVoy/issues) and pull requests.
 - For large changes, open a proposal issue first.
 - Keep changes focused on one responsibility.
 - Do not include credentials, private endpoints, or proprietary code.
@@ -21,8 +21,8 @@ Thank you for your interest in contributing to ApiVoy.
 ### Clone and run
 
 ```bash
-git clone https://github.com/aiLi0617/ApiVoy.git
-cd ApiVoy
+git clone https://github.com/aiLi0617/ProtoVoy.git
+cd ProtoVoy
 pnpm install
 cargo check --workspace
 
@@ -30,11 +30,11 @@ cargo check --workspace
 pnpm dev:desktop
 
 # Web (requires Local Agent in another terminal)
-cargo run -p apivoy-local-agent
+cargo run -p protovoy-local-agent
 pnpm dev:web
 
 # CLI smoke test
-cargo run -p apivoy-cli -- http-get https://httpbin.org/get
+cargo run -p protovoy-cli -- http-get https://httpbin.org/get
 ```
 
 ### Collaboration server (optional)

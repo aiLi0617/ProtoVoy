@@ -38,7 +38,7 @@
   display: grid;
   grid-template-rows: auto auto minmax(220px, 1fr) minmax(180px, .72fr);
   overflow: hidden;
-  background: var(--apivoy-workspace);
+  background: var(--protovoy-workspace);
 }
 
 .protocol-history-commandbar {
@@ -47,19 +47,19 @@
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--apivoy-border);
-  background: var(--apivoy-panel);
+  border-bottom: 1px solid var(--protovoy-border);
+  background: var(--protovoy-panel);
 }
 
 .protocol-history-commandbar > input,
 .protocol-history-editor input,
 .protocol-history-editor textarea {
   width: 100%;
-  border: 1px solid var(--apivoy-border);
+  border: 1px solid var(--protovoy-border);
   border-radius: 6px;
   outline: 0;
-  background: var(--apivoy-bg-elevated);
-  color: var(--apivoy-text);
+  background: var(--protovoy-bg-elevated);
+  color: var(--protovoy-text);
   font: inherit;
 }
 
@@ -72,16 +72,16 @@
 .protocol-history-commandbar > input:focus,
 .protocol-history-editor input:focus,
 .protocol-history-editor textarea:focus {
-  border-color: var(--apivoy-accent);
-  box-shadow: 0 0 0 3px var(--apivoy-accent-soft);
+  border-color: var(--protovoy-accent);
+  box-shadow: 0 0 0 3px var(--protovoy-accent-soft);
 }
 
 .protocol-history-badge {
   min-width: 54px;
   padding: 5px 8px;
   border-radius: 5px;
-  background: var(--apivoy-accent-soft);
-  color: var(--apivoy-accent);
+  background: var(--protovoy-accent-soft);
+  color: var(--protovoy-accent);
   text-align: center;
   font-size: 10px;
   font-weight: 800;
@@ -104,7 +104,7 @@
   min-height: 0;
   display: grid;
   gap: 7px;
-  color: var(--apivoy-muted);
+  color: var(--protovoy-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -116,8 +116,8 @@
 }
 
 .protocol-history-editor label small {
-  color: var(--apivoy-subtle);
-  font-family: var(--apivoy-mono);
+  color: var(--protovoy-subtle);
+  font-family: var(--protovoy-mono);
   font-weight: 400;
 }
 
@@ -129,17 +129,17 @@
   min-height: 0;
   padding: 11px 12px;
   resize: none;
-  font-family: var(--apivoy-mono);
+  font-family: var(--protovoy-mono);
   font-size: 11px;
   line-height: 1.55;
 }
 
 .protocol-history-error {
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, var(--apivoy-danger) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--protovoy-danger) 28%, transparent);
   border-radius: 6px;
-  background: color-mix(in srgb, var(--apivoy-danger) 8%, transparent);
-  color: var(--apivoy-danger);
+  background: color-mix(in srgb, var(--protovoy-danger) 8%, transparent);
+  color: var(--protovoy-danger);
   font-size: 11px;
 }
 
@@ -147,8 +147,8 @@
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  border-top: 1px solid var(--apivoy-border);
-  background: var(--apivoy-panel);
+  border-top: 1px solid var(--protovoy-border);
+  background: var(--protovoy-panel);
 }
 
 .protocol-history-response > header {
@@ -156,8 +156,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 9px 13px;
-  border-bottom: 1px solid var(--apivoy-border);
-  color: var(--apivoy-muted);
+  border-bottom: 1px solid var(--protovoy-border);
+  color: var(--protovoy-muted);
   font-size: 10px;
 }
 
@@ -169,7 +169,7 @@
 
 .protocol-history-response > header strong,
 .protocol-history-response > header b {
-  color: var(--apivoy-text);
+  color: var(--protovoy-text);
 }
 
 .protocol-history-response pre {
@@ -177,8 +177,8 @@
   margin: 0;
   padding: 13px;
   overflow: auto;
-  color: var(--apivoy-text);
-  font-family: var(--apivoy-mono);
+  color: var(--protovoy-text);
+  font-family: var(--protovoy-mono);
   font-size: 11px;
   line-height: 1.55;
   white-space: pre-wrap;
@@ -198,9 +198,9 @@
   align-items: center;
   gap: 12px;
   padding: 5px 12px;
-  border-bottom: 1px solid var(--apivoy-border);
-  background: var(--apivoy-bg-elevated);
-  color: var(--apivoy-muted);
+  border-bottom: 1px solid var(--protovoy-border);
+  background: var(--protovoy-bg-elevated);
+  color: var(--protovoy-muted);
   font-size: 10px;
 }
 
@@ -217,7 +217,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--apivoy-accent);
+  color: var(--protovoy-accent);
   font: inherit;
   font-weight: 650;
   cursor: pointer;
@@ -234,7 +234,7 @@
 }
 
 .http-history-interface-link:focus-visible {
-  outline: 2px solid var(--apivoy-accent);
+  outline: 2px solid var(--protovoy-accent);
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -243,12 +243,12 @@
 .http-history-time svg {
   width: 13px;
   height: 13px;
-  color: var(--apivoy-accent);
+  color: var(--protovoy-accent);
 }
 
 .http-history-time time {
-  color: var(--apivoy-text);
-  font-family: var(--apivoy-mono);
+  color: var(--protovoy-text);
+  font-family: var(--protovoy-mono);
 }
 
 .history-debug-case-dialog {
@@ -258,10 +258,10 @@
 .history-save-interface-dialog {
   width: min(520px, calc(100vw - 32px));
   overflow: hidden;
-  border: 1px solid var(--apivoy-border);
+  border: 1px solid var(--protovoy-border);
   border-radius: 10px;
-  background: var(--apivoy-panel);
-  color: var(--apivoy-text);
+  background: var(--protovoy-panel);
+  color: var(--protovoy-text);
   box-shadow: 0 24px 80px rgb(0 0 0 / 34%);
 }
 
@@ -293,12 +293,12 @@
 .history-save-interface-fields > label:not(.history-save-url-toggle) {
   display: grid;
   gap: 7px;
-  color: var(--apivoy-muted);
+  color: var(--protovoy-muted);
   font-size: 11px;
 }
 
 .history-save-interface-fields i {
-  color: var(--apivoy-danger);
+  color: var(--protovoy-danger);
   font-style: normal;
 }
 
@@ -307,18 +307,18 @@
   width: 100%;
   height: 36px;
   padding: 0 10px;
-  border: 1px solid var(--apivoy-border);
+  border: 1px solid var(--protovoy-border);
   border-radius: 6px;
   outline: 0;
-  background: var(--apivoy-workspace);
-  color: var(--apivoy-text);
+  background: var(--protovoy-workspace);
+  color: var(--protovoy-text);
   font: inherit;
 }
 
 .history-save-interface-fields input:focus,
 .history-save-interface-fields select:focus {
-  border-color: var(--apivoy-accent);
-  box-shadow: 0 0 0 3px var(--apivoy-accent-soft);
+  border-color: var(--protovoy-accent);
+  box-shadow: 0 0 0 3px var(--protovoy-accent-soft);
 }
 
 .history-save-interface-fields input:disabled {
@@ -329,7 +329,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  color: var(--apivoy-muted);
+  color: var(--protovoy-muted);
   font-size: 11px;
 }
 
@@ -339,7 +339,7 @@
   height: 16px;
   margin: 0;
   border-radius: 999px;
-  background: var(--apivoy-border-strong);
+  background: var(--protovoy-border-strong);
   cursor: pointer;
   transition: background .18s ease;
 }
@@ -356,7 +356,7 @@
 }
 
 .history-save-url-toggle input:checked {
-  background: var(--apivoy-accent);
+  background: var(--protovoy-accent);
 }
 
 .history-save-url-toggle input:checked::before {
@@ -364,7 +364,7 @@
 }
 
 .history-save-url-toggle input:focus-visible {
-  outline: 2px solid var(--apivoy-accent);
+  outline: 2px solid var(--protovoy-accent);
   outline-offset: 2px;
 }
 

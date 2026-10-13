@@ -462,8 +462,8 @@ export function MockWorkbench({ onList, onCreate, onUpdate, onDelete, onStatus, 
       if (nextSeed) applySeed(nextSeed);
       else startCreate();
     };
-    window.addEventListener("apivoy-create-mock-rule", createRule);
-    return () => window.removeEventListener("apivoy-create-mock-rule", createRule);
+    window.addEventListener("protovoy-create-mock-rule", createRule);
+    return () => window.removeEventListener("protovoy-create-mock-rule", createRule);
   }, [variant]);
 
   function changeResponseStatus(statusCode: string) {
@@ -485,12 +485,12 @@ export function MockWorkbench({ onList, onCreate, onUpdate, onDelete, onStatus, 
     setTestingId(rule.id);
     setTestResult(null);
     try {
-      const headers = new Headers({ "X-ApiVoy-Protocol-Api-Version": "1" });
-      const token = localStorage.getItem("apivoy-agent-token");
+      const headers = new Headers({ "X-ProtoVoy-Protocol-Api-Version": "1" });
+      const token = localStorage.getItem("protovoy:agent-token");
       if (token) headers.set("Authorization", `Bearer ${token}`);
-      const response = await fetch(`${requestUrl(mockBaseUrl(serverStatus), rule)}?apivoyScenarioId=${encodeURIComponent(rule.id)}`, { method: rule.method === "*" ? "GET" : rule.method, headers });
+      const response = await fetch(`${requestUrl(mockBaseUrl(serverStatus), rule)}?protovoyScenarioId=${encodeURIComponent(rule.id)}`, { method: rule.method === "*" ? "GET" : rule.method, headers });
       const body = (await response.text()).slice(0, 1200);
-      setTestResult({ ruleId: rule.id, status: response.status, matchedRuleId: response.headers.get("X-ApiVoy-Mock-Scenario") ?? undefined, body });
+      setTestResult({ ruleId: rule.id, status: response.status, matchedRuleId: response.headers.get("X-ProtoVoy-Mock-Scenario") ?? undefined, body });
     } catch (error) {
       notify(error instanceof Error ? error.message : String(error), "danger");
     } finally { setTestingId(null); }
@@ -593,7 +593,7 @@ export function MockWorkbench({ onList, onCreate, onUpdate, onDelete, onStatus, 
         <div className="mock-overview-heading"><div><h3 id="mock-design-responses-title">设计响应</h3><p>来源于最近一次保存的接口定义；响应示例优先，未填写示例时按 Schema 生成。</p></div><StatusBadge tone={contextSeed.persisted === false ? "warning" : "success"}>{contextSeed.persisted === false ? "尚未保存" : "已保存"}</StatusBadge></div>
         {contextSeed.responses.length ? <div className="mock-design-response-list">{contextSeed.responses.map((response) => {
           const addressRoot = contextOperationUrl || contextPathUrl;
-          const address = `${addressRoot}${addressRoot.includes("?") ? "&" : "?"}apivoyResponseId=${encodeURIComponent(response.id)}`;
+          const address = `${addressRoot}${addressRoot.includes("?") ? "&" : "?"}protovoyResponseId=${encodeURIComponent(response.id)}`;
           return <article key={response.id}><div><StatusBadge tone={statusTone(responseStatus(response, "success"))}>HTTP {response.statusCode}</StatusBadge><strong>{response.name}</strong><small>{response.exampleBody === undefined ? "Schema 智能生成" : "响应示例"}</small></div><code>{address}</code><Button size="compact" variant="ghost" icon="copy" disabled={contextSeed.persisted === false} onClick={() => void navigator.clipboard.writeText(address)}>复制</Button></article>;
         })}</div> : <EmptyState title="尚未设计响应" description="在接口设计中添加响应并保存后，会自动成为 Mock 的默认返回来源。" />}
       </section> : null}

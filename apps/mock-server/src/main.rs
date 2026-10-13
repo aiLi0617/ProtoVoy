@@ -36,9 +36,9 @@ struct AppState {
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MockQuery {
-    apivoy_api_id: Option<String>,
-    apivoy_response_id: Option<String>,
-    apivoy_scenario_id: Option<Uuid>,
+    protovoy_api_id: Option<String>,
+    protovoy_response_id: Option<String>,
+    protovoy_scenario_id: Option<Uuid>,
     #[serde(flatten)]
     values: HashMap<String, String>,
 }
@@ -63,10 +63,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
-    let bind = std::env::var("APIVOY_MOCK_BIND")
+    let bind = std::env::var("PROTOVOY_MOCK_BIND")
         .unwrap_or_else(|_| "127.0.0.1:39218".into())
         .parse::<SocketAddr>()?;
-    let rules_path = std::env::var_os("APIVOY_MOCK_RULES_PATH")
+    let rules_path = std::env::var_os("PROTOVOY_MOCK_RULES_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|| config_dir().join("mock-rules.json"));
     let state = AppState {
@@ -97,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .with_state(state);
     let listener = tokio::net::TcpListener::bind(bind).await?;
-    info!("ApiVoy Mock Server listening on http://{bind}");
+    info!("ProtoVoy Mock Server listening on http://{bind}");
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -107,21 +107,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn config_dir() -> PathBuf {
-    if let Ok(value) = std::env::var("APIVOY_CONFIG_DIR") {
+    if let Ok(value) = std::env::var("PROTOVOY_CONFIG_DIR") {
         return PathBuf::from(value);
     }
     if cfg!(target_os = "windows") {
         if let Ok(local) = std::env::var("LOCALAPPDATA") {
-            return PathBuf::from(local).join("ApiVoy");
+            return PathBuf::from(local).join("protovoy");
         }
     }
     if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        return PathBuf::from(xdg).join("apivoy");
+        return PathBuf::from(xdg).join("protovoy");
     }
     if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(home).join(".config").join("apivoy");
+        return PathBuf::from(home).join(".config").join("protovoy");
     }
-    PathBuf::from(".apivoy")
+    PathBuf::from(".protovoy")
 }
 
 async fn refresh_rules(state: &AppState) {
@@ -145,7 +145,7 @@ async fn refresh_rules(state: &AppState) {
 
 async fn health(State(state): State<AppState>) -> Json<HealthResponse> {
     Json(HealthResponse {
-        service: "apivoy-mock",
+        service: "protovoy-mock",
         version: env!("CARGO_PKG_VERSION"),
         bind: state.bind.to_string(),
         request_count: state.request_count.load(Ordering::Relaxed),
@@ -225,7 +225,7 @@ async fn serve_mock(
     let cookies = parse_cookies(request_headers.get("cookie").map(String::as_str));
     let body_text = String::from_utf8_lossy(&body);
     let (path, route_operation_id) = match &target {
-        RouteTarget::Path(path) => (Some(path.as_str()), query.apivoy_api_id.as_deref()),
+        RouteTarget::Path(path) => (Some(path.as_str()), query.protovoy_api_id.as_deref()),
         RouteTarget::Operation(operation_id) => (None, Some(operation_id.as_str())),
     };
     let request_method = if websocket.is_some() {
@@ -239,8 +239,8 @@ async fn serve_mock(
         method: request_method,
         path,
         operation_id: route_operation_id,
-        response_id: query.apivoy_response_id.as_deref(),
-        scenario_id: query.apivoy_scenario_id,
+        response_id: query.protovoy_response_id.as_deref(),
+        scenario_id: query.protovoy_scenario_id,
         query: &query.values,
         headers: &request_headers,
         cookies: &cookies,
@@ -251,7 +251,7 @@ async fn serve_mock(
     let selected = select_mock_rule(&rules, &facts);
     let rule = match selected {
         MatchResult::NotFound => {
-            return (StatusCode::NOT_FOUND, "No ApiVoy Mock response matched").into_response();
+            return (StatusCode::NOT_FOUND, "No ProtoVoy Mock response matched").into_response();
         }
         MatchResult::Conflict(ids) => {
             return (
@@ -259,7 +259,7 @@ async fn serve_mock(
                 Json(serde_json::json!({
                     "error": "multiple_mock_responses_matched",
                     "scenarioIds": ids,
-                    "hint": "Specify apivoyApiId or apivoyScenarioId",
+                    "hint": "Specify protovoyApiId or protovoyScenarioId",
                 })),
             )
                 .into_response();
@@ -286,13 +286,13 @@ async fn serve_mock(
     if rule.error_every.is_some_and(|every| hits % every == 0) {
         return Response::builder()
             .status(StatusCode::SERVICE_UNAVAILABLE)
-            .header("X-ApiVoy-Mock-Injected", "true")
+            .header("X-ProtoVoy-Mock-Injected", "true")
             .body(Body::from("Injected mock failure"))
             .unwrap();
     }
     let mut response = Response::builder()
         .status(rule.status)
-        .header("X-ApiVoy-Mock-Scenario", rule.id.to_string());
+        .header("X-ProtoVoy-Mock-Scenario", rule.id.to_string());
     for (name, value) in rule.headers {
         response = response.header(name, value);
     }

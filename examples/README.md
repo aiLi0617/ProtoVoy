@@ -1,4 +1,4 @@
-# ApiVoy examples
+# ProtoVoy examples
 
 Public, credential-free samples for documentation and smoke testing.
 
@@ -15,7 +15,7 @@ Public, credential-free samples for documentation and smoke testing.
 Run the HTTP smoke collection:
 
 ```bash
-apivoy-cli run examples/collections/httpbin-smoke.json
+protovoy-cli run examples/collections/httpbin-smoke.json
 ```
 
 See [docs/getting-started/](../docs/getting-started/) for user-facing guides.

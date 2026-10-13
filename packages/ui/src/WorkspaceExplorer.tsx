@@ -1,4 +1,4 @@
-import { IMPORT_MAX_DOCUMENTS, IMPORT_MAX_FILE_BYTES, IMPORT_MAX_TOTAL_BYTES, importDocument, type PortableRequest } from "@apivoy/import-export";
+import { IMPORT_MAX_DOCUMENTS, IMPORT_MAX_FILE_BYTES, IMPORT_MAX_TOTAL_BYTES, importDocument, type PortableRequest } from "@protovoy/import-export";
 import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useFeedback } from "./Feedback";
@@ -17,7 +17,7 @@ export interface RequestRecord { id: string; projectId: string; collectionId: st
 export interface WorkspaceTree { workspaces: WorkspaceRecord[]; projects: ProjectRecord[]; modules?: ModuleRecord[]; collections: CollectionRecord[]; requests: RequestRecord[] }
 
 function isDebugCase(request: RequestRecord): boolean {
-  return Boolean(request.envelope?.variables?.__apivoyCaseOf) && request.envelope?.metadata?.__apivoyCaseType !== "test";
+  return Boolean(request.envelope?.variables?.__protovoyCaseOf) && request.envelope?.metadata?.__protovoyCaseType !== "test";
 }
 const CREATE_PROTOCOL_GROUPS = [
   { label: "API", items: [["http", "HTTP", "globe"], ["grpc", "gRPC", "network"]] },
@@ -97,8 +97,8 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
 
   useEffect(() => {
     const openImport = () => importInput.current?.click();
-    window.addEventListener("apivoy-import-requests", openImport);
-    return () => window.removeEventListener("apivoy-import-requests", openImport);
+    window.addEventListener("protovoy-import-requests", openImport);
+    return () => window.removeEventListener("protovoy-import-requests", openImport);
   }, []);
   useEffect(() => {
     if (!openMenuId) return;
@@ -228,7 +228,7 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
 
   const tree = props.tree;
   if (props.loading) return <div className="workspace-tree-empty" role="status" aria-live="polite">正在加载工作区…</div>;
-  if (props.error) return <div className="workspace-load-error" role="alert"><Icon name="archive"/><strong>无法加载工作区</strong><span>{props.error}</span><div><button type="button" className="ui-button primary" onClick={props.onRetry}>重试</button><button type="button" className="ui-button secondary" onClick={() => window.dispatchEvent(new CustomEvent("apivoy-open-settings"))}>检查 Local Agent 设置</button></div></div>;
+  if (props.error) return <div className="workspace-load-error" role="alert"><Icon name="archive"/><strong>无法加载工作区</strong><span>{props.error}</span><div><button type="button" className="ui-button primary" onClick={props.onRetry}>重试</button><button type="button" className="ui-button secondary" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-settings"))}>检查 Local Agent 设置</button></div></div>;
   if (!tree) return <div className="workspace-tree-empty" role="status">尚未加载工作区</div>;
   const workspace = tree.workspaces[0];
   const workspaceProjects = tree.projects.filter((project) => project.workspaceId === workspace?.id);
@@ -238,7 +238,7 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
     if (cached != null) return cached;
     if (ancestors.has(collectionId)) return 0;
     const nextAncestors = new Set(ancestors).add(collectionId);
-    const direct = tree!.requests.filter((request) => request.collectionId === collectionId && !request.envelope?.variables?.__apivoyCaseOf).length;
+    const direct = tree!.requests.filter((request) => request.collectionId === collectionId && !request.envelope?.variables?.__protovoyCaseOf).length;
     const descendants = tree!.collections.filter((collection) => collection.parentId === collectionId).reduce((count, child) => count + collectionRequestCount(child.id, nextAncestors), 0);
     const total = direct + descendants;
     collectionCountCache.set(collectionId, total);
@@ -247,7 +247,7 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
   const selectedProjectIds = [...new Set(tree.requests.filter((item) => selectedIds.includes(item.id)).map((item) => item.projectId))];
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const selectedProject = tree.projects.find((project) => project.id === props.selectedProjectId) ?? workspaceProjects[0];
-  const selectedProjectRequestCount = selectedProject ? tree.requests.filter((request) => request.projectId === selectedProject.id && !request.envelope?.variables?.__apivoyCaseOf).length : 0;
+  const selectedProjectRequestCount = selectedProject ? tree.requests.filter((request) => request.projectId === selectedProject.id && !request.envelope?.variables?.__protovoyCaseOf).length : 0;
   const projectModules = selectedProject ? (tree.modules?.filter((module) => module.projectId === selectedProject.id) ?? [{ id: `default-module-${selectedProject.id}`, projectId: selectedProject.id, name: "默认模块", isDefault: true }]) : [];
   const collectionInModule = (collection: CollectionRecord, module: ModuleRecord) => collection.moduleId ? collection.moduleId === module.id : module.isDefault;
   function collectionPath(parentId: string | null): CollectionRecord[] {
@@ -270,11 +270,15 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
     return tree!.collections.filter((item) => item.parentId === collection.id).some(collectionMatches);
   }
   function readDrag(event: DragEvent): { type: "request" | "collection"; id: string } | null {
-    try { return JSON.parse(event.dataTransfer.getData("application/x-apivoy-item")); } catch { return null; }
+    try {
+      return JSON.parse(
+        event.dataTransfer.getData("application/x-protovoy-item"),
+      );
+    } catch { return null; }
   }
   function setDrag(event: DragEvent, type: "request" | "collection", id: string) {
     event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("application/x-apivoy-item", JSON.stringify({ type, id }));
+    event.dataTransfer.setData("application/x-protovoy-item", JSON.stringify({ type, id }));
   }
   function dropOnCollection(event: DragEvent, target: CollectionRecord) {
     event.preventDefault();
@@ -320,8 +324,8 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
   }
   function renderCollection(collection: CollectionRecord, depth = 0) {
     const collectionRequests = tree!.requests.filter((item) => item.collectionId === collection.id);
-    const requests = collectionRequests.filter((item) => !item.envelope?.variables?.__apivoyCaseOf).flatMap((request) => {
-      const cases = collectionRequests.filter((item) => item.envelope?.variables?.__apivoyCaseOf === request.id && isDebugCase(item));
+    const requests = collectionRequests.filter((item) => !item.envelope?.variables?.__protovoyCaseOf).flatMap((request) => {
+      const cases = collectionRequests.filter((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item));
       return collapsedNodes.includes(`request:${request.id}`) ? [request] : [request, ...cases];
     });
     const siblings = tree!.collections.filter((item) => item.projectId === collection.projectId && (item.parentId ?? null) === (collection.parentId ?? null)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
@@ -353,9 +357,9 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
       </div>
       {!isCollapsed && children.filter(collectionMatches).map((child) => renderCollection(child, depth + 1))}
       {!isCollapsed && !!collection.tags?.length && <div className="tree-tags" style={{ paddingLeft: 31 + depth * 20 }}>{collection.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
-      {!isCollapsed && requests.filter((request) => !normalizedQuery || `${request.name} ${request.target}`.toLocaleLowerCase().includes(normalizedQuery)).map((request, requestIndex, visibleRequests) => <div draggable={!batchMode} onDragStart={(event) => setDrag(event, "request", request.id)} className={`tree-row tree-request-row${request.envelope?.variables?.__apivoyCaseOf ? " tree-case-row" : ""}${batchMode ? " is-batch-mode" : ""}${selectedIds.includes(request.id) ? " is-selected" : ""}${props.selectedRequestId === request.id ? " is-active" : ""}${openMenuId === `request:${request.id}` ? " is-menu-open" : ""}`} role="treeitem" aria-selected={batchMode ? selectedIds.includes(request.id) : undefined} aria-level={depth + (request.envelope?.variables?.__apivoyCaseOf ? 3 : 2)} aria-setsize={visibleRequests.length} aria-posinset={requestIndex + 1} key={request.id} style={{ paddingLeft: (request.envelope?.variables?.__apivoyCaseOf ? 73 : 38) + depth * 20 }}>
-        {!request.envelope?.variables?.__apivoyCaseOf ? (collectionRequests.some((item) => item.envelope?.variables?.__apivoyCaseOf === request.id && isDebugCase(item)) ? <span className="tree-actions-leading"><button type="button" className={`tree-chevron tree-request-chevron${collapsedNodes.includes(`request:${request.id}`) ? "" : " is-expanded"}`} aria-label={`${collapsedNodes.includes(`request:${request.id}`) ? "展开" : "收起"}调试用例 ${request.name}`} aria-expanded={!collapsedNodes.includes(`request:${request.id}`)} onClick={() => toggleExplorerNode(`request:${request.id}`)}><Icon name="chevron"/></button></span> : <span className="tree-actions-leading tree-chevron-placeholder" aria-hidden="true"><span className="tree-chevron tree-request-chevron"><Icon name="chevron"/></span></span>) : null}
-        <button type="button" className="tree-main tree-request-main" onClick={() => { if (batchMode) { toggleSelected(request.id); return; } const parentId = request.envelope?.variables?.__apivoyCaseOf; const parentStructure = parentId ? readInterfaceStructureMetadata(collectionRequests.find((item) => item.id === parentId)?.envelope?.metadata) : null; if (parentStructure) stashCaseInterfaceStructure(request.id, parentStructure); props.onOpenRequest(request.id); }} title={batchMode ? (selectedIds.includes(request.id) ? "取消选择" : "选择此项") : request.target}>{request.envelope?.variables?.__apivoyCaseOf ? <span className="tree-case-icon" title="调试用例"><Icon name="bolt"/></span> : request.protocolId === "websocket" ? <span className="tree-protocol-icon tree-protocol-websocket" title="WebSocket"><Icon name="websocket" /></span> : <b className="tree-request-method" data-method={(request.method ?? request.protocolId ?? "HTTP").toUpperCase()}>{request.method ?? request.protocolId?.toUpperCase() ?? "HTTP"}</b>}<span className="tree-label">{request.name}</span>{!request.envelope?.variables?.__apivoyCaseOf && collectionRequests.some((item) => item.envelope?.variables?.__apivoyCaseOf === request.id && isDebugCase(item)) ? <small className="tree-interface-case-count" title="调试用例数量">（{collectionRequests.filter((item) => item.envelope?.variables?.__apivoyCaseOf === request.id && isDebugCase(item)).length}）</small> : null}</button>
+      {!isCollapsed && requests.filter((request) => !normalizedQuery || `${request.name} ${request.target}`.toLocaleLowerCase().includes(normalizedQuery)).map((request, requestIndex, visibleRequests) => <div draggable={!batchMode} onDragStart={(event) => setDrag(event, "request", request.id)} className={`tree-row tree-request-row${request.envelope?.variables?.__protovoyCaseOf ? " tree-case-row" : ""}${batchMode ? " is-batch-mode" : ""}${selectedIds.includes(request.id) ? " is-selected" : ""}${props.selectedRequestId === request.id ? " is-active" : ""}${openMenuId === `request:${request.id}` ? " is-menu-open" : ""}`} role="treeitem" aria-selected={batchMode ? selectedIds.includes(request.id) : undefined} aria-level={depth + (request.envelope?.variables?.__protovoyCaseOf ? 3 : 2)} aria-setsize={visibleRequests.length} aria-posinset={requestIndex + 1} key={request.id} style={{ paddingLeft: (request.envelope?.variables?.__protovoyCaseOf ? 73 : 38) + depth * 20 }}>
+        {!request.envelope?.variables?.__protovoyCaseOf ? (collectionRequests.some((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item)) ? <span className="tree-actions-leading"><button type="button" className={`tree-chevron tree-request-chevron${collapsedNodes.includes(`request:${request.id}`) ? "" : " is-expanded"}`} aria-label={`${collapsedNodes.includes(`request:${request.id}`) ? "展开" : "收起"}调试用例 ${request.name}`} aria-expanded={!collapsedNodes.includes(`request:${request.id}`)} onClick={() => toggleExplorerNode(`request:${request.id}`)}><Icon name="chevron"/></button></span> : <span className="tree-actions-leading tree-chevron-placeholder" aria-hidden="true"><span className="tree-chevron tree-request-chevron"><Icon name="chevron"/></span></span>) : null}
+        <button type="button" className="tree-main tree-request-main" onClick={() => { if (batchMode) { toggleSelected(request.id); return; } const parentId = request.envelope?.variables?.__protovoyCaseOf; const parentStructure = parentId ? readInterfaceStructureMetadata(collectionRequests.find((item) => item.id === parentId)?.envelope?.metadata) : null; if (parentStructure) stashCaseInterfaceStructure(request.id, parentStructure); props.onOpenRequest(request.id); }} title={batchMode ? (selectedIds.includes(request.id) ? "取消选择" : "选择此项") : request.target}>{request.envelope?.variables?.__protovoyCaseOf ? <span className="tree-case-icon" title="调试用例"><Icon name="bolt"/></span> : request.protocolId === "websocket" ? <span className="tree-protocol-icon tree-protocol-websocket" title="WebSocket"><Icon name="websocket" /></span> : <b className="tree-request-method" data-method={(request.method ?? request.protocolId ?? "HTTP").toUpperCase()}>{request.method ?? request.protocolId?.toUpperCase() ?? "HTTP"}</b>}<span className="tree-label">{request.name}</span>{!request.envelope?.variables?.__protovoyCaseOf && collectionRequests.some((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item)) ? <small className="tree-interface-case-count" title="调试用例数量">（{collectionRequests.filter((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item)).length}）</small> : null}</button>
         <span className="tree-actions tree-more" data-tree-menu={`request:${request.id}`}><button type="button" className="tree-action-button" ref={(node) => { const id = `request:${request.id}`; if (node) menuButtonRefs.current.set(id, node); else menuButtonRefs.current.delete(id); }} title="更多操作" aria-label={`${request.name} 更多操作`} aria-expanded={openMenuId === `request:${request.id}`} aria-haspopup="menu" onClick={(event) => { event.stopPropagation(); openCollectionMenu(`request:${request.id}`); }}><Icon name="menu" /></button>{renderRequestMenu(request)}</span>
       </div>)}
     </div>;
@@ -363,7 +367,7 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
   return <section className="workspace-explorer-tree" role="tree" aria-label="工作区资源树" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={onTreeKeyDown}>
     <div className="workspace-tree-heading">
       <span>接口管理 <small className="workspace-resource-count" title="当前项目请求总数">{selectedProjectRequestCount}</small></span>
-      <input ref={importInput} hidden multiple type="file" accept=".json,.yaml,.yml,.har,.apivoy" onChange={(event) => void importFiles(event.target.files)} />
+      <input ref={importInput} hidden multiple type="file" accept=".json,.yaml,.yml,.har,.protovoy" onChange={(event) => void importFiles(event.target.files)} />
     </div>
     <div ref={createMenuRef} className="workspace-quick-actions">
       <div className="workspace-search-row">
@@ -373,19 +377,19 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
       </div>
       {createMenuOpen && createMenuPos && typeof document !== "undefined" ? createPortal(<div className="workspace-protocol-menu" data-workspace-create-menu role="menu" aria-label="选择接口协议" style={{ top: createMenuPos.top, left: createMenuPos.left, width: createMenuPos.width }}>
         <div className="workspace-create-menu-title">新建</div>
-        <div className="workspace-create-menu-grid">{CREATE_PROTOCOL_GROUPS.map((group) => group.items.map(([id, label, icon]) => <button key={id} type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("apivoy-create-workbench", { detail: id })); }}><Icon name={icon} /><span>{label === "HTTP" ? "HTTP 接口" : label}</span></button>))}</div>
+        <div className="workspace-create-menu-grid">{CREATE_PROTOCOL_GROUPS.map((group) => group.items.map(([id, label, icon]) => <button key={id} type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: id })); }}><Icon name={icon} /><span>{label === "HTTP" ? "HTTP 接口" : label}</span></button>))}</div>
         <div className="workspace-create-menu-divider"/>
         <div className="workspace-create-menu-title">项目资源</div>
         <div className="workspace-create-menu-grid">
           <button type="button" role="menuitem" disabled={!selectedProject} onClick={() => { if (selectedProject) setDraft({ kind: "module", owner: selectedProject.id }); setCreateMenuOpen(false); }}><Icon name="folder"/><span>接口目录</span></button>
           <button type="button" role="menuitem" disabled={!props.selectedCollectionId} onClick={() => { const selected = tree.collections.find((item) => item.id === props.selectedCollectionId); if (selected) setDraft({ kind: "collection", owner: selected.projectId, parentId: selected.id }); setCreateMenuOpen(false); }}><Icon name="folder"/><span>新建子集合</span></button>
-          <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("apivoy-open-script-library")); }}><Icon name="code"/><span>脚本库</span></button>
+          <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("protovoy-open-script-library")); }}><Icon name="code"/><span>脚本库</span></button>
         </div>
         <div className="workspace-create-menu-divider"/>
         <div className="workspace-create-menu-title">其他</div>
         <div className="workspace-create-menu-grid">
           <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); importInput.current?.click(); }}><Icon name="download"/><span>导入文件</span></button>
-          <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("apivoy-open-curl-import", { detail: { projectId: selectedProject?.id, collectionId: props.selectedCollectionId ?? undefined } })); }}><Icon name="code"/><span>导入 cURL</span></button>
+          <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("protovoy-open-curl-import", { detail: { projectId: selectedProject?.id, collectionId: props.selectedCollectionId ?? undefined } })); }}><Icon name="code"/><span>导入 cURL</span></button>
         </div>
       </div>, document.body) : null}
     </div>

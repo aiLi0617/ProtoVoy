@@ -1,12 +1,12 @@
 [package]
-name = "apivoy-cli"
+name = "protovoy-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "ApiVoy CLI runner"
+description = "ProtoVoy CLI runner"
 
 [[bin]]
-name = "apivoy-cli"
+name = "protovoy-cli"
 path = "src/main.rs"
 
 [dependencies]

@@ -4,7 +4,7 @@ This guide uses the public [httpbin.org](https://httpbin.org) service — no API
 
 ## Desktop or Web
 
-1. Open ApiVoy and create or select a **local workspace**.
+1. Open ProtoVoy and create or select a **local workspace**.
 2. Open the **HTTP** workbench.
 3. Set method to **GET**.
 4. Enter URL: `https://httpbin.org/get`
@@ -29,7 +29,7 @@ Re-send and confirm the assertion passes.
 ## CLI equivalent
 
 ```bash
-apivoy-cli http-get https://httpbin.org/get
+protovoy-cli http-get https://httpbin.org/get
 ```
 
 ## Next steps

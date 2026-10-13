@@ -1,12 +1,12 @@
 [package]
-name = "apivoy-protocol-gateway"
+name = "protovoy-protocol-gateway"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "ApiVoy authenticated remote protocol execution, scheduler, and CI runner"
+description = "ProtoVoy authenticated remote protocol execution, scheduler, and CI runner"
 
 [[bin]]
-name = "apivoy-protocol-gateway"
+name = "protovoy-protocol-gateway"
 path = "src/main.rs"
 
 [dependencies]

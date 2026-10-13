@@ -1,5 +1,5 @@
 {
-  "name": "@apivoy/web",
+  "name": "@protovoy/web",
   "version": "0.2.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,9 @@
     "test": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@apivoy/request-model": "workspace:*",
-    "@apivoy/ui": "workspace:*",
+    "@protovoy/app-wiring": "workspace:*",
+    "@protovoy/request-model": "workspace:*",
+    "@protovoy/ui": "workspace:*",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

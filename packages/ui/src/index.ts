@@ -35,8 +35,9 @@ export { redisRequestEnvelope, mqttRequestEnvelope, amqpRequestEnvelope, kafkaRe
 export { Icon, type IconName } from "./Icons";
 export { FeedbackProvider, useFeedback, EmptyState, LoadingState } from "./Feedback";
 export { useAppStore, type ThemeMode, type WorkbenchLayoutPreference, type SplitPanePreference } from "./appStore";
+export { readStorage } from "./storageMigration";
 export { VirtualList, getVirtualRange, type VirtualListProps, type VirtualRange } from "./VirtualList";
-export { ApiVoyProviders } from "./ApiVoyProviders";
+export { ProtoVoyProviders } from "./ProtoVoyProviders";
 export { WorkspaceExplorer, type WorkspaceTree, type WorkspaceExplorerProps, type WorkspaceRecord, type ProjectRecord, type ModuleRecord, type CollectionRecord, type RequestRecord } from "./WorkspaceExplorer";
 export { flattenWorkspaceTree, type FlattenWorkspaceTreeOptions, type WorkspaceTreeRow } from "./workspaceTreeRows";
 export { SseWorkbench, type SseWorkbenchProps, type SseWorkbenchRequest } from "./SseWorkbench";

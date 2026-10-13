@@ -6,7 +6,7 @@ Interface-design validation is separate from post-response assertions. Project s
 
 The module switches are enforced independently: `interfaceRun` covers normal interface runs and debug cases, `singleCase` covers saved single-interface test cases, and `testScenario` covers batch test-case runs. Disabling a module switch suppresses both request assertions and interface-design validation in that context without deleting saved rules. The debug response selector is populated from the response statuses defined by the bound interface definition (default `200`).
 
-Requests without `metadata.__apivoyAssertionSchemaVersion: 2` do not load legacy assertions. Legacy text DSL is intentionally unsupported.
+Requests without `metadata.__protovoyAssertionSchemaVersion: 2` do not load legacy assertions. Legacy text DSL is intentionally unsupported.
 
 Rules generated from a response are drafts until the user saves the editor. JSON generation is bounded to 1 MB, 300 visited nodes, and 8 levels of recursion. Arrays generate a length rule and inspect only their first element.
 

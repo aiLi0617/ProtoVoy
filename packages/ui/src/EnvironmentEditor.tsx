@@ -10,7 +10,7 @@ export interface EnvironmentEditorProps {
 }
 
 type Section = "global-variables" | "global-parameters" | "vault" | string;
-const GLOBAL_PARAMETERS_KEY = "apivoy:global-parameters:v1";
+const GLOBAL_PARAMETERS_KEY = "protovoy:global-parameters:v1";
 
 function formatKv(values: Record<string, string>): string {
   return Object.entries(values).map(([key, value]) => `${key}=${value}`).join("\n");

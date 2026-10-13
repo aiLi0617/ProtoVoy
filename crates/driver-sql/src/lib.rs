@@ -268,7 +268,7 @@ impl ProtocolDriver for SqlDriver {
             .await;
         let operation = async {
             if query_like(&payload.sql) {
-                // ApiVoy is an explicit SQL debugging client: the complete statement is supplied
+                // ProtoVoy is an explicit SQL debugging client: the complete statement is supplied
                 // by the user, while individual values still use driver bind parameters below.
                 let query = bind(
                     sqlx::query(AssertSqlSafe(payload.sql.as_str())),

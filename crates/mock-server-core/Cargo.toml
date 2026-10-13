@@ -3,7 +3,7 @@ name = "mock-server-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "ApiVoy Mock Server rules and deterministic request matching"
+description = "ProtoVoy Mock Server rules and deterministic request matching"
 
 [dependencies]
 regex = "1"

@@ -1,12 +1,15 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "@apivoy/ui/styles.css";
-import "../../../packages/ui/src/curl-import.css";
+import "@protovoy/ui/styles.css";
+import "@protovoy/ui/curl-import.css";
+import { ProtoVoyProviders } from "@protovoy/ui";
+import { bootstrapClientStorage } from "@protovoy/app-wiring";
 import { App } from "./App";
-import { ApiVoyProviders } from "@apivoy/ui";
+
+bootstrapClientStorage();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ApiVoyProviders><App /></ApiVoyProviders>
+    <ProtoVoyProviders><App /></ProtoVoyProviders>
   </StrictMode>,
 );

@@ -224,7 +224,7 @@ mod tests {
     #[tokio::test]
     async fn exposes_bounded_crypto_helpers() {
         let mut request = RequestEnvelope::http_get("test", "https://example.com");
-        request.pre_scripts = vec!["variables.hash=crypto.sha256('abc'); variables.encoded=crypto.base64Encode('ApiVoy'); variables.decoded=crypto.base64Decode(variables.encoded); variables.uuid=crypto.randomUUID();".into()];
+        request.pre_scripts = vec!["variables.hash=crypto.sha256('abc'); variables.encoded=crypto.base64Encode('ProtoVoy'); variables.decoded=crypto.base64Decode(variables.encoded); variables.uuid=crypto.randomUUID();".into()];
         let result = run_pre_scripts(request).await.unwrap();
         assert_eq!(
             result.variables.get("hash").map(String::as_str),
@@ -236,7 +236,7 @@ mod tests {
         );
         assert_eq!(
             result.variables.get("decoded").map(String::as_str),
-            Some("ApiVoy")
+            Some("ProtoVoy")
         );
         assert!(uuid::Uuid::parse_str(result.variables.get("uuid").unwrap()).is_ok());
     }

@@ -1,16 +1,16 @@
 [package]
-name = "apivoy-desktop"
+name = "protovoy-desktop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "ApiVoy desktop shell (Tauri 2)"
+description = "ProtoVoy desktop shell (Tauri 2)"
 
 [[bin]]
-name = "apivoy"
+name = "protovoy"
 path = "src/main.rs"
 
 [lib]
-name = "apivoy_desktop_lib"
+name = "protovoy_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

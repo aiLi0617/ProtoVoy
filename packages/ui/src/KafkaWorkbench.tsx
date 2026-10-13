@@ -16,10 +16,10 @@ export interface KafkaWorkbenchProps { onSend: (request: KafkaWorkbenchRequest, 
 
 export function KafkaWorkbench({ onSend, onSave, onCancel }: KafkaWorkbenchProps) {
   const [name, setName] = useState("Kafka request"); const [target, setTarget] = useState("kafka://127.0.0.1:9092");
-  const [mode, setMode] = useState<"produce" | "consume">("produce"); const [topic, setTopic] = useState("apivoy-events");
+  const [mode, setMode] = useState<"produce" | "consume">("produce"); const [topic, setTopic] = useState("protovoy-events");
   const [key, setKey] = useState(""); const [payload, setPayload] = useState('{"hello":"kafka"}');
   const [encoding, setEncoding] = useState<"text" | "base64">("text"); const [partition, setPartition] = useState<number | null>(null);
-  const [groupId, setGroupId] = useState("apivoy-consumer"); const [offsetReset, setOffsetReset] = useState<KafkaWorkbenchRequest["offsetReset"]>("latest");
+  const [groupId, setGroupId] = useState("protovoy-consumer"); const [offsetReset, setOffsetReset] = useState<KafkaWorkbenchRequest["offsetReset"]>("latest");
   const [autoCommit, setAutoCommit] = useState(false); const [receiveLimit, setReceiveLimit] = useState(1);
   const [securityProtocol, setSecurityProtocol] = useState<KafkaWorkbenchRequest["securityProtocol"]>("PLAINTEXT");
   const [saslMechanism, setSaslMechanism] = useState<KafkaWorkbenchRequest["saslMechanism"]>("PLAIN");
@@ -32,7 +32,7 @@ export function KafkaWorkbench({ onSend, onSave, onCancel }: KafkaWorkbenchProps
     if (envelope.protocolId !== "kafka" || envelope.payload?.type !== "raw") return;
     const value = envelope.payload.value ?? envelope.payload;
     setName(envelope.name ?? ""); setTarget(envelope.target ?? ""); setMode(value.mode ?? "produce"); setTopic(value.topic ?? ""); setKey(value.key ?? "");
-    setPayload(value.payload ?? ""); setEncoding(value.encoding ?? "text"); setPartition(value.partition ?? null); setGroupId(value.groupId ?? "apivoy-consumer");
+    setPayload(value.payload ?? ""); setEncoding(value.encoding ?? "text"); setPartition(value.partition ?? null); setGroupId(value.groupId ?? "protovoy-consumer");
     setOffsetReset(value.offsetReset ?? "latest"); setAutoCommit(value.autoCommit ?? false); setReceiveLimit(value.receiveLimit ?? 1);
     setSecurityProtocol(value.securityProtocol ?? "PLAINTEXT"); setSaslMechanism(value.saslMechanism ?? "PLAIN"); setUsername(value.username ?? "");
     setPasswordRef(value.passwordRef ?? ""); setCaPemRef(value.caPemRef ?? ""); setCertificatePemRef(value.certificatePemRef ?? "");

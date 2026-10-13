@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = path.join(root, "docs", "images");
-const baseUrl = process.env.APIVOY_SCREENSHOT_BASE ?? "http://127.0.0.1:5180";
+const baseUrl = process.env.PROTOVOY_SCREENSHOT_BASE ?? "http://127.0.0.1:5180";
 
 const workspaceTree = {
   workspaces: [{ id: "ws-1", name: "Demo Workspace", archived: false, lastOpenedAt: new Date().toISOString() }],
@@ -15,7 +15,7 @@ const workspaceTree = {
 };
 
 const health = {
-  service: "apivoy-agent",
+  service: "protovoy-agent",
   version: "0.1.0",
   agentVersion: "0.1.0",
   protocolApiVersion: "1",
@@ -51,7 +51,7 @@ function mockAgent(route) {
     return route.fulfill({ contentType: "application/json", body: JSON.stringify([]) });
   }
   if (pathname.startsWith("/v1/capture/")) {
-    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ running: false, bind: "127.0.0.1:39219", count: 0 }) });
+    return route.fulfill({ contentType: "application/json", body: JSON.stringify({ running: false, bind: "127.0.0.1:39220", count: 0 }) });
   }
   if (pathname === "/v1/executions" && route.request().method() === "POST") {
     return route.fulfill({
@@ -81,11 +81,11 @@ function mockAgent(route) {
 
 async function preparePage(page) {
   await page.addInitScript(() => {
-    localStorage.setItem("apivoy:locale", "en-US");
-    localStorage.setItem("apivoy-agent-token", "screenshot-bootstrap-token");
+    localStorage.setItem("protovoy:locale", "en-US");
+    localStorage.setItem("protovoy:agent-token", "screenshot-bootstrap-token");
     document.documentElement.lang = "en-US";
     const uiState = { state: { collapsedNavigation: false, collapsedExplorer: false, themeMode: "dark", activeWorkbench: "http" }, version: 3 };
-    localStorage.setItem("apivoy:ui-state", JSON.stringify(uiState));
+    localStorage.setItem("protovoy:ui-state", JSON.stringify(uiState));
   });
   await page.route("http://127.0.0.1:39217/**", mockAgent);
 }
@@ -93,7 +93,7 @@ async function preparePage(page) {
 async function openWorkbench(page, id) {
   await page.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
   await page.evaluate((workbenchId) => {
-    window.dispatchEvent(new CustomEvent("apivoy-create-workbench", { detail: workbenchId }));
+    window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: workbenchId }));
   }, id);
   await page.waitForTimeout(800);
 }

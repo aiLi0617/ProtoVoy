@@ -1,16 +1,16 @@
-name: apivoy
+﻿name: protovoy
 services:
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: apivoy
-      POSTGRES_USER: apivoy
-      POSTGRES_PASSWORD: ${APIVOY_DATABASE_PASSWORD:?set APIVOY_DATABASE_PASSWORD}
+      POSTGRES_DB: protovoy
+      POSTGRES_USER: protovoy
+      POSTGRES_PASSWORD: ${PROTOVOY_DATABASE_PASSWORD:?set PROTOVOY_DATABASE_PASSWORD}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U apivoy"]
+      test: ["CMD-SHELL", "pg_isready -U protovoy"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -23,20 +23,20 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      APIVOY_COLLAB_DATABASE_URL: jdbc:postgresql://postgres:5432/apivoy
-      APIVOY_COLLAB_DATABASE_USER: apivoy
-      APIVOY_COLLAB_DATABASE_PASSWORD: ${APIVOY_DATABASE_PASSWORD}
-      APIVOY_COLLAB_BOOTSTRAP_TOKEN: ${APIVOY_BOOTSTRAP_TOKEN:?set APIVOY_BOOTSTRAP_TOKEN}
-      APIVOY_COLLAB_ALLOWED_ORIGINS: ${APIVOY_PUBLIC_ORIGIN:-http://localhost:8080}
-      APIVOY_COLLAB_SSO_ENABLED: ${APIVOY_SSO_ENABLED:-false}
-      APIVOY_COLLAB_SSO_ORGANIZATION_ID: ${APIVOY_SSO_ORGANIZATION_ID:-}
-      APIVOY_COLLAB_SSO_WEB_REDIRECT: ${APIVOY_PUBLIC_ORIGIN:-http://localhost:8080}
-      APIVOY_COLLAB_OIDC_CLIENT_ID: ${APIVOY_OIDC_CLIENT_ID:-disabled}
-      APIVOY_COLLAB_OIDC_CLIENT_SECRET: ${APIVOY_OIDC_CLIENT_SECRET:-disabled}
-      APIVOY_COLLAB_OIDC_AUTHORIZATION_URI: ${APIVOY_OIDC_AUTHORIZATION_URI:-https://invalid.local/authorize}
-      APIVOY_COLLAB_OIDC_TOKEN_URI: ${APIVOY_OIDC_TOKEN_URI:-https://invalid.local/token}
-      APIVOY_COLLAB_OIDC_JWK_SET_URI: ${APIVOY_OIDC_JWK_SET_URI:-https://invalid.local/jwks}
-      APIVOY_COLLAB_OIDC_USER_INFO_URI: ${APIVOY_OIDC_USER_INFO_URI:-https://invalid.local/userinfo}
+      PROTOVOY_COLLAB_DATABASE_URL: jdbc:postgresql://postgres:5432/protovoy
+      PROTOVOY_COLLAB_DATABASE_USER: protovoy
+      PROTOVOY_COLLAB_DATABASE_PASSWORD: ${PROTOVOY_DATABASE_PASSWORD}
+      PROTOVOY_COLLAB_BOOTSTRAP_TOKEN: ${PROTOVOY_BOOTSTRAP_TOKEN:?set PROTOVOY_BOOTSTRAP_TOKEN}
+      PROTOVOY_COLLAB_ALLOWED_ORIGINS: ${PROTOVOY_PUBLIC_ORIGIN:-http://localhost:8080}
+      PROTOVOY_COLLAB_SSO_ENABLED: ${PROTOVOY_SSO_ENABLED:-false}
+      PROTOVOY_COLLAB_SSO_ORGANIZATION_ID: ${PROTOVOY_SSO_ORGANIZATION_ID:-}
+      PROTOVOY_COLLAB_SSO_WEB_REDIRECT: ${PROTOVOY_PUBLIC_ORIGIN:-http://localhost:8080}
+      PROTOVOY_COLLAB_OIDC_CLIENT_ID: ${PROTOVOY_OIDC_CLIENT_ID:-disabled}
+      PROTOVOY_COLLAB_OIDC_CLIENT_SECRET: ${PROTOVOY_OIDC_CLIENT_SECRET:-disabled}
+      PROTOVOY_COLLAB_OIDC_AUTHORIZATION_URI: ${PROTOVOY_OIDC_AUTHORIZATION_URI:-https://invalid.local/authorize}
+      PROTOVOY_COLLAB_OIDC_TOKEN_URI: ${PROTOVOY_OIDC_TOKEN_URI:-https://invalid.local/token}
+      PROTOVOY_COLLAB_OIDC_JWK_SET_URI: ${PROTOVOY_OIDC_JWK_SET_URI:-https://invalid.local/jwks}
+      PROTOVOY_COLLAB_OIDC_USER_INFO_URI: ${PROTOVOY_OIDC_USER_INFO_URI:-https://invalid.local/userinfo}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8088/actuator/health"]
       interval: 10s
@@ -49,12 +49,12 @@ services:
       dockerfile: deploy/agent.Dockerfile
     restart: unless-stopped
     environment:
-      APIVOY_AGENT_BIND: 0.0.0.0:39217
-      APIVOY_AGENT_TOKEN: ${APIVOY_AGENT_TOKEN:?set APIVOY_AGENT_TOKEN}
-      APIVOY_CONFIG_DIR: /var/lib/apivoy
-      APIVOY_ALLOWED_ORIGINS: ${APIVOY_PUBLIC_ORIGIN:-http://localhost:8080}
+      PROTOVOY_AGENT_BIND: 0.0.0.0:39217
+      PROTOVOY_AGENT_TOKEN: ${PROTOVOY_AGENT_TOKEN:?set PROTOVOY_AGENT_TOKEN}
+      PROTOVOY_CONFIG_DIR: /var/lib/protovoy
+      PROTOVOY_ALLOWED_ORIGINS: ${PROTOVOY_PUBLIC_ORIGIN:-http://localhost:8080}
     volumes:
-      - agent-data:/var/lib/apivoy
+      - agent-data:/var/lib/protovoy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:39217/health"]
       interval: 10s
@@ -67,14 +67,14 @@ services:
       dockerfile: deploy/gateway.Dockerfile
     restart: unless-stopped
     environment:
-      APIVOY_GATEWAY_BIND: 0.0.0.0:39218
-      APIVOY_GATEWAY_API_KEY: ${APIVOY_GATEWAY_API_KEY:?set APIVOY_GATEWAY_API_KEY}
-      APIVOY_GATEWAY_DATA_DIR: /var/lib/apivoy-gateway
-      APIVOY_GATEWAY_MAX_CONCURRENCY: ${APIVOY_GATEWAY_MAX_CONCURRENCY:-16}
+      PROTOVOY_GATEWAY_BIND: 0.0.0.0:39219
+      PROTOVOY_GATEWAY_API_KEY: ${PROTOVOY_GATEWAY_API_KEY:?set PROTOVOY_GATEWAY_API_KEY}
+      PROTOVOY_GATEWAY_DATA_DIR: /var/lib/protovoy-gateway
+      PROTOVOY_GATEWAY_MAX_CONCURRENCY: ${PROTOVOY_GATEWAY_MAX_CONCURRENCY:-16}
     volumes:
-      - gateway-data:/var/lib/apivoy-gateway
+      - gateway-data:/var/lib/protovoy-gateway
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:39218/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:39219/health"]
       interval: 10s
       timeout: 4s
       retries: 20
@@ -92,11 +92,11 @@ services:
       gateway:
         condition: service_healthy
     environment:
-      APIVOY_PUBLIC_AGENT_PATH: /agent
-      APIVOY_PUBLIC_COLLABORATION_PATH: /collaboration
-      APIVOY_AGENT_TOKEN: ${APIVOY_AGENT_TOKEN}
+      PROTOVOY_PUBLIC_AGENT_PATH: /agent
+      PROTOVOY_PUBLIC_COLLABORATION_PATH: /collaboration
+      PROTOVOY_AGENT_TOKEN: ${PROTOVOY_AGENT_TOKEN}
     ports:
-      - "${APIVOY_WEB_PORT:-8080}:8080"
+      - "${PROTOVOY_WEB_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 10s

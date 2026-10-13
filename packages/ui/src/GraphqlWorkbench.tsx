@@ -22,7 +22,7 @@ export interface GraphqlWorkbenchProps {
   externalRequest?: GraphqlWorkbenchRequest | null;
 }
 
-const INTROSPECTION_QUERY = `query ApiVoyIntrospection { __schema { queryType { name } mutationType { name } subscriptionType { name } types { name kind fields { name } } } }`;
+const INTROSPECTION_QUERY = `query ProtoVoyIntrospection { __schema { queryType { name } mutationType { name } subscriptionType { name } types { name kind fields { name } } } }`;
 
 export function GraphqlWorkbench({ onSend, onCancel, onSave, externalRequest }: GraphqlWorkbenchProps) {
   const [url, setUrl] = useState("https://");
@@ -95,7 +95,7 @@ export function GraphqlWorkbench({ onSend, onCancel, onSave, externalRequest }: 
     setBusy(true);
     setOutput("正在读取 GraphQL Schema…");
     try {
-      const result = await send(INTROSPECTION_QUERY, {}, "ApiVoyIntrospection");
+      const result = await send(INTROSPECTION_QUERY, {}, "ProtoVoyIntrospection");
       if (result.error) throw new Error(result.error);
       const parsed = JSON.parse(result.preview ?? "{}") as { data?: { __schema?: { types?: Array<{ name?: string }> } } };
       const names = (parsed.data?.__schema?.types ?? []).map((type) => type.name ?? "").filter((name) => name && !name.startsWith("__")).sort();

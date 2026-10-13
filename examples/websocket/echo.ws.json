@@ -6,6 +6,6 @@
     "type": "websocket",
     "subprotocols": [],
     "headers": [],
-    "messages": [{ "type": "text", "data": "hello from ApiVoy" }]
+    "messages": [{ "type": "text", "data": "hello from ProtoVoy" }]
   }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import type {
   Assertion,
@@ -11,7 +11,7 @@ import type {
   MultipartPart,
   ResponseMeta,
   RequestEnvelope,
-} from "@apivoy/request-model";
+} from "@protovoy/request-model";
 import { Icon } from "./Icons";
 import { CodeEditor } from "./CodeEditor";
 import { CodeGenerator } from "./CodeGenerator";
@@ -88,6 +88,24 @@ export function isSensitiveHeaderName(name: string): boolean {
     || SENSITIVE_CREDENTIAL_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
 }
 
+function isTemplateReference(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("{{") || !trimmed.endsWith("}}")) return false;
+  const name = trimmed.slice(2, -2).trim();
+  return Boolean(name) && [...name].every((character) => /[A-Za-z0-9_.-]/.test(character));
+}
+
+/** Keeps the Cookies tab shape without writing literal session credentials to disk. */
+export function sanitizeCookieHeaderForPersistence(value: string): string {
+  return value.split(";").flatMap((part) => {
+    const separator = part.indexOf("=");
+    const name = (separator >= 0 ? part.slice(0, separator) : part).trim();
+    if (!name) return [];
+    const cookieValue = separator >= 0 ? part.slice(separator + 1).trim() : "";
+    return [`${name}=${isTemplateReference(cookieValue) ? cookieValue : ""}`];
+  }).join("; ");
+}
+
 function isSensitiveJsonKey(name: string): boolean {
   return SENSITIVE_JSON_KEYS.has(normalizedCredentialName(name)) || isSensitiveHeaderName(name);
 }
@@ -115,9 +133,16 @@ function sanitizeMetadataValue(value: unknown, parentKey?: string): unknown {
 
 /** Removes execution-only credentials before drafts, requests, or cases are persisted. */
 export function sanitizeHttpRequestForPersistence(request: HttpWorkbenchRequest): HttpWorkbenchRequest {
+  const isCase = request.metadata?.__protovoyCaseType === "debug" || request.metadata?.__protovoyCaseType === "test";
   return {
     ...request,
-    headers: request.headers.filter(([name]) => !isSensitiveHeaderName(name)),
+    headers: request.headers.flatMap(([name, value]) => {
+      if (isCase && name.trim().toLowerCase() === "cookie") {
+        const sanitized = sanitizeCookieHeaderForPersistence(value);
+        return sanitized ? [[name, sanitized] as [string, string]] : [];
+      }
+      return isSensitiveHeaderName(name) ? [] : [[name, value] as [string, string]];
+    }),
     auth: request.auth ? { ...request.auth, token: null } : request.auth,
     metadata: request.metadata
       ? sanitizeMetadataValue(request.metadata) as Record<string, unknown>
@@ -129,7 +154,7 @@ export function requestNameFromUrl(value: string): string {
   const target = value.trim();
   if (!target) return "";
   try {
-    return new URL(target, "http://apivoy.local").pathname || "/";
+    return new URL(target, "http://protovoy.local").pathname || "/";
   } catch {
     return target.split(/[?#]/, 1)[0] || "";
   }
@@ -300,6 +325,30 @@ const BODY_MODES: Array<{ id: BodyMode; label: string; contentType?: string }> =
   { id: "msgpack", label: "MessagePack", contentType: "application/msgpack" },
 ];
 
+export const REQUEST_CONTENT_TYPES = [
+  "application/atom+xml",
+  "application/ecmascript",
+  "application/json",
+  "application/vnd.api+json",
+  "application/javascript",
+  "application/octet-stream",
+  "application/ogg",
+  "application/pdf",
+  "application/xml",
+  "application/soap+xml",
+  "application/msgpack",
+  "text/plain",
+  "text/xml",
+] as const;
+
+export function replaceContentTypeHeader(rows: HeaderRow[], contentType: string): HeaderRow[] {
+  const withoutContentType = rows.filter((row) => row.key.trim().toLowerCase() !== "content-type");
+  const contentRows = contentType ? [createHeaderRow("Content-Type", contentType), ...withoutContentType] : withoutContentType;
+  return contentRows.length && !contentRows[contentRows.length - 1].key && !contentRows[contentRows.length - 1].value
+    ? contentRows
+    : [...contentRows, createHeaderRow()];
+}
+
 export function formatJsonBody(value: string): string {
   if (!value.trim()) return value;
   return JSON.stringify(JSON.parse(value), null, 2);
@@ -309,8 +358,8 @@ function snapshotActualRequest(request: HttpWorkbenchRequest): HttpWorkbenchRequ
   return sanitizeHttpRequestForPersistence({ ...request, metadata: {} });
 }
 
-function resolveAssets(ids:string[]):string[]{ let assets:ScriptAsset[]=[];try{assets=JSON.parse(localStorage.getItem("apivoy-project-scripts-v1")??"[]") as ScriptAsset[]}catch{return []}return ids.map((id)=>assets.find((item)=>item.id===id)).filter((item):item is ScriptAsset=>!!item).map((item)=>{const source=item.language==="typescript"?ts.transpileModule(item.source,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.None}}).outputText:item.source;return `// @apivoy-script:${item.id}\n${source}`})}
-function assetIdsFromScripts(scripts:string[]|undefined):string[]{return Array.from(new Set((scripts??[]).map((script)=>script.match(/^\/\/ @apivoy-script:([^\s]+)/m)?.[1]).filter((id):id is string=>Boolean(id))))}
+function resolveAssets(ids:string[]):string[]{ let assets:ScriptAsset[]=[];try{assets=JSON.parse(localStorage.getItem("protovoy-project-scripts-v1")??"[]") as ScriptAsset[]}catch{return []}return ids.map((id)=>assets.find((item)=>item.id===id)).filter((item):item is ScriptAsset=>!!item).map((item)=>{const source=item.language==="typescript"?ts.transpileModule(item.source,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.None}}).outputText:item.source;return `// @protovoy-script:${item.id}\n${source}`})}
+function assetIdsFromScripts(scripts:string[]|undefined):string[]{return Array.from(new Set((scripts??[]).map((script)=>script.match(/^\/\/ @protovoy-script:([^\s]+)/m)?.[1]).filter((id):id is string=>Boolean(id))))}
 
 function createMultipartEditorPart(part: Partial<MultipartPart> = {}): MultipartEditorPart {
   return { id: crypto.randomUUID(), enabled: Boolean(part.name?.trim()), description: "", kind: part.fileName ? "file" : "text", valueType: "string", typeSelected: Boolean(part.fileName), required: false, name: part.name ?? "", value: part.value ?? "", fileName: part.fileName, contentType: part.contentType, base64: part.base64 ?? false };
@@ -662,7 +711,7 @@ export function HttpWorkbench({
   const [oauthScope, setOauthScope] = useState("");
   const [oauthAudience, setOauthAudience] = useState("");
   const [oauthAuthorizationUrl, setOauthAuthorizationUrl] = useState("");
-  const [oauthRedirectUri, setOauthRedirectUri] = useState("http://127.0.0.1:39218/oauth/callback");
+  const [oauthRedirectUri, setOauthRedirectUri] = useState("http://127.0.0.1:39219/oauth/callback");
   const [oauthAuthorizationCode, setOauthAuthorizationCode] = useState("");
   const [oauthCodeRef] = useState(() => `oauth-code-${crypto.randomUUID()}`);
   const [oauthVerifierRef] = useState(() => `oauth-verifier-${crypto.randomUUID()}`);
@@ -713,7 +762,7 @@ export function HttpWorkbench({
   const [graphqlQuery, setGraphqlQuery] = useState("query Example {\n  __typename\n}");
   const [graphqlVariables, setGraphqlVariables] = useState("{}");
   const [graphqlOperationName, setGraphqlOperationName] = useState("");
-  const [graphqlSplitRatio, setGraphqlSplitRatio] = useState(() => Number(localStorage.getItem("apivoy-graphql-editor-ratio-v2")) || .5);
+  const [graphqlSplitRatio, setGraphqlSplitRatio] = useState(() => Number(localStorage.getItem("protovoy-graphql-editor-ratio-v2")) || .5);
   const [graphqlSchemaState, setGraphqlSchemaState] = useState<{ status: "idle" | "loading" | "ready" | "error"; typeCount?: number; message?: string }>({ status: "idle" });
   const graphqlSplitRef = useRef<HTMLDivElement>(null);
   const [rpcMethod, setRpcMethod] = useState("users.list");
@@ -726,6 +775,7 @@ export function HttpWorkbench({
   const [binaryFileName, setBinaryFileName] = useState("");
   const [binarySize, setBinarySize] = useState(0);
   const [messagePackJson, setMessagePackJson] = useState("{}" );
+  const requestContentType = headerRows.find((row) => row.key.trim().toLowerCase() === "content-type")?.value.trim() ?? "";
 
   function formatBodyJson() {
     try {
@@ -750,7 +800,7 @@ export function HttpWorkbench({
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
   }
-  useEffect(() => { localStorage.setItem("apivoy-graphql-editor-ratio-v2", String(graphqlSplitRatio)); }, [graphqlSplitRatio]);
+  useEffect(() => { localStorage.setItem("protovoy-graphql-editor-ratio-v2", String(graphqlSplitRatio)); }, [graphqlSplitRatio]);
 
   useEffect(() => {
     onTitleChange?.(`${method} ${name.trim() || "新建 HTTP 接口"}`);
@@ -891,7 +941,7 @@ export function HttpWorkbench({
       bodySource: bodyMode === "msgpack" ? messagePackJson : bodyMode === "graphql" ? JSON.stringify({ type: "graphql", query: graphqlQuery, variables: JSON.parse(graphqlVariables || "{}"), operationName: graphqlOperationName.trim() || null }) : bodyMode === "jsonrpc" ? JSON.stringify({ type: "jsonrpc", method: rpcMethod, params: JSON.parse(rpcParams || "{}"), id: rpcId }) : undefined,
       multipart: bodyMode === "multipart" ? multipart.filter((part) => part.enabled && part.name.trim()).map(({ id: _id, enabled: _enabled, description: _description, kind: _kind, valueType: _valueType, typeSelected: _typeSelected, required: _required, ...part }) => part) : [],
       timeoutMs,
-      metadata: { ...requestMetadata, __apivoyAssertionSchemaVersion: ASSERTION_SCHEMA_VERSION, __apivoyAssertionsEnabled: assertionsEnabled },
+      metadata: { ...requestMetadata, __protovoyAssertionSchemaVersion: ASSERTION_SCHEMA_VERSION, __protovoyAssertionsEnabled: assertionsEnabled },
       variables: parseKv(variablesText),
       assertions: assertionRules,
       auth: buildAuth(authKind, bearerTokenSource, bearerToken, authSecretRef, authUsername, authHeaderName, oauthTokenUrl, oauthScope, oauthAudience, oauthAuthorizationUrl, oauthRedirectUri, oauthCodeRef, oauthVerifierRef),
@@ -924,7 +974,7 @@ export function HttpWorkbench({
     const href = URL.createObjectURL(new Blob([body], { type }));
     const anchor = document.createElement("a");
     anchor.href = href;
-    anchor.download = `apivoy-response-${result?.executionId?.slice(0, 8) ?? "latest"}.${extension}`;
+    anchor.download = `protovoy-response-${result?.executionId?.slice(0, 8) ?? "latest"}.${extension}`;
     anchor.click();
     URL.revokeObjectURL(href);
     setStatusMsg("响应正文已下载");
@@ -945,15 +995,15 @@ export function HttpWorkbench({
   function applyRequest(loaded: HttpWorkbenchRequest) {
     setRequestId(loaded.id);
     setRequestMetadata(loaded.metadata ?? {});
-    const projectId = typeof loaded.metadata?.__apivoyProjectId === "string" ? loaded.metadata.__apivoyProjectId : undefined;
+    const projectId = typeof loaded.metadata?.__protovoyProjectId === "string" ? loaded.metadata.__protovoyProjectId : undefined;
     setResponseValidationSettings(readResponseValidationSettings(projectId));
-    const definitions = Array.isArray(loaded.metadata?.__apivoyResponseDefinitions) ? loaded.metadata.__apivoyResponseDefinitions as DesignedResponse[] : [];
+    const definitions = Array.isArray(loaded.metadata?.__protovoyResponseDefinitions) ? loaded.metadata.__protovoyResponseDefinitions as DesignedResponse[] : [];
     setSelectedDesignedResponse(definitions[0]?.status ?? "200");
-    setOpenedCaseParentId(loaded.variables?.__apivoyCaseOf ?? null);
-    setOpenedCaseInterfaceName(typeof loaded.metadata?.__apivoyCaseInterfaceName === "string" ? loaded.metadata.__apivoyCaseInterfaceName : loaded.variables?.__apivoyCaseInterfaceName ?? "");
-    setSyncCaseResponse(Boolean(loaded.metadata?.__apivoySavedResponse));
-    const savedResponse = loaded.metadata?.__apivoySavedResponse as { status?: number | null; durationMs?: number; body?: string | null; headers?: Array<[string, string]>; contentType?: string | null } | undefined;
-    const savedActualRequest = loaded.metadata?.__apivoySavedActualRequest as HttpWorkbenchRequest | undefined;
+    setOpenedCaseParentId(loaded.variables?.__protovoyCaseOf ?? null);
+    setOpenedCaseInterfaceName(typeof loaded.metadata?.__protovoyCaseInterfaceName === "string" ? loaded.metadata.__protovoyCaseInterfaceName : loaded.variables?.__protovoyCaseInterfaceName ?? "");
+    setSyncCaseResponse(Boolean(loaded.metadata?.__protovoySavedResponse));
+    const savedResponse = loaded.metadata?.__protovoySavedResponse as { status?: number | null; durationMs?: number; body?: string | null; headers?: Array<[string, string]>; contentType?: string | null } | undefined;
+    const savedActualRequest = loaded.metadata?.__protovoySavedActualRequest as HttpWorkbenchRequest | undefined;
     setLastRequest(savedActualRequest && typeof savedActualRequest.url === "string" && Array.isArray(savedActualRequest.headers) ? savedActualRequest : savedResponse ? snapshotActualRequest(loaded) : null);
     if (savedResponse) {
       const savedBody = savedResponse.body ?? "";
@@ -1011,9 +1061,9 @@ export function HttpWorkbench({
     setPreScriptAssetIds(assetIdsFromScripts(loaded.preScripts));
     setPostScriptAssetIds(assetIdsFromScripts(loaded.postScripts));
     setVariablesText(formatKv(loaded.variables));
-    const hasNewAssertions = loaded.metadata?.__apivoyAssertionSchemaVersion === ASSERTION_SCHEMA_VERSION;
+    const hasNewAssertions = loaded.metadata?.__protovoyAssertionSchemaVersion === ASSERTION_SCHEMA_VERSION;
     setAssertionRules(hasNewAssertions ? loaded.assertions : []);
-    setAssertionsEnabled(hasNewAssertions ? loaded.metadata?.__apivoyAssertionsEnabled !== false : false);
+    setAssertionsEnabled(hasNewAssertions ? loaded.metadata?.__protovoyAssertionsEnabled !== false : false);
     const auth = loaded.auth;
     setBearerToken(auth?.kind === "bearer" ? auth.token ?? "" : "");
     setBearerTokenSource(auth?.kind === "bearer" && auth.secret_ref && !auth.token ? "secret_ref" : "direct");
@@ -1028,7 +1078,7 @@ export function HttpWorkbench({
       setOauthScope(auth.scope ?? "");
       setOauthAudience(auth.audience ?? "");
       setOauthAuthorizationUrl(auth.authorization_url ?? "");
-      setOauthRedirectUri(auth.redirect_uri ?? "http://127.0.0.1:39218/oauth/callback");
+      setOauthRedirectUri(auth.redirect_uri ?? "http://127.0.0.1:39219/oauth/callback");
     } else {
       setAuthKind("none");
     }
@@ -1038,13 +1088,7 @@ export function HttpWorkbench({
     const contentType = nextMode === "soap" && soapVersion === "1.1" ? "text/xml" : BODY_MODES.find((mode) => mode.id === nextMode)?.contentType;
     if (["graphql", "jsonrpc", "soap", "binary", "msgpack"].includes(nextMode)) setMethod("POST");
     setBodyMode(nextMode);
-    setHeaderRows((rows) => {
-      const withoutContentType = rows.filter((row) => row.key.toLowerCase() !== "content-type");
-      const contentRows = contentType ? [createHeaderRow("Content-Type", contentType), ...withoutContentType] : withoutContentType;
-      return contentRows.length && !contentRows[contentRows.length - 1].key && !contentRows[contentRows.length - 1].value
-        ? contentRows
-        : [...contentRows, createHeaderRow()];
-    });
+    setHeaderRows((rows) => replaceContentTypeHeader(rows, contentType ?? ""));
   }
 
   useEffect(() => {
@@ -1067,14 +1111,14 @@ export function HttpWorkbench({
       if (!deletedId) return;
       setRequestId((current) => current === deletedId ? undefined : current);
     };
-    window.addEventListener("apivoy-request-deleted", markRequestDeleted);
-    return () => window.removeEventListener("apivoy-request-deleted", markRequestDeleted);
+    window.addEventListener("protovoy-request-deleted", markRequestDeleted);
+    return () => window.removeEventListener("protovoy-request-deleted", markRequestDeleted);
   }, []);
 
   useWorkbenchHydration("http", (raw) => {
     const savedRequest = httpRequestFromHydration(raw);
     if (savedRequest) {
-      const latestInterface = savedRequest.variables?.__apivoyCaseOf ? readInterfaceStructureMetadata(savedRequest.metadata) : null;
+      const latestInterface = savedRequest.variables?.__protovoyCaseOf ? readInterfaceStructureMetadata(savedRequest.metadata) : null;
       const differences = latestInterface ? diffHttpInterfaceStructure(captureHttpInterfaceStructure(savedRequest), latestInterface) : [];
       const requestToOpen = latestInterface && differences.length ? alignRequestToInterface(savedRequest, latestInterface) : savedRequest;
       if (latestInterface && differences.length) {
@@ -1082,7 +1126,7 @@ export function HttpWorkbench({
         void onSave?.(requestToOpen).then(() => setStatusMsg(`用例已自动同步接口的 ${differences.length} 项参数变化`)).catch((error) => setStatusMsg(`用例参数已同步，但保存失败：${error instanceof Error ? error.message : String(error)}`));
       }
       applyRequest(requestToOpen);
-      const hasSavedResponse = Boolean(requestToOpen.metadata?.__apivoySavedResponse);
+      const hasSavedResponse = Boolean(requestToOpen.metadata?.__protovoySavedResponse);
       setStatusMsg(differences.length ? `正在同步接口的 ${differences.length} 项参数变化…` : hasSavedResponse ? "已打开用例及其保存的响应" : (raw as { request?: unknown } | null)?.request ? "接口定义已同步到调试请求" : "已打开资源树中的请求");
       return;
     }
@@ -1104,7 +1148,7 @@ export function HttpWorkbench({
     const detail = raw as { request?: HttpWorkbenchRequest };
     if (!detail?.request) return;
     applyRequest(detail.request);
-    setStatusMsg(detail.request.metadata?.__apivoySavedResponse ? "已载入用例及其保存的响应" : "已载入请求，请检查后再发送");
+    setStatusMsg(detail.request.metadata?.__protovoySavedResponse ? "已载入用例及其保存的响应" : "已载入请求，请检查后再发送");
   }, workbenchSessionId);
 
   useAutosaveDraft("http", () => sanitizeHttpRequestForPersistence(buildRequest()));
@@ -1136,9 +1180,9 @@ export function HttpWorkbench({
     setGraphqlSchemaState({ status: "loading" });
     try {
       const request = buildRequest();
-      const introspectionQuery = "query ApiVoySchemaIntrospection { __schema { queryType { name } mutationType { name } subscriptionType { name } types { name kind } } }";
+      const introspectionQuery = "query ProtoVoySchemaIntrospection { __schema { queryType { name } mutationType { name } subscriptionType { name } types { name kind } } }";
       const schemaHeaders = request.headers.some(([key]) => key.toLowerCase() === "content-type") ? request.headers : [["Content-Type", "application/json"], ...request.headers] as Array<[string, string]>;
-      const schemaRequest: HttpWorkbenchRequest = { ...request, name: "GraphQL Schema Introspection", method: "POST", headers: schemaHeaders, body: JSON.stringify({ query: introspectionQuery, operationName: "ApiVoySchemaIntrospection", variables: {} }) };
+      const schemaRequest: HttpWorkbenchRequest = { ...request, name: "GraphQL Schema Introspection", method: "POST", headers: schemaHeaders, body: JSON.stringify({ query: introspectionQuery, operationName: "ProtoVoySchemaIntrospection", variables: {} }) };
       const response = await onSend(schemaRequest);
       if (response.error) throw new Error(response.error);
       const parsed = JSON.parse(response.preview ?? "{}") as { data?: { __schema?: { types?: unknown[] } }; errors?: Array<{ message?: string }> };
@@ -1186,7 +1230,7 @@ export function HttpWorkbench({
       }
       const request = buildRequest();
       setLastRequest(request);
-      const validationContext = request.metadata?.__apivoyCaseType === "test" ? "singleCase" : "interfaceRun";
+      const validationContext = request.metadata?.__protovoyCaseType === "test" ? "singleCase" : "interfaceRun";
       const validationEnabled = assertionsEnabled && responseValidationSettings[validationContext];
       const executionRequest = validationEnabled ? request : { ...request, assertions: [] };
       const next = await onSend(executionRequest, {
@@ -1204,9 +1248,11 @@ export function HttpWorkbench({
           }
         },
       });
-      const designedResponses = Array.isArray(request.metadata?.__apivoyResponseDefinitions) ? request.metadata.__apivoyResponseDefinitions as DesignedResponse[] : [];
-      const designedResponse = designedResponses.find((item) => item.status === selectedDesignedResponse) ?? designedResponses[0];
-      const designAssertions = validationEnabled && designedResponse ? validateDesignedResponse(designedResponse, next, responseValidationSettings) : [];
+      const designedResponses = Array.isArray(request.metadata?.__protovoyResponseDefinitions) ? request.metadata.__protovoyResponseDefinitions as DesignedResponse[] : [];
+      const designedResponse = designedResponses.find((item) => item.status === selectedDesignedResponse)
+        ?? designedResponses[0]
+        ?? { status: selectedDesignedResponse || "200", fields: [] };
+      const designAssertions = validationEnabled ? validateDesignedResponse(designedResponse, next, responseValidationSettings) : [];
       const combinedAssertions = designAssertions.length ? [...designAssertions, ...(next.assertions ?? [])] : next.assertions;
       setResult(combinedAssertions ? { ...next, assertions: combinedAssertions } : next);
       setRequestWallMs(Math.round(performance.now() - wallStartedAt));
@@ -1238,6 +1284,13 @@ export function HttpWorkbench({
     }
   }
 
+  async function prepareCaseRequestForPersistence(request: HttpWorkbenchRequest): Promise<HttpWorkbenchRequest> {
+    if (request.auth?.kind !== "bearer" || !request.auth.token?.trim() || !onPutSecret) return request;
+    const secretRef = request.auth.secret_ref?.trim() || `case-bearer-${crypto.randomUUID()}`;
+    await onPutSecret(secretRef, request.auth.token.trim());
+    return { ...request, auth: { ...request.auth, token: null, secret_ref: secretRef } };
+  }
+
   async function handleSave(saveDefinition = false) {
     if (!onSave || !validateParameterNames()) return;
     try {
@@ -1262,13 +1315,16 @@ export function HttpWorkbench({
         contentType: result.responseMeta?.contentType ?? null,
       } : null;
       if (responseSnapshot) {
-        request.metadata = { ...(request.metadata ?? {}), __apivoySavedResponse: responseSnapshot, ...(lastRequest ? { __apivoySavedActualRequest: snapshotActualRequest(lastRequest) } : {}) };
+        request.metadata = { ...(request.metadata ?? {}), __protovoySavedResponse: responseSnapshot, ...(lastRequest ? { __protovoySavedActualRequest: snapshotActualRequest(lastRequest) } : {}) };
         setRequestMetadata(request.metadata);
       }
-      await onSave(sanitizeHttpRequestForPersistence(request), result);
+      const persistedRequest = saveActionLabel === "保存为用例"
+        ? await prepareCaseRequestForPersistence(request)
+        : sanitizeHttpRequestForPersistence(request);
+      await onSave(persistedRequest, result);
       if (!name.trim()) setName(request.name ?? "");
       setStatusMsg("请求已保存到本地库");
-      if (saveDefinition) window.dispatchEvent(new CustomEvent("apivoy-save-interface-definition", { detail: { requestId: request.id } }));
+      if (saveDefinition) window.dispatchEvent(new CustomEvent("protovoy-save-interface-definition", { detail: { requestId: request.id } }));
     } catch (err) {
       setStatusMsg(err instanceof Error ? err.message : String(err));
     }
@@ -1282,8 +1338,8 @@ export function HttpWorkbench({
       if (openedCaseParentId || (targetId && requestId && targetId !== requestId)) return;
       void handleSave();
     };
-    window.addEventListener("apivoy-save-interface-draft", saveInterfaceDraft);
-    return () => window.removeEventListener("apivoy-save-interface-draft", saveInterfaceDraft);
+    window.addEventListener("protovoy-save-interface-draft", saveInterfaceDraft);
+    return () => window.removeEventListener("protovoy-save-interface-draft", saveInterfaceDraft);
   });
 
   function openCaseDialog(defaultType: "debug" | "test" = "debug") {
@@ -1304,8 +1360,8 @@ export function HttpWorkbench({
       if (detail?.sessionId && detail.sessionId !== workbenchSessionId) return;
       openCaseDialog(detail?.caseType ?? "debug");
     };
-    window.addEventListener("apivoy-create-interface-example", createCase);
-    return () => window.removeEventListener("apivoy-create-interface-example", createCase);
+    window.addEventListener("protovoy-create-interface-example", createCase);
+    return () => window.removeEventListener("protovoy-create-interface-example", createCase);
   }, [workbenchSessionId]);
 
   async function saveAsCase() {
@@ -1320,7 +1376,7 @@ export function HttpWorkbench({
         headers: result.responseMeta?.headers ?? [],
         contentType: result.responseMeta?.contentType ?? null,
       } : null;
-      const request = buildRequest();
+      const request = await prepareCaseRequestForPersistence(buildRequest());
       const interfaceStructure = captureHttpInterfaceStructure(request);
       await onSaveAsCase(sanitizeHttpRequestForPersistence({
         ...request,
@@ -1328,10 +1384,10 @@ export function HttpWorkbench({
         metadata: {
           ...(request.metadata ?? {}),
           [INTERFACE_STRUCTURE_METADATA_KEY]: interfaceStructure,
-          __apivoyCaseType: caseType,
-          ...(caseType === "test" ? { __apivoyCaseCategory: caseCategory, __apivoyCaseTags: caseTags.split(",").map((tag) => tag.trim()).filter(Boolean) } : {}),
-          ...(responseSnapshot ? { __apivoySavedResponse: responseSnapshot } : {}),
-          ...(lastRequest ? { __apivoySavedActualRequest: snapshotActualRequest(lastRequest) } : {}),
+          __protovoyCaseType: caseType,
+          ...(caseType === "test" ? { __protovoyCaseCategory: caseCategory, __protovoyCaseTags: caseTags.split(",").map((tag) => tag.trim()).filter(Boolean) } : {}),
+          ...(responseSnapshot ? { __protovoySavedResponse: responseSnapshot } : {}),
+          ...(lastRequest ? { __protovoySavedActualRequest: snapshotActualRequest(lastRequest) } : {}),
         },
       }));
       setCaseDialogOpen(false);
@@ -1371,8 +1427,8 @@ export function HttpWorkbench({
       const request = buildRequest();
       const structure = captureHttpInterfaceStructure(request);
       const variables = { ...request.variables };
-      delete variables.__apivoyCaseOf;
-      delete variables.__apivoyCaseInterfaceName;
+      delete variables.__protovoyCaseOf;
+      delete variables.__protovoyCaseInterfaceName;
       await onUpdateInterface(sanitizeHttpRequestForPersistence({ ...request, id: openedCaseParentId ?? undefined, name: openedCaseInterfaceName || request.name, variables, metadata: { [INTERFACE_STRUCTURE_METADATA_KEY]: structure } }));
       setRequestMetadata((current) => ({ ...current, [INTERFACE_STRUCTURE_METADATA_KEY]: structure }));
       setStatusMsg("接口已更新；保存当前用例后将记录新的接口基线");
@@ -1427,8 +1483,8 @@ export function HttpWorkbench({
       setHistoryOpen(true);
       void handleRefreshHistory();
     };
-    window.addEventListener("apivoy-focus-history", focusHistory);
-    return () => window.removeEventListener("apivoy-focus-history", focusHistory);
+    window.addEventListener("protovoy-focus-history", focusHistory);
+    return () => window.removeEventListener("protovoy-focus-history", focusHistory);
   }, [onListHistory, historyStateFilter, historyStatusFilter]);
 
   function toggleCompare(id: string) {
@@ -1454,7 +1510,7 @@ export function HttpWorkbench({
         return;
       }
       if ("payload" in loaded) {
-        window.dispatchEvent(new CustomEvent("apivoy-open-request", { detail: loaded }));
+        window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: loaded }));
         if (loaded.payload.type === "http") applyRequest({ name: loaded.name, url: loaded.target, method: loaded.payload.method, headers: loaded.payload.headers, body: loaded.payload.body ?? undefined, multipart: loaded.payload.multipart ?? [], timeoutMs: loaded.timeoutMs, variables: loaded.variables ?? {}, assertions: loaded.assertions ?? [], auth: loaded.authRef ?? null, followRedirects: loaded.payload.followRedirects, retryMax: loaded.retryPolicy.max_retries, retryBackoffMs: loaded.retryPolicy.backoff_ms, proxy: loaded.proxy ?? null, tlsVerify: loaded.tls.verify, tlsClientCertRef: loaded.tls.client_cert_ref ?? null, preScripts: loaded.preScripts ?? [], postScripts: loaded.postScripts ?? [] });
       } else applyRequest(loaded);
       setHistoryOpen(false);
@@ -1502,10 +1558,10 @@ export function HttpWorkbench({
   const assertionFailed = result?.assertions?.filter((item) => !item.passed).length ?? 0;
   const responseStatus = result?.summary.status ?? 0;
   const responseStatusTone = responseStatus >= 100 && responseStatus < 600 ? ` status-${Math.floor(responseStatus / 100)}xx` : "";
-  const validationContext = requestMetadata.__apivoyCaseType === "test" ? "singleCase" : "interfaceRun";
+  const validationContext = requestMetadata.__protovoyCaseType === "test" ? "singleCase" : "interfaceRun";
   const validationFeatureEnabled = responseValidationSettings[validationContext];
   const responseValidationActive = validationFeatureEnabled && assertionsEnabled;
-  const designedResponses = Array.isArray(requestMetadata.__apivoyResponseDefinitions) ? requestMetadata.__apivoyResponseDefinitions as DesignedResponse[] : [];
+  const designedResponses = Array.isArray(requestMetadata.__protovoyResponseDefinitions) ? requestMetadata.__protovoyResponseDefinitions as DesignedResponse[] : [];
   const displayedResponses = designedResponses.length ? designedResponses : [{ status: selectedDesignedResponse || "200", fields: [] }];
   const responseMetrics = result && !result.error ? <>
     <strong className={`http-status-code${responseStatusTone}`}>{result.summary.status ?? "—"}</strong>
@@ -1555,7 +1611,7 @@ export function HttpWorkbench({
       </details>; })}
     </div> : <div className="http-validation-empty"><strong>校验响应</strong><span>{assertionsEnabled ? "发送请求后将在这里显示校验结果" : "响应校验已关闭"}</span></div>}
   </div>;
-  const environmentControl = <div className="http-environment-select"><select aria-label="请求环境" value={environmentRef} onChange={(event)=>setEnvironmentRef(event.target.value)} disabled={loading}>{environmentOptions.map((environment)=><option key={environment.id} value={environment.id}>{environment.name}{environment.id===defaultEnvironmentId?" · 默认":""}</option>)}</select><button type="button" className="http-environment-manage" aria-label="编辑环境变量" title="编辑环境变量" onClick={() => window.dispatchEvent(new CustomEvent("apivoy-open-environment"))}><Icon name="menu"/></button></div>;
+  const environmentControl = <div className="http-environment-select"><select aria-label="请求环境" value={environmentRef} onChange={(event)=>setEnvironmentRef(event.target.value)} disabled={loading}>{environmentOptions.map((environment)=><option key={environment.id} value={environment.id}>{environment.name}{environment.id===defaultEnvironmentId?" · 默认":""}</option>)}</select><button type="button" className="http-environment-manage" aria-label="编辑环境变量" title="编辑环境变量" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-environment"))}><Icon name="menu"/></button></div>;
 
   const requestCommandbar = <div className="http-request-commandbar">
     <label className="http-request-name-field"><input aria-label={openedCaseParentId ? "接口及用例名称" : "接口名称"} style={styles.input} value={openedCaseParentId && openedCaseInterfaceName ? `${openedCaseInterfaceName}（${name}）` : name} onChange={(event) => { const value = event.target.value; if (openedCaseParentId && openedCaseInterfaceName) { const prefix = `${openedCaseInterfaceName}（`; setName(value.startsWith(prefix) ? value.slice(prefix.length).replace(/）$/, "") : value); } else setName(value); }} placeholder="接口名称" disabled={loading} /></label>
@@ -1566,7 +1622,7 @@ export function HttpWorkbench({
       <label className="http-target-field"><input id="http-target-url" aria-label="目标 URL" style={styles.input} value={url} onChange={(e) => setUrl(e.target.value)} onBlur={(e) => setQueryRows(queryRowsFromUrl(e.target.value))} placeholder="接口路径" spellCheck={false} disabled={loading} /></label>
       {lifecycleTab === "definition" ? <>
         <button type="button" className="http-send-button" style={styles.button} disabled={loading} onClick={() => void handleSave(true)}><Icon name="archive"/>保存</button>
-        <button type="button" className="http-save-button" style={styles.secondaryButton} onClick={() => window.dispatchEvent(new CustomEvent("apivoy-open-lifecycle-tab", { detail: { sessionId: workbenchSessionId, tab: "debug" } }))}><Icon name="send"/>调试</button>
+        <button type="button" className="http-save-button" style={styles.secondaryButton} onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-lifecycle-tab", { detail: { sessionId: workbenchSessionId, tab: "debug" } }))}><Icon name="send"/>调试</button>
       </> : <>
         <button className={`http-send-button${loading ? " is-cancel" : ""}`} style={styles.button} disabled={loading && (!onCancel || !executionId)} aria-label={loading ? t("action.cancel") : t("action.send")} onClick={() => loading ? void handleCancel() : void handleSend()}>
           <Icon name={loading ? "close" : "send"}/>{loading ? t("action.cancel") : t("action.send")}
@@ -1587,7 +1643,7 @@ export function HttpWorkbench({
   </div>;
 
   return (
-    <>{saveInterfaceDraft ? createPortal(<div className="dialog-backdrop" role="presentation" onMouseDown={() => !saveInterfaceBusy && setSaveInterfaceDraft(null)}><form className="save-interface-dialog" role="dialog" aria-modal="true" aria-labelledby="save-interface-title" onMouseDown={(event) => event.stopPropagation()} onSubmit={async (event) => { event.preventDefault(); if (!saveInterfaceName.trim() || !saveCollectionId || !onSaveToCollection) return; setSaveInterfaceBusy(true); try { const request = { ...saveInterfaceDraft.request, name: saveInterfaceName.trim() }; const savedId = await onSaveToCollection(sanitizeHttpRequestForPersistence(request), saveCollectionId); const persistedId = savedId || request.id; setName(request.name); setRequestId(persistedId); onTitleChange?.(request.name); setStatusMsg("请求已保存到本地库"); const shouldSaveDefinition = saveInterfaceDraft.saveDefinition; setSaveInterfaceDraft(null); if (shouldSaveDefinition) window.dispatchEvent(new CustomEvent("apivoy-save-interface-definition", { detail: { requestId: persistedId } })); } catch (error) { setStatusMsg(error instanceof Error ? error.message : String(error)); } finally { setSaveInterfaceBusy(false); } }}><header><h2 id="save-interface-title">保存接口</h2><button type="button" className="ui-icon-button" aria-label="关闭" disabled={saveInterfaceBusy} onClick={() => setSaveInterfaceDraft(null)}><Icon name="close"/></button></header><div className="save-interface-fields"><label><span>名称 <i>*</i></span><input className="save-interface-name-input" autoFocus required value={saveInterfaceName} onChange={(event) => setSaveInterfaceName(event.target.value)} /></label><fieldset><legend>目录 <i>*</i></legend><div className={`save-interface-directory-picker${saveDirectoryOpen ? " is-open" : ""}`}><button type="button" className="save-interface-directory-trigger" role="combobox" aria-label="目录" aria-haspopup="tree" aria-expanded={saveDirectoryOpen} onClick={() => setSaveDirectoryOpen((open) => !open)}><Icon name="folder"/><span>{selectedSaveCollection?.name ?? "请选择目录"}</span><Icon name="chevron"/></button>{saveDirectoryOpen ? <div className="save-interface-directory-tree" role="tree" aria-label="选择保存目录">{displayedSaveModules.map((module) => { const moduleCollections = saveCollections.filter((collection) => collection.moduleId ? collection.moduleId === module.id : module.isDefault); const moduleExpanded = expandedSaveModules.has(module.id); const rootCollection = moduleCollections.find((collection) => !collection.parentId) ?? moduleCollections[0]; return <div className="save-interface-module-group" role="group" key={module.id}><div className="save-interface-module-row" role="treeitem" aria-expanded={moduleExpanded}><button type="button" className="save-interface-tree-toggle" aria-label={moduleExpanded ? `收起${module.name}` : `展开${module.name}`} onClick={() => setExpandedSaveModules((current) => { const next = new Set(current); next.has(module.id) ? next.delete(module.id) : next.add(module.id); return next; })}><Icon name="chevron"/></button><button type="button" className="save-interface-tree-select" onClick={() => { setSaveModuleId(module.id); if (rootCollection) { setSaveCollectionId(rootCollection.id); setSaveDirectoryOpen(false); } }}><Icon name="folder"/><span>{module.name}</span></button></div>{moduleExpanded ? <SaveDirectoryBranch collections={moduleCollections} parentId={null} depth={0} selectedId={saveCollectionId} expandedIds={expandedSaveCollections} onSelect={(collectionId) => { setSaveModuleId(module.id); setSaveCollectionId(collectionId); setSaveDirectoryOpen(false); }} onToggle={(collectionId, expanded) => setExpandedSaveCollections((current) => { const next = new Set(current); expanded ? next.add(collectionId) : next.delete(collectionId); return next; })}/> : null}</div>; })}{!saveCollections.length ? <p>当前模块暂无目录，请先新建目录。</p> : null}<button type="button" className="save-interface-new-directory" onClick={() => { setNewCollectionName(""); setNewCollectionParentId(""); setNewCollectionOpen(true); }}><Icon name="plus"/>新建目录</button></div> : null}</div></fieldset></div><footer><button type="button" className="ui-button secondary" disabled={saveInterfaceBusy} onClick={() => setSaveInterfaceDraft(null)}>取消</button><button type="submit" className="ui-button primary" disabled={saveInterfaceBusy || !saveInterfaceName.trim() || !saveCollectionId}>{saveInterfaceBusy ? "保存中…" : "保存"}</button></footer></form>{newCollectionOpen ? <div className="save-interface-nested-backdrop" role="presentation" onMouseDown={() => setNewCollectionOpen(false)}><form className="save-interface-new-dialog" role="dialog" aria-modal="true" aria-labelledby="new-save-directory-title" onMouseDown={(event) => event.stopPropagation()} onSubmit={async (event) => { event.preventDefault(); if (!newCollectionName.trim() || !onCreateCollection) return; setSaveInterfaceBusy(true); try { const created = await onCreateCollection(newCollectionParentId || null, newCollectionName.trim(), saveModuleId || selectedSaveModule?.id); setSaveCollectionId(created.id); setNewCollectionOpen(false); setSaveDirectoryOpen(false); } finally { setSaveInterfaceBusy(false); } }}><header><h2 id="new-save-directory-title">新建目录</h2><button type="button" className="ui-icon-button" aria-label="关闭" onClick={() => setNewCollectionOpen(false)}><Icon name="close"/></button></header><label><span>名称 <i>*</i></span><input autoFocus value={newCollectionName} onChange={(event) => setNewCollectionName(event.target.value)}/></label><label><span>父级目录 <i>*</i></span><select value={newCollectionParentId} onChange={(event) => setNewCollectionParentId(event.target.value)}><option value="">{selectedSaveModule?.name ?? "模块根目录"}</option>{saveCollections.filter((collection) => collection.moduleId ? collection.moduleId === selectedSaveModule?.id : selectedSaveModule?.isDefault).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label><footer><button type="button" className="ui-button secondary" onClick={() => setNewCollectionOpen(false)}>取消</button><button type="submit" className="ui-button primary" disabled={saveInterfaceBusy || !newCollectionName.trim()}>{saveInterfaceBusy ? "创建中…" : "创建"}</button></footer></form></div> : null}</div>, document.body) : null}{caseDialogOpen ? createPortal(<ModalFrame open onClose={() => !caseSaving && setCaseDialogOpen(false)} closeOnBackdrop={!caseSaving} className="case-save-dialog" ariaLabelledBy="case-save-title" as="form" onSubmit={(event) => { event.preventDefault(); void saveAsCase(); }}>
+    <>{saveInterfaceDraft ? createPortal(<div className="dialog-backdrop" role="presentation" onMouseDown={() => !saveInterfaceBusy && setSaveInterfaceDraft(null)}><form className="save-interface-dialog" role="dialog" aria-modal="true" aria-labelledby="save-interface-title" onMouseDown={(event) => event.stopPropagation()} onSubmit={async (event) => { event.preventDefault(); if (!saveInterfaceName.trim() || !saveCollectionId || !onSaveToCollection) return; setSaveInterfaceBusy(true); try { const request = { ...saveInterfaceDraft.request, name: saveInterfaceName.trim() }; const savedId = await onSaveToCollection(sanitizeHttpRequestForPersistence(request), saveCollectionId); const persistedId = savedId || request.id; setName(request.name); setRequestId(persistedId); onTitleChange?.(request.name); setStatusMsg("请求已保存到本地库"); const shouldSaveDefinition = saveInterfaceDraft.saveDefinition; setSaveInterfaceDraft(null); if (shouldSaveDefinition) window.dispatchEvent(new CustomEvent("protovoy-save-interface-definition", { detail: { requestId: persistedId } })); } catch (error) { setStatusMsg(error instanceof Error ? error.message : String(error)); } finally { setSaveInterfaceBusy(false); } }}><header><h2 id="save-interface-title">保存接口</h2><button type="button" className="ui-icon-button" aria-label="关闭" disabled={saveInterfaceBusy} onClick={() => setSaveInterfaceDraft(null)}><Icon name="close"/></button></header><div className="save-interface-fields"><label><span>名称 <i>*</i></span><input className="save-interface-name-input" autoFocus required value={saveInterfaceName} onChange={(event) => setSaveInterfaceName(event.target.value)} /></label><fieldset><legend>目录 <i>*</i></legend><div className={`save-interface-directory-picker${saveDirectoryOpen ? " is-open" : ""}`}><button type="button" className="save-interface-directory-trigger" role="combobox" aria-label="目录" aria-haspopup="tree" aria-expanded={saveDirectoryOpen} onClick={() => setSaveDirectoryOpen((open) => !open)}><Icon name="folder"/><span>{selectedSaveCollection?.name ?? "请选择目录"}</span><Icon name="chevron"/></button>{saveDirectoryOpen ? <div className="save-interface-directory-tree" role="tree" aria-label="选择保存目录">{displayedSaveModules.map((module) => { const moduleCollections = saveCollections.filter((collection) => collection.moduleId ? collection.moduleId === module.id : module.isDefault); const moduleExpanded = expandedSaveModules.has(module.id); const rootCollection = moduleCollections.find((collection) => !collection.parentId) ?? moduleCollections[0]; return <div className="save-interface-module-group" role="group" key={module.id}><div className="save-interface-module-row" role="treeitem" aria-expanded={moduleExpanded}><button type="button" className="save-interface-tree-toggle" aria-label={moduleExpanded ? `收起${module.name}` : `展开${module.name}`} onClick={() => setExpandedSaveModules((current) => { const next = new Set(current); next.has(module.id) ? next.delete(module.id) : next.add(module.id); return next; })}><Icon name="chevron"/></button><button type="button" className="save-interface-tree-select" onClick={() => { setSaveModuleId(module.id); if (rootCollection) { setSaveCollectionId(rootCollection.id); setSaveDirectoryOpen(false); } }}><Icon name="folder"/><span>{module.name}</span></button></div>{moduleExpanded ? <SaveDirectoryBranch collections={moduleCollections} parentId={null} depth={0} selectedId={saveCollectionId} expandedIds={expandedSaveCollections} onSelect={(collectionId) => { setSaveModuleId(module.id); setSaveCollectionId(collectionId); setSaveDirectoryOpen(false); }} onToggle={(collectionId, expanded) => setExpandedSaveCollections((current) => { const next = new Set(current); expanded ? next.add(collectionId) : next.delete(collectionId); return next; })}/> : null}</div>; })}{!saveCollections.length ? <p>当前模块暂无目录，请先新建目录。</p> : null}<button type="button" className="save-interface-new-directory" onClick={() => { setNewCollectionName(""); setNewCollectionParentId(""); setNewCollectionOpen(true); }}><Icon name="plus"/>新建目录</button></div> : null}</div></fieldset></div><footer><button type="button" className="ui-button secondary" disabled={saveInterfaceBusy} onClick={() => setSaveInterfaceDraft(null)}>取消</button><button type="submit" className="ui-button primary" disabled={saveInterfaceBusy || !saveInterfaceName.trim() || !saveCollectionId}>{saveInterfaceBusy ? "保存中…" : "保存"}</button></footer></form>{newCollectionOpen ? <div className="save-interface-nested-backdrop" role="presentation" onMouseDown={() => setNewCollectionOpen(false)}><form className="save-interface-new-dialog" role="dialog" aria-modal="true" aria-labelledby="new-save-directory-title" onMouseDown={(event) => event.stopPropagation()} onSubmit={async (event) => { event.preventDefault(); if (!newCollectionName.trim() || !onCreateCollection) return; setSaveInterfaceBusy(true); try { const created = await onCreateCollection(newCollectionParentId || null, newCollectionName.trim(), saveModuleId || selectedSaveModule?.id); setSaveCollectionId(created.id); setNewCollectionOpen(false); setSaveDirectoryOpen(false); } finally { setSaveInterfaceBusy(false); } }}><header><h2 id="new-save-directory-title">新建目录</h2><button type="button" className="ui-icon-button" aria-label="关闭" onClick={() => setNewCollectionOpen(false)}><Icon name="close"/></button></header><label><span>名称 <i>*</i></span><input autoFocus value={newCollectionName} onChange={(event) => setNewCollectionName(event.target.value)}/></label><label><span>父级目录 <i>*</i></span><select value={newCollectionParentId} onChange={(event) => setNewCollectionParentId(event.target.value)}><option value="">{selectedSaveModule?.name ?? "模块根目录"}</option>{saveCollections.filter((collection) => collection.moduleId ? collection.moduleId === selectedSaveModule?.id : selectedSaveModule?.isDefault).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label><footer><button type="button" className="ui-button secondary" onClick={() => setNewCollectionOpen(false)}>取消</button><button type="submit" className="ui-button primary" disabled={saveInterfaceBusy || !newCollectionName.trim()}>{saveInterfaceBusy ? "创建中…" : "创建"}</button></footer></form></div> : null}</div>, document.body) : null}{caseDialogOpen ? createPortal(<ModalFrame open onClose={() => !caseSaving && setCaseDialogOpen(false)} closeOnBackdrop={!caseSaving} className="case-save-dialog" ariaLabelledBy="case-save-title" as="form" onSubmit={(event) => { event.preventDefault(); void saveAsCase(); }}>
         <header><div><h2 id="case-save-title">保存为用例</h2></div><button type="button" className="ui-icon-button" aria-label="关闭" disabled={caseSaving} onClick={() => setCaseDialogOpen(false)}><Icon name="close"/></button></header>
         <div className="case-save-fields">
           <label><span>用例名称 <i>*</i></span><div className="case-name-composer"><input autoFocus list="case-name-presets" aria-label="用例场景名称" value={caseName} onChange={(event) => setCaseName(event.target.value)} placeholder="选择预设或输入自定义名称" /><datalist id="case-name-presets">{CASE_NAME_PRESETS.map((preset) => <option key={preset} value={preset}/>)}</datalist></div></label>
@@ -1610,7 +1666,7 @@ export function HttpWorkbench({
       {commandbarTarget || embeddedPreview ? null : requestCommandbar}
       {historyStartedAt ? <div className="http-history-sent-at">{historyInterfaceName && onOpenHistoryInterface ? <button type="button" className="http-history-interface-link" aria-label={"\u6253\u5f00\u63a5\u53e3 " + historyInterfaceName} onClick={onOpenHistoryInterface}><Icon name="folder"/><span>{historyInterfaceName}</span></button> : null}<span className="http-history-time"><Icon name="activity"/><span>{"\u5386\u53f2\u53d1\u9001\u65f6\u95f4"}</span><time dateTime={historyStartedAt}>{new Date(historyStartedAt).toLocaleString("zh-CN", { hour12: false })}</time></span></div> : null}
       <div className={`http-workbench-split${responseValidationActive && result ? " has-response-validation" : ""}`}>
-      <SplitPane id={embeddedPreview ? "http-test-case-preview" : "http-workbench"} direction="vertical" fixedDirection={fixedSplitDirection ?? (embeddedPreview ? "horizontal" : undefined)} minPrimary={160} minSecondary={160} primaryLabel="请求配置" secondaryLabel="响应检查器" secondaryActions={responseHeaderActions} primary={<div className="apivoy-workbench http-request-pane" style={styles.section}>
+      <SplitPane id={embeddedPreview ? "http-test-case-preview" : "http-workbench"} direction="vertical" fixedDirection={fixedSplitDirection ?? (embeddedPreview ? "horizontal" : undefined)} minPrimary={160} minSecondary={160} primaryLabel="请求配置" secondaryLabel="响应检查器" secondaryActions={responseHeaderActions} primary={<div className="protovoy-workbench http-request-pane" style={styles.section}>
       {(() => {
         const paramDifferenceCount = caseStructureState?.differences.filter((item) => item.field.location === "query").length ?? 0;
         const requestTabs = [
@@ -1645,9 +1701,19 @@ export function HttpWorkbench({
               <KeyValueRows rows={headerRows} setRows={setHeaderRows} kind="Header" nameLabel="Header 名称" valueLabel="Header 值" addPlaceholder="例如 Content-Type" loading={loading} inconsistentNames={caseStructureState?.differences.filter((item) => item.field.location === "header").map((item) => item.field.name)}/>
             </div>}
             {activeTab === "body" && <div style={styles.label}>
-              <RovingTabList className="http-body-mode-tabs" ariaLabel="请求体类型">
-                {BODY_MODES.map((mode) => <button key={mode.id} type="button" role="tab" tabIndex={bodyMode === mode.id ? 0 : -1} aria-selected={bodyMode === mode.id} className={bodyMode === mode.id ? "is-active" : ""} onClick={() => selectBodyMode(mode.id)} disabled={loading}>{mode.label}</button>)}
-              </RovingTabList>
+              <div className="http-body-toolbar" style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid var(--protovoy-border)" }}>
+                <RovingTabList className="http-body-mode-tabs" ariaLabel="请求体类型" style={{ minWidth: 0, flex: "1 1 auto" }}>
+                  {BODY_MODES.map((mode) => <button key={mode.id} type="button" role="tab" tabIndex={bodyMode === mode.id ? 0 : -1} aria-selected={bodyMode === mode.id} className={bodyMode === mode.id ? "is-active" : ""} onClick={() => selectBodyMode(mode.id)} disabled={loading}>{mode.label}</button>)}
+                </RovingTabList>
+                {bodyMode !== "none" && bodyMode !== "multipart" ? <label className="http-body-content-type" style={{ flex: "0 0 auto", display: "flex", alignItems: "center", gap: 7, color: "var(--protovoy-subtle)", fontSize: 10 }}>
+                  <span>Content-Type</span>
+                  <select aria-label="请求 Content-Type" title="选择请求 Content-Type" value={requestContentType} disabled={loading} style={{ ...styles.input, width: 190, height: 30, padding: "0 8px", fontFamily: "var(--protovoy-mono)", fontSize: 11, cursor: loading ? "not-allowed" : "pointer" }} onChange={(event) => setHeaderRows((rows) => replaceContentTypeHeader(rows, event.target.value))}>
+                    {!requestContentType ? <option value="" disabled>选择 Content-Type</option> : null}
+                    {requestContentType && !REQUEST_CONTENT_TYPES.includes(requestContentType as typeof REQUEST_CONTENT_TYPES[number]) ? <option value={requestContentType}>{requestContentType}</option> : null}
+                    {REQUEST_CONTENT_TYPES.map((contentType) => <option key={contentType} value={contentType}>{contentType}</option>)}
+                  </select>
+                </label> : null}
+              </div>
               {bodyMode === "none" && <div className="http-body-empty">当前请求不发送 Body。选择上方类型开始编辑。</div>}
               {bodyMode === "json" && <>
                 <div className="http-body-editor-heading"><span className="http-body-editor-label">请求内容</span><span className="http-body-editor-actions"><button type="button" className="http-body-icon-action" onClick={formatBodyJson} disabled={loading || !body.trim()} title="格式化 JSON" aria-label="格式化 JSON Body"><Icon name="code"/></button><button type="button" className="http-body-icon-action" onClick={() => setBody("")} disabled={loading || !body} title="清除 JSON" aria-label="清除 JSON Body"><Icon name="broom"/></button></span></div>
@@ -1722,7 +1788,7 @@ export function HttpWorkbench({
                 </div>
               )}
             </label>}
-            {activeTab === "cookies" && <div className="http-request-editor-section">
+            {activeTab === "cookies" && <div className="http-kv-editor" aria-label="请求 Cookies">
               <div className="http-section-heading">请求 Cookies</div>
               <KeyValueRows rows={cookieRows} setRows={setCookieRows} kind="Cookie" nameLabel="Cookie 名称" valueLabel="Cookie 值" addPlaceholder="添加 Cookie" loading={loading}/>
             </div>}
@@ -1746,7 +1812,7 @@ export function HttpWorkbench({
         <div className="execution-history-layer" role="presentation" onMouseDown={() => setHistoryOpen(false)}>
         <aside className="execution-history-drawer" role="dialog" aria-modal="true" aria-label="执行历史" id="http-execution-history" onMouseDown={(event) => event.stopPropagation()}>
           <div style={styles.row}>
-            <strong style={{ color: "var(--apivoy-text)" }}>执行历史</strong>
+            <strong style={{ color: "var(--protovoy-text)" }}>执行历史</strong>
             <button type="button" className="ui-icon-button" aria-label="关闭执行历史" onClick={() => setHistoryOpen(false)}><Icon name="close"/></button>
             <button style={styles.secondaryButton} disabled={loading} onClick={handleRefreshHistory}>
               刷新
@@ -1922,7 +1988,7 @@ const styles: Record<string, CSSProperties> = {
   },
   p: {
     margin: 0,
-    color: "var(--apivoy-muted)",
+    color: "var(--protovoy-muted)",
     lineHeight: 1.5,
     maxWidth: 720,
   },
@@ -1938,14 +2004,14 @@ const styles: Record<string, CSSProperties> = {
     background: "rgba(21,39,56,.72)", boxShadow: "0 18px 50px rgba(0,0,0,.16)",
   },
   panelTitle: {
-    display: "flex", alignItems: "baseline", gap: 10, color: "var(--apivoy-text)", fontSize: 14,
+    display: "flex", alignItems: "baseline", gap: 10, color: "var(--protovoy-text)", fontSize: 14,
   },
   grid: {
     display: "grid",
     gridTemplateColumns: "1fr 160px",
     gap: 12,
     padding: 16,
-    border: "1px solid var(--apivoy-border)",
+    border: "1px solid var(--protovoy-border)",
     borderRadius: 14,
     background: "rgba(18,25,35,.72)",
   },
@@ -1954,51 +2020,51 @@ const styles: Record<string, CSSProperties> = {
     gridTemplateColumns: "1fr 1fr",
     gap: 12,
     padding: 16,
-    border: "1px solid var(--apivoy-border)",
+    border: "1px solid var(--protovoy-border)",
     borderRadius: 14,
     background: "rgba(18,25,35,.72)",
   },
   grid3: {
     display: "grid", gridTemplateColumns: "minmax(280px, 2fr) 1fr 1fr", gap: 12,
-    padding: 16, border: "1px solid var(--apivoy-border)", borderRadius: 14,
+    padding: 16, border: "1px solid var(--protovoy-border)", borderRadius: 14,
     background: "rgba(18,25,35,.72)", alignItems: "end",
   },
   checkLabel: {
-    display: "flex", alignItems: "center", gap: 8, color: "var(--apivoy-text)", fontSize: 12,
+    display: "flex", alignItems: "center", gap: 8, color: "var(--protovoy-text)", fontSize: 12,
     minHeight: 34,
   },
-  dangerHint: { color: "var(--apivoy-danger)", fontSize: 12 },
+  dangerHint: { color: "var(--protovoy-danger)", fontSize: 12 },
   label: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
     fontSize: 12,
-    color: "var(--apivoy-muted)",
+    color: "var(--protovoy-muted)",
   },
   select: {
-    fontFamily: "var(--apivoy-mono)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 13,
     fontWeight: 600,
-    color: "var(--apivoy-success)",
+    color: "var(--protovoy-success)",
     background: "rgba(62, 207, 142, 0.12)",
     border: "1px solid rgba(62, 207, 142, 0.35)",
     borderRadius: 9,
     padding: "10px 12px",
   },
   selectWide: {
-    fontFamily: "var(--apivoy-mono)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 13,
     fontWeight: 600,
-    color: "var(--apivoy-text)",
-    background: "var(--apivoy-control-bg)",
-    border: "1px solid var(--apivoy-control-border)",
-    borderRadius: "var(--apivoy-control-radius)",
-    minHeight: "var(--apivoy-control-height)",
-    padding: "0 var(--apivoy-control-padding-x)",
+    color: "var(--protovoy-text)",
+    background: "var(--protovoy-control-bg)",
+    border: "1px solid var(--protovoy-control-border)",
+    borderRadius: "var(--protovoy-control-radius)",
+    minHeight: "var(--protovoy-control-height)",
+    padding: "0 var(--protovoy-control-padding-x)",
   },
 
   authCredentialLabel: {
-    color: "var(--apivoy-muted)",
+    color: "var(--protovoy-muted)",
     fontSize: 11,
     fontWeight: 650,
   },
@@ -2011,33 +2077,33 @@ const styles: Record<string, CSSProperties> = {
   input: {
     flex: 1,
     minWidth: 220,
-    fontFamily: "var(--apivoy-mono)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 12,
-    color: "var(--apivoy-text)",
-    background: "var(--apivoy-control-bg)",
-    border: "1px solid var(--apivoy-control-border)",
-    borderRadius: "var(--apivoy-control-radius)",
-    minHeight: "var(--apivoy-control-height)",
-    padding: "0 var(--apivoy-control-padding-x)",
+    color: "var(--protovoy-text)",
+    background: "var(--protovoy-control-bg)",
+    border: "1px solid var(--protovoy-control-border)",
+    borderRadius: "var(--protovoy-control-radius)",
+    minHeight: "var(--protovoy-control-height)",
+    padding: "0 var(--protovoy-control-padding-x)",
     outline: "none",
   },
   timeout: {
-    fontFamily: "var(--apivoy-mono)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 12,
-    color: "var(--apivoy-text)",
-    background: "var(--apivoy-control-bg)",
-    border: "1px solid var(--apivoy-control-border)",
-    borderRadius: "var(--apivoy-control-radius)",
-    minHeight: "var(--apivoy-control-height)",
-    padding: "0 var(--apivoy-control-padding-x)",
+    color: "var(--protovoy-text)",
+    background: "var(--protovoy-control-bg)",
+    border: "1px solid var(--protovoy-control-border)",
+    borderRadius: "var(--protovoy-control-radius)",
+    minHeight: "var(--protovoy-control-height)",
+    padding: "0 var(--protovoy-control-padding-x)",
     outline: "none",
   },
   textarea: {
-    fontFamily: "var(--apivoy-mono)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 11,
-    color: "var(--apivoy-text)",
-    background: "var(--apivoy-bg-elevated)",
-    border: "1px solid var(--apivoy-border)",
+    color: "var(--protovoy-text)",
+    background: "var(--protovoy-bg-elevated)",
+    border: "1px solid var(--protovoy-border)",
     borderRadius: 10,
     padding: "12px 14px",
     outline: "none",
@@ -2047,29 +2113,29 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 14,
     fontWeight: 600,
     color: "#041018",
-    background: "var(--apivoy-accent)",
+    background: "var(--protovoy-accent)",
     border: "none",
-    borderRadius: "var(--apivoy-button-radius)",
-    minHeight: "var(--apivoy-control-height)",
-    padding: "0 var(--apivoy-button-padding-x)",
+    borderRadius: "var(--protovoy-button-radius)",
+    minHeight: "var(--protovoy-control-height)",
+    padding: "0 var(--protovoy-button-padding-x)",
     cursor: "pointer",
     boxShadow: "0 8px 22px rgba(31,111,184,.22)",
   },
   secondaryButton: {
     fontSize: 14,
     fontWeight: 600,
-    color: "var(--apivoy-text)",
-    background: "var(--apivoy-control-bg)",
-    border: "1px solid var(--apivoy-control-border)",
-    borderRadius: "var(--apivoy-button-radius)",
-    minHeight: "var(--apivoy-control-height)",
-    padding: "0 var(--apivoy-button-padding-x)",
+    color: "var(--protovoy-text)",
+    background: "var(--protovoy-control-bg)",
+    border: "1px solid var(--protovoy-control-border)",
+    borderRadius: "var(--protovoy-button-radius)",
+    minHeight: "var(--protovoy-control-height)",
+    padding: "0 var(--protovoy-button-padding-x)",
     cursor: "pointer",
   },
   linkButton: {
     fontSize: 12,
     fontWeight: 600,
-    color: "var(--apivoy-accent)",
+    color: "var(--protovoy-accent)",
     background: "transparent",
     border: "none",
     cursor: "pointer",
@@ -2077,8 +2143,8 @@ const styles: Record<string, CSSProperties> = {
   },
   panel: {
     marginTop: 8,
-    background: "var(--apivoy-panel)",
-    border: "1px solid var(--apivoy-border)",
+    background: "var(--protovoy-panel)",
+    border: "1px solid var(--protovoy-border)",
     borderRadius: 14,
     padding: 18,
     boxShadow: "0 18px 50px rgba(0,0,0,.18)",
@@ -2087,63 +2153,63 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexWrap: "wrap",
     gap: 16,
-    fontFamily: "var(--apivoy-mono)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 12,
-    color: "var(--apivoy-muted)",
+    color: "var(--protovoy-muted)",
     marginBottom: 0,
   },
   responseHeader: {
     display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-    flexWrap: "wrap", paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid var(--apivoy-border)",
+    flexWrap: "wrap", paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid var(--protovoy-border)",
   },
-  responseTabs: { display: "flex", alignItems: "stretch", gap: 4, marginBottom: 12, borderBottom: "1px solid var(--apivoy-border)" },
-  requestTabs: { display: "flex", flexWrap: "wrap", gap: 2, marginBottom: 12, borderBottom: "1px solid var(--apivoy-border)" },
-  jsonTableWrap: { maxHeight: 420, overflow: "auto", border: "1px solid var(--apivoy-border)", borderRadius: 8 },
+  responseTabs: { display: "flex", alignItems: "stretch", gap: 4, marginBottom: 12, borderBottom: "1px solid var(--protovoy-border)" },
+  requestTabs: { display: "flex", flexWrap: "wrap", gap: 2, marginBottom: 12, borderBottom: "1px solid var(--protovoy-border)" },
+  jsonTableWrap: { maxHeight: 420, overflow: "auto", border: "1px solid var(--protovoy-border)", borderRadius: 8 },
   jsonTable: { width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" },
-  timeline: { display: "grid", gap: 1, maxHeight: 420, overflow: "auto", border: "1px solid var(--apivoy-border)", borderRadius: 8 },
-  timelineRow: { display: "grid", gridTemplateColumns: "85px 145px 1fr", gap: 10, padding: "7px 9px", borderBottom: "1px solid var(--apivoy-border)", fontSize: 11, color: "var(--apivoy-muted)" },
-  windowNav: { display: "flex", justifyContent: "center", alignItems: "center", gap: 10, padding: 8, color: "var(--apivoy-muted)", fontSize: 10 },
+  timeline: { display: "grid", gap: 1, maxHeight: 420, overflow: "auto", border: "1px solid var(--protovoy-border)", borderRadius: 8 },
+  timelineRow: { display: "grid", gridTemplateColumns: "85px 145px 1fr", gap: 10, padding: "7px 9px", borderBottom: "1px solid var(--protovoy-border)", fontSize: 11, color: "var(--protovoy-muted)" },
+  windowNav: { display: "flex", justifyContent: "center", alignItems: "center", gap: 10, padding: 8, color: "var(--protovoy-muted)", fontSize: 10 },
   count: { opacity: .7, marginLeft: 4 },
-  headerTable: { display: "flex", flexDirection: "column", border: "1px solid var(--apivoy-border)", borderRadius: 9, overflow: "hidden" },
-  headerSummary: { display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 11px", background: "rgba(86,173,245,.08)", color: "var(--apivoy-muted)", fontSize: 11 },
-  headerRow: { display: "grid", gridTemplateColumns: "minmax(140px, .35fr) 1fr", gap: 12, padding: "8px 11px", borderTop: "1px solid var(--apivoy-border)", fontFamily: "var(--apivoy-mono)", fontSize: 11, wordBreak: "break-all" },
+  headerTable: { display: "flex", flexDirection: "column", border: "1px solid var(--protovoy-border)", borderRadius: 9, overflow: "hidden" },
+  headerSummary: { display: "flex", justifyContent: "space-between", gap: 10, padding: "9px 11px", background: "rgba(86,173,245,.08)", color: "var(--protovoy-muted)", fontSize: 11 },
+  headerRow: { display: "grid", gridTemplateColumns: "minmax(140px, .35fr) 1fr", gap: 12, padding: "8px 11px", borderTop: "1px solid var(--protovoy-border)", fontFamily: "var(--protovoy-mono)", fontSize: 11, wordBreak: "break-all" },
   statusBadge: {
-    color: "var(--apivoy-success)", background: "rgba(62,207,142,.1)",
+    color: "var(--protovoy-success)", background: "rgba(62,207,142,.1)",
     borderRadius: 999, padding: "4px 9px",
   },
   tab: {
-    border: 0, background: "transparent", color: "var(--apivoy-muted)",
-    height: "var(--apivoy-tab-height)", display: "flex", alignItems: "center", padding: "0 var(--apivoy-tab-padding-x)", marginBottom: -1, cursor: "pointer", borderRadius: 0, borderBottom: "2px solid transparent", fontSize: 11,
+    border: 0, background: "transparent", color: "var(--protovoy-muted)",
+    height: "var(--protovoy-tab-height)", display: "flex", alignItems: "center", padding: "0 var(--protovoy-tab-padding-x)", marginBottom: -1, cursor: "pointer", borderRadius: 0, borderBottom: "2px solid transparent", fontSize: 11,
   },
   tabActive: {
-    border: 0, background: "transparent", color: "var(--apivoy-accent)",
-    height: "var(--apivoy-tab-height)", display: "flex", alignItems: "center", padding: "0 var(--apivoy-tab-padding-x)", marginBottom: -1, cursor: "pointer", borderRadius: 0, borderBottom: "2px solid var(--apivoy-accent)", fontSize: 11,
+    border: 0, background: "transparent", color: "var(--protovoy-accent)",
+    height: "var(--protovoy-tab-height)", display: "flex", alignItems: "center", padding: "0 var(--protovoy-tab-padding-x)", marginBottom: -1, cursor: "pointer", borderRadius: 0, borderBottom: "2px solid var(--protovoy-accent)", fontSize: 11,
   },
   pre: {
     margin: 0,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
-    fontFamily: "var(--apivoy-mono)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 12,
     lineHeight: 1.5,
     maxHeight: 420,
     overflow: "auto",
   },
   error: {
-    color: "var(--apivoy-danger)",
-    fontFamily: "var(--apivoy-mono)",
+    color: "var(--protovoy-danger)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 13,
   },
   status: {
     fontSize: 13,
-    color: "var(--apivoy-accent)",
+    color: "var(--protovoy-accent)",
   },
   history: {
     display: "flex",
     flexDirection: "column",
     gap: 8,
     padding: 16,
-    border: "1px solid var(--apivoy-border)",
+    border: "1px solid var(--protovoy-border)",
     borderRadius: 14,
     background: "rgba(18,25,35,.72)",
   },
@@ -2169,7 +2235,7 @@ const styles: Record<string, CSSProperties> = {
     display: "inline-flex",
     gap: 4,
     alignItems: "center",
-    color: "var(--apivoy-muted)",
+    color: "var(--protovoy-muted)",
     fontSize: 12,
   },
   compareBox: {
@@ -2179,7 +2245,7 @@ const styles: Record<string, CSSProperties> = {
     marginTop: 8,
   },
   comparePane: {
-    border: "1px solid var(--apivoy-border)",
+    border: "1px solid var(--protovoy-border)",
     borderRadius: 8,
     padding: 10,
     display: "flex",
@@ -2191,19 +2257,19 @@ const styles: Record<string, CSSProperties> = {
     margin: 0,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
-    fontFamily: "var(--apivoy-mono)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 11,
     lineHeight: 1.4,
     maxHeight: 240,
     overflow: "auto",
-    color: "var(--apivoy-text)",
+    color: "var(--protovoy-text)",
   },
   mono: {
-    fontFamily: "var(--apivoy-mono)",
-    color: "var(--apivoy-text)",
+    fontFamily: "var(--protovoy-mono)",
+    color: "var(--protovoy-text)",
   },
   muted: {
-    color: "var(--apivoy-muted)",
+    color: "var(--protovoy-muted)",
     fontSize: 12,
   },
   assertList: {
@@ -2213,13 +2279,13 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     gap: 4,
-    fontFamily: "var(--apivoy-mono)",
+    fontFamily: "var(--protovoy-mono)",
     fontSize: 12,
   },
   assertPass: {
-    color: "var(--apivoy-success)",
+    color: "var(--protovoy-success)",
   },
   assertFail: {
-    color: "var(--apivoy-danger)",
+    color: "var(--protovoy-danger)",
   },
 };

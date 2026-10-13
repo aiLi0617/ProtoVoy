@@ -54,7 +54,7 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=8192
           ESBUILD_WORKER_THREADS: "1"
-        run: pnpm --filter @apivoy/desktop exec tauri build --config src-tauri/tauri.sidecar.conf.json --bundles ${{ matrix.bundle }}
+        run: pnpm --filter @protovoy/desktop exec tauri build --config src-tauri/tauri.sidecar.conf.json --bundles ${{ matrix.bundle }}
       - name: Linux install, upgrade, and uninstall
         if: runner.os == 'Linux'
         shell: bash
@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           dmg="$(find target/release/bundle/dmg -name '*.dmg' -print -quit)"
-          mount="$RUNNER_TEMP/apivoy-dmg"
+          mount="$RUNNER_TEMP/protovoy-dmg"
           install="$RUNNER_TEMP/Applications"
           mkdir -p "$mount" "$install"
           hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mount"
@@ -85,8 +85,8 @@ jobs:
           plutil -lint "$installed/Contents/Info.plist"
           ditto "$app" "$installed"
           plutil -lint "$installed/Contents/Info.plist"
-          find "$installed/Contents" -name 'apivoy-agent*' -type f -perm -111 | grep -q .
-          find "$installed/Contents" -name 'apivoy-mock*' -type f -perm -111 | grep -q .
+          find "$installed/Contents" -name 'protovoy-agent*' -type f -perm -111 | grep -q .
+          find "$installed/Contents" -name 'protovoy-mock*' -type f -perm -111 | grep -q .
           rm -rf "$installed"
           test ! -e "$installed"
           hdiutil detach "$mount"
@@ -101,13 +101,13 @@ jobs:
           $upgrade = Start-Process msiexec.exe -ArgumentList @('/i', $msi.FullName, 'REINSTALL=ALL', 'REINSTALLMODE=vomus', '/qn', '/norestart') -Wait -PassThru
           if ($upgrade.ExitCode -ne 0) { throw "MSI upgrade/reinstall failed: $($upgrade.ExitCode)" }
           $roots = 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall','HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
-          $entry = Get-ChildItem $roots -ErrorAction SilentlyContinue | Get-ItemProperty -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'ApiVoy' } | Select-Object -First 1
-          if (-not $entry) { throw 'ApiVoy uninstall registration not found' }
+          $entry = Get-ChildItem $roots -ErrorAction SilentlyContinue | Get-ItemProperty -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'ProtoVoy' } | Select-Object -First 1
+          if (-not $entry) { throw 'ProtoVoy uninstall registration not found' }
           $productCode = Split-Path $entry.PSPath -Leaf
           $uninstall = Start-Process msiexec.exe -ArgumentList @('/x', $productCode, '/qn', '/norestart') -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw "MSI uninstall failed: $($uninstall.ExitCode)" }
-          $remaining = Get-ChildItem $roots -ErrorAction SilentlyContinue | Get-ItemProperty -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'ApiVoy' }
-          if ($remaining) { throw 'ApiVoy remains registered after uninstall' }
+          $remaining = Get-ChildItem $roots -ErrorAction SilentlyContinue | Get-ItemProperty -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq 'ProtoVoy' }
+          if ($remaining) { throw 'ProtoVoy remains registered after uninstall' }
 
   tools:
     strategy:
@@ -119,43 +119,43 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --locked -p apivoy-local-agent -p apivoy-mock-server -p apivoy-cli -p apivoy-protocol-gateway
+      - run: cargo build --release --locked -p protovoy-local-agent -p protovoy-mock-server -p protovoy-cli -p protovoy-protocol-gateway
       - name: Unix tools lifecycle
         if: runner.os != 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-          install="$RUNNER_TEMP/apivoy-tools/bin"
+          install="$RUNNER_TEMP/protovoy-tools/bin"
           mkdir -p "$install"
-          cp target/release/apivoy-cli target/release/apivoy-agent target/release/apivoy-mock target/release/apivoy-protocol-gateway "$install/"
-          "$install/apivoy-cli" --version
-          APIVOY_AGENT_BIND=127.0.0.1:39227 APIVOY_AGENT_TOKEN=release-smoke-token APIVOY_CONFIG_DIR="$RUNNER_TEMP/apivoy-agent-data" "$install/apivoy-agent" >"$RUNNER_TEMP/apivoy-agent.log" 2>&1 &
+          cp target/release/protovoy-cli target/release/protovoy-agent target/release/protovoy-mock target/release/protovoy-protocol-gateway "$install/"
+          "$install/protovoy-cli" --version
+          PROTOVOY_AGENT_BIND=127.0.0.1:39227 PROTOVOY_AGENT_TOKEN=release-smoke-token PROTOVOY_CONFIG_DIR="$RUNNER_TEMP/protovoy-agent-data" "$install/protovoy-agent" >"$RUNNER_TEMP/protovoy-agent.log" 2>&1 &
           agent_pid=$!
           trap 'kill "$agent_pid" 2>/dev/null || true' EXIT
           for attempt in {1..20}; do curl -fsS http://127.0.0.1:39227/health && break; sleep 1; done
-          curl -fsS http://127.0.0.1:39227/health | grep -q '"service":"apivoy-agent"'
+          curl -fsS http://127.0.0.1:39227/health | grep -q '"service":"protovoy-agent"'
           kill "$agent_pid"
           wait "$agent_pid" || true
           trap - EXIT
-          rm -rf "$RUNNER_TEMP/apivoy-tools" "$RUNNER_TEMP/apivoy-agent-data"
-          test ! -e "$RUNNER_TEMP/apivoy-tools"
+          rm -rf "$RUNNER_TEMP/protovoy-tools" "$RUNNER_TEMP/protovoy-agent-data"
+          test ! -e "$RUNNER_TEMP/protovoy-tools"
       - name: Windows tools lifecycle
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $install = Join-Path $env:RUNNER_TEMP 'apivoy-tools\bin'
+          $install = Join-Path $env:RUNNER_TEMP 'protovoy-tools\bin'
           New-Item -ItemType Directory -Force $install | Out-Null
-          Copy-Item target/release/apivoy-cli.exe,target/release/apivoy-agent.exe,target/release/apivoy-mock.exe,target/release/apivoy-protocol-gateway.exe $install
-          & "$install\apivoy-cli.exe" --version
-          $env:APIVOY_AGENT_BIND = '127.0.0.1:39227'
-          $env:APIVOY_AGENT_TOKEN = 'release-smoke-token'
-          $env:APIVOY_CONFIG_DIR = Join-Path $env:RUNNER_TEMP 'apivoy-agent-data'
-          $agent = Start-Process "$install\apivoy-agent.exe" -PassThru -WindowStyle Hidden
+          Copy-Item target/release/protovoy-cli.exe,target/release/protovoy-agent.exe,target/release/protovoy-mock.exe,target/release/protovoy-protocol-gateway.exe $install
+          & "$install\protovoy-cli.exe" --version
+          $env:PROTOVOY_AGENT_BIND = '127.0.0.1:39227'
+          $env:PROTOVOY_AGENT_TOKEN = 'release-smoke-token'
+          $env:PROTOVOY_CONFIG_DIR = Join-Path $env:RUNNER_TEMP 'protovoy-agent-data'
+          $agent = Start-Process "$install\protovoy-agent.exe" -PassThru -WindowStyle Hidden
           try {
             $ready = $false
-            1..20 | ForEach-Object { if (-not $ready) { Start-Sleep 1; try { $health = Invoke-RestMethod http://127.0.0.1:39227/health; $ready = $health.service -eq 'apivoy-agent' } catch {} } }
+            1..20 | ForEach-Object { if (-not $ready) { Start-Sleep 1; try { $health = Invoke-RestMethod http://127.0.0.1:39227/health; $ready = $health.service -eq 'protovoy-agent' } catch {} } }
             if (-not $ready) { throw 'Installed Agent did not become healthy' }
           } finally { Stop-Process -Id $agent.Id -Force -ErrorAction SilentlyContinue }
           Remove-Item (Split-Path $install -Parent) -Recurse -Force
-          Remove-Item $env:APIVOY_CONFIG_DIR -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $env:PROTOVOY_CONFIG_DIR -Recurse -Force -ErrorAction SilentlyContinue
           if (Test-Path $install) { throw 'Tools directory remains after uninstall smoke' }

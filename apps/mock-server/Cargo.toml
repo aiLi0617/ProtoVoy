@@ -1,12 +1,12 @@
 [package]
-name = "apivoy-mock-server"
+name = "protovoy-mock-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "ApiVoy standalone local HTTP and WebSocket Mock Server"
+description = "ProtoVoy standalone local HTTP and WebSocket Mock Server"
 
 [[bin]]
-name = "apivoy-mock"
+name = "protovoy-mock"
 path = "src/main.rs"
 
 [dependencies]

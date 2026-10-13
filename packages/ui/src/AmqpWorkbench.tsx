@@ -22,7 +22,7 @@ export function AmqpWorkbench({ onSend, onSave, onCancel }: AmqpWorkbenchProps) 
   const [mode, setMode] = useState<"publish" | "consume">("publish"); const [username, setUsername] = useState("guest");
   const [passwordRef, setPasswordRef] = useState("amqp-password"); const [exchange, setExchange] = useState("amq.topic");
   const [exchangeType, setExchangeType] = useState<AmqpWorkbenchRequest["exchangeType"]>("topic");
-  const [routingKey, setRoutingKey] = useState("apivoy.demo"); const [queue, setQueue] = useState("apivoy-demo");
+  const [routingKey, setRoutingKey] = useState("protovoy.demo"); const [queue, setQueue] = useState("protovoy-demo");
   const [declare, setDeclare] = useState(true); const [durable, setDurable] = useState(false); const [autoAck, setAutoAck] = useState(false);
   const [receiveLimit, setReceiveLimit] = useState(1); const [payload, setPayload] = useState('{"hello":"amqp"}');
   const [encoding, setEncoding] = useState<"text" | "base64">("text"); const [contentType, setContentType] = useState("application/json");

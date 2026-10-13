@@ -3,7 +3,7 @@ name = "capture-proxy"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Explicit HTTP proxy and HTTPS CONNECT metadata capture for ApiVoy"
+description = "Explicit HTTP proxy and HTTPS CONNECT metadata capture for ProtoVoy"
 
 [dependencies]
 bytes = { workspace = true }

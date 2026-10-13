@@ -1,10 +1,10 @@
-# apivoy-plugin-sdk
+# protovoy-plugin-sdk
 
-WASM Component plugin SDK for ApiVoy.
+WASM Component plugin SDK for ProtoVoy.
 
 Third-party plugins must be WASM. Native sidecars are not part of the public plugin surface.
 
-The first stable interface is defined in `apivoy-plugin.wit`:
+The first stable interface is defined in `protovoy-plugin.wit`:
 
 ```wit
 world transformer {
@@ -51,9 +51,9 @@ permissions, description and publisher key ID.
 Trusted public keys are configured as Base64-encoded 32-byte Ed25519 keys:
 
 ```text
-APIVOY_PLUGIN_TRUSTED_KEYS={"official":"<base64-public-key>"}
+PROTOVOY_PLUGIN_TRUSTED_KEYS={"official":"<base64-public-key>"}
 ```
 
 Unsigned plugins are rejected by default. Development builds may explicitly
-set `APIVOY_ALLOW_UNSIGNED_PLUGINS=1`; this should never be used for production
+set `PROTOVOY_ALLOW_UNSIGNED_PLUGINS=1`; this should never be used for production
 packages.

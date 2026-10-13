@@ -1,4 +1,4 @@
-import type { RequestEnvelope } from "@apivoy/request-model";
+import type { RequestEnvelope } from "@protovoy/request-model";
 import type { AmqpWorkbenchRequest } from "./AmqpWorkbench";
 import type { GrpcWorkbenchRequest } from "./GrpcWorkbench";
 import type { KafkaWorkbenchRequest } from "./KafkaWorkbench";

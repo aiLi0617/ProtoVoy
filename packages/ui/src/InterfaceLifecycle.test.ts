@@ -5,8 +5,8 @@ import { interfaceCaseCategory, lifecycleTabsFor } from "./InterfaceLifecycle";
 test("treats an unset test case group as the default positive category", () => {
   assert.equal(interfaceCaseCategory(), "positive");
   assert.equal(interfaceCaseCategory({}), "positive");
-  assert.equal(interfaceCaseCategory({ __apivoyCaseGroup: "positive" }), "positive");
-  assert.equal(interfaceCaseCategory({ __apivoyCaseGroup: "未分组" }), "other");
+  assert.equal(interfaceCaseCategory({ __protovoyCaseGroup: "positive" }), "positive");
+  assert.equal(interfaceCaseCategory({ __protovoyCaseGroup: "未分组" }), "other");
 });
 
 test("enables the full lifecycle for schema-driven API protocols", () => {

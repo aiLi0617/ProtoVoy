@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security advisories
-    url: https://github.com/aiLi0617/ApiVoy/security/advisories/new
+    url: https://github.com/aiLi0617/ProtoVoy/security/advisories/new
     about: Report security vulnerabilities privately (not via public issues).
   - name: Discussions
-    url: https://github.com/aiLi0617/ApiVoy/discussions
+    url: https://github.com/aiLi0617/ProtoVoy/discussions
     about: Ask questions, share ideas, and discuss protocol compatibility.

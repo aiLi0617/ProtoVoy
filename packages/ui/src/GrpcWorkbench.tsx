@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ExecutionEvent, ResponseMeta } from "@apivoy/request-model";
+import type { ExecutionEvent, ResponseMeta } from "@protovoy/request-model";
 import { useWorkbenchHydration } from "./useWorkbenchHydration";
 import type { HttpRunResult, HttpSendHooks } from "./HttpWorkbench";
 import { KeyValueRows, createQueryRow, type HeaderRow } from "./KeyValueEditor";
@@ -46,7 +46,7 @@ export function GrpcWorkbench({ onSend, onCancel, onSave, externalRequest, onTit
   const [busy, setBusy] = useState(false);
   const [requestTab, setRequestTab] = useState<RequestTab>("message");
   const detailEditorRef = useRef<CodeEditorHandle | null>(null);
-  const { stacked: responseDetailsStacked } = useMessageDetailResize("apivoy-grpc-message-list-ratio", Boolean(selectedMessageId), ".grpc-response .websocket-message-browser.has-detail");
+  const { stacked: responseDetailsStacked } = useMessageDetailResize("protovoy-grpc-message-list-ratio", Boolean(selectedMessageId), ".grpc-response .websocket-message-browser.has-detail");
 
   function applyRequest(value: GrpcWorkbenchRequest) { setTarget(value.target); setService(value.service); setMethod(value.method); setMode(value.mode); const json = value.messageJson; setMessageMode(json != null ? "json" : "base64"); setMessage(json ?? value.messageBase64); setDescriptorSetBase64(value.descriptorSetBase64 ?? ""); setDescriptorName(value.descriptorSetBase64 ? "DescriptorSet" : ""); setMetadata(metadataRows(value.metadata)); setTimeoutMs(value.timeoutMs); }
   useEffect(() => { if (externalRequest) applyRequest(externalRequest); else { const draft = readWorkbenchDraft<GrpcWorkbenchRequest>("grpc"); if (draft) applyRequest(draft); } }, [externalRequest]);

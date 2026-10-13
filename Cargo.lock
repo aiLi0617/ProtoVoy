@@ -186,7 +186,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
-name = "apivoy-cli"
+name = "protovoy-cli"
 version = "0.2.0"
 dependencies = [
  "clap",
@@ -213,7 +213,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "apivoy-desktop"
+name = "protovoy-desktop"
 version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
@@ -245,7 +245,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "apivoy-local-agent"
+name = "protovoy-local-agent"
 version = "0.2.0"
 dependencies = [
  "axum",
@@ -282,7 +282,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "apivoy-mock-server"
+name = "protovoy-mock-server"
 version = "0.2.0"
 dependencies = [
  "axum",
@@ -298,7 +298,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "apivoy-protocol-gateway"
+name = "protovoy-protocol-gateway"
 version = "0.2.0"
 dependencies = [
  "axum",

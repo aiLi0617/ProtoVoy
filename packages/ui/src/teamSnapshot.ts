@@ -1,4 +1,4 @@
-import type { RequestEnvelope } from "@apivoy/request-model";
+import type { RequestEnvelope } from "@protovoy/request-model";
 import type { WorkspaceTree } from "./WorkspaceExplorer";
 
 export interface TeamSnapshot {

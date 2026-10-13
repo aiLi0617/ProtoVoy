@@ -220,7 +220,7 @@ impl LocalStore {
     }
 
     pub fn open_in_memory() -> StoreResult<Self> {
-        let blob_dir = std::env::temp_dir().join(format!("apivoy-blobs-{}", Uuid::new_v4()));
+        let blob_dir = std::env::temp_dir().join(format!("protovoy-blobs-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&blob_dir)?;
         let conn = Connection::open_in_memory()?;
         let store = Self { conn, blob_dir };
@@ -457,8 +457,8 @@ impl LocalStore {
         content: &str,
         existing_content: Option<&str>,
     ) -> StoreResult<String> {
-        const RESPONSES_PREFIX: &str = "x-apivoy-responses:";
-        const FIELDS_PREFIX: &str = "x-apivoy-visual-fields:";
+        const RESPONSES_PREFIX: &str = "x-protovoy-responses:";
+        const FIELDS_PREFIX: &str = "x-protovoy-visual-fields:";
         let mut id_map = HashMap::<String, String>::new();
         let preserved_ids = existing_content
             .map(formal_mock_response_ids)
@@ -1426,7 +1426,7 @@ impl LocalStore {
         }
         let blob = self.put_blob(body.as_bytes(), Some("application/octet-stream"))?;
         if let ProtocolPayload::Http(ref mut payload) = envelope.payload {
-            payload.body = Some(format!("@apivoy-blob:{}", blob.id));
+            payload.body = Some(format!("@protovoy-blob:{}", blob.id));
         }
         Ok(Some(blob.id))
     }
@@ -1449,7 +1449,7 @@ impl LocalStore {
             ..
         }) = envelope.payload
         {
-            if let Some(id) = marker.strip_prefix("@apivoy-blob:") {
+            if let Some(id) = marker.strip_prefix("@protovoy-blob:") {
                 let bytes = self.read_blob(id)?;
                 let text = String::from_utf8_lossy(&bytes).into_owned();
                 if let ProtocolPayload::Http(ref mut payload) = envelope.payload {
@@ -2110,7 +2110,10 @@ fn is_formal_mock_id(id: &str) -> bool {
 fn formal_mock_response_ids(content: &str) -> HashSet<String> {
     content
         .lines()
-        .filter_map(|line| line.trim_start().strip_prefix("x-apivoy-responses:"))
+        .filter_map(|line| {
+            let trimmed = line.trim_start();
+            trimmed.strip_prefix("x-protovoy-responses:")
+        })
         .filter_map(|source| serde_json::from_str::<serde_json::Value>(source.trim()).ok())
         .flat_map(|value| value.as_array().cloned().unwrap_or_default())
         .filter_map(|response| response.get("id")?.as_str().map(str::to_owned))
@@ -2148,7 +2151,7 @@ mod tests {
     #[test]
     fn assigns_numeric_mock_ids_and_preserves_response_references() {
         let store = LocalStore::open_in_memory().expect("open");
-        let content = "openapi: 3.1.0\nx-apivoy-visual-fields: [{\"id\":\"field\",\"responseId\":\"client:one\"}]\nx-apivoy-responses: [{\"id\":\"client:one\",\"name\":\"成功\",\"statusCode\":\"200\"}]";
+        let content = "openapi: 3.1.0\nx-protovoy-visual-fields: [{\"id\":\"field\",\"responseId\":\"client:one\"}]\nx-protovoy-responses: [{\"id\":\"client:one\",\"name\":\"成功\",\"statusCode\":\"200\"}]";
         let canonical = store
             .canonicalize_mock_response_ids(content, None)
             .expect("canonical definition");
@@ -2161,7 +2164,7 @@ mod tests {
             .expect("preserve formal identifiers");
         assert_eq!(unchanged, canonical);
 
-        let client_supplied = "x-apivoy-responses: [{\"id\":\"999999999\",\"name\":\"伪造 ID\",\"statusCode\":\"201\"}]";
+        let client_supplied = "x-protovoy-responses: [{\"id\":\"999999999\",\"name\":\"伪造 ID\",\"statusCode\":\"201\"}]";
         let reassigned = store
             .canonicalize_mock_response_ids(client_supplied, None)
             .expect("replace a client-supplied numeric identifier");
@@ -2172,7 +2175,7 @@ mod tests {
     #[test]
     fn migrates_legacy_mock_identifiers_to_numeric_ids() {
         let root =
-            std::env::temp_dir().join(format!("apivoy-mock-id-migration-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("protovoy-mock-id-migration-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&root).expect("create migration test directory");
         let path = root.join("legacy.db");
         {
@@ -2191,7 +2194,7 @@ mod tests {
                     );
                     INSERT INTO api_definitions VALUES (
                       'definition', 'default-project', NULL, 'Legacy', 'openapi', 'openapi.yaml',
-                      'x-apivoy-responses: [{"id":"resp_legacy","name":"成功","statusCode":"200"}]',
+                      'x-protovoy-responses: [{"id":"resp_legacy","name":"成功","statusCode":"200"}]',
                       '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
                     );
                     INSERT INTO request_definition_bindings VALUES (

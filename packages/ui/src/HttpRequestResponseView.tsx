@@ -15,7 +15,7 @@ type RequestTab = "params" | "body" | "headers" | "auth" | "pre" | "post" | "set
 
 export function HttpRequestResponseView({ request, result, loadingLabel = "正在加载用例…" }: { request: HttpWorkbenchRequest | null; result?: HttpResponseViewResult; loadingLabel?: string }) {
   const [activeTab, setActiveTab] = useState<RequestTab>("body");
-  const query = (() => { try { return [...new URL(request?.url ?? "", "http://apivoy.local").searchParams.entries()]; } catch { return []; } })();
+  const query = (() => { try { return [...new URL(request?.url ?? "", "http://protovoy.local").searchParams.entries()]; } catch { return []; } })();
   const content: Record<RequestTab, string> = {
     params: query.length ? query.map(([key, value]) => `${key}: ${value}`).join("\n") : "当前请求没有 Query 参数",
     body: request?.body || "当前请求没有 Body",

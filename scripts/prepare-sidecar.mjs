@@ -15,7 +15,7 @@ const host = execFileSync("rustc", ["-vV"], { encoding: "utf8" })
 
 if (!host) throw new Error("Unable to determine the Rust host target triple");
 
-execFileSync("cargo", ["build", "-p", "apivoy-local-agent", "--bin", "apivoy-agent", "-p", "apivoy-mock-server", "--bin", "apivoy-mock", "--release"], {
+execFileSync("cargo", ["build", "-p", "protovoy-local-agent", "--bin", "protovoy-agent", "-p", "protovoy-mock-server", "--bin", "protovoy-mock", "--release"], {
   cwd: repository,
   stdio: "inherit",
 });
@@ -23,7 +23,7 @@ execFileSync("cargo", ["build", "-p", "apivoy-local-agent", "--bin", "apivoy-age
 const extension = process.platform === "win32" ? ".exe" : "";
 const destinationDirectory = join(repository, "apps", "desktop", "src-tauri", "binaries");
 mkdirSync(destinationDirectory, { recursive: true });
-for (const binary of ["apivoy-agent", "apivoy-mock"]) {
+for (const binary of ["protovoy-agent", "protovoy-mock"]) {
   const source = join(metadata.target_directory, "release", `${binary}${extension}`);
   const destination = join(destinationDirectory, `${binary}-${host}${extension}`);
   copyFileSync(source, destination);

@@ -1,0 +1,58 @@
+/* Design tokens — ProtoVoy semantic surfaces */
+:root {
+  --protovoy-bg: #0b0d10;
+  --protovoy-nav: #101216;
+  --protovoy-workspace: #111419;
+  --protovoy-bg-elevated: #171a20;
+  --protovoy-project-rail: color-mix(in srgb, var(--protovoy-nav) 82%, #05070a);
+  --protovoy-overlay: #1d2128;
+  --protovoy-border: #2a2f38;
+  --protovoy-border-strong: #3b4350;
+  --protovoy-text: #eef1f5;
+  --protovoy-muted: #a5adb9;
+  --protovoy-subtle: #7f8997;
+  --protovoy-accent: #4c9aff;
+  --protovoy-accent-hover: #67a9ff;
+  --protovoy-accent-soft: rgba(76, 154, 255, 0.13);
+  --protovoy-success: #52c98b;
+  --protovoy-warning: #e7ad52;
+  --protovoy-danger: #ef6b73;
+  --protovoy-control-height: 34px;
+  --protovoy-control-radius: 6px;
+  --protovoy-control-padding-x: 10px;
+  --protovoy-control-bg: var(--protovoy-bg-elevated);
+  --protovoy-control-border: var(--protovoy-border);
+  --protovoy-button-radius: 6px;
+  --protovoy-button-padding-x: 12px;
+  --protovoy-tab-height: 34px;
+  --protovoy-tab-padding-x: 10px;
+  --protovoy-font: "IBM Plex Sans", "Noto Sans SC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  --protovoy-mono: "JetBrains Mono", "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  --z-header: 20;
+  --z-dropdown: 30;
+  --z-drag: 40;
+  --z-dialog: 50;
+  --z-toast: 60;
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  --protovoy-bg: #eef1f5;
+  --protovoy-nav: #f7f8fa;
+  --protovoy-workspace: #fff;
+  --protovoy-bg-elevated: #f7f8fa;
+  --protovoy-overlay: #fff;
+  --protovoy-project-rail: var(--protovoy-nav);
+  --protovoy-border: #d8dde5;
+  --protovoy-border-strong: #b8c0cc;
+  --protovoy-text: #172033;
+  --protovoy-muted: #4f5c6e;
+  --protovoy-subtle: #667386;
+  --protovoy-accent: #1769d2;
+  --protovoy-accent-hover: #0f57b4;
+  --protovoy-accent-soft: rgba(23, 105, 210, 0.1);
+  --protovoy-success: #18794e;
+  --protovoy-warning: #9a6700;
+  --protovoy-danger: #c9363e;
+  color-scheme: light;
+}

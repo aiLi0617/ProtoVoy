@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("opens a focused Mock draft from the interface lifecycle action", async ({ page }) => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("apivoy-create-interface-mock", {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-create-interface-mock", {
     detail: { workbenchId: "http", sessionId: "test-http" },
   })));
 
@@ -30,7 +30,7 @@ test("keeps interface context while creating a status-specific Mock scenario", a
     id: "status-404", target: "https://httpbin.org/status/404", envelope: {
       id: "status-404", name: "\u6307\u5b9a\u72b6\u6001\u7801", protocolId: "http", target: "https://httpbin.org/status/404", environmentRef: "default-env", authRef: null, timeoutMs: 30000, retryPolicy: { max_retries: 0, backoff_ms: 250 }, proxy: null, tls: { verify: true, client_cert_ref: null }, preScripts: [], postScripts: [], assertions: [], variables: {},
       payload: { type: "http", method: "GET", headers: [], body: null, followRedirects: true },
-      metadata: { __apivoyResponseDefinitions: [
+      metadata: { __protovoyResponseDefinitions: [
         { id: "100000001", name: "success", statusCode: "200", contentType: "application/json", fields: [] },
         { id: "100000002", name: "not found", statusCode: "404", contentType: "application/json", fields: [] },
       ] },
@@ -46,14 +46,14 @@ test("keeps interface context while creating a status-specific Mock scenario", a
     await route.fulfill({ status: 200, json: {} });
   });
   await page.route("**/v1/mock-rules", (route) => route.fulfill({ json: [{ id: "error-rule", name: "404 error", method: "GET", path: "/status/404", status: 404, headers: {}, body: "{}", delayMs: 0, errorEvery: null, priority: 0, wsMessages: [], wsEcho: false, wsIntervalMs: 250 }, { id: "success-rule", name: "200 success", method: "GET", path: "/status/404", status: 200, headers: {}, body: "{}", delayMs: 0, errorEvery: null, priority: 0, wsMessages: [], wsEcho: false, wsIntervalMs: 250 }] }));
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("apivoy-open-request", { detail: {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: {
     id: "status-404", name: "status 404", protocolId: "http", target: "https://httpbin.org/status/404",
     payload: { type: "http", method: "GET", headers: [], body: null },
   } })));
   await page.getByRole("tab", { name: "Mock" }).click();
   await expect(page.locator(".mock-interface-context")).toContainText("/status/404");
   await expect(page.locator(".mock-design-response-list code").first()).toContainText("/100000000");
-  await expect(page.locator(".mock-design-response-list")).toContainText("apivoyResponseId=100000001");
+  await expect(page.locator(".mock-design-response-list")).toContainText("protovoyResponseId=100000001");
   await expect(page.getByText("无法确定当前命中场景")).toBeVisible();
   await expect(page.getByRole("button", { name: "设为当前" })).toHaveCount(2);
   await mkdir("output/playwright", { recursive: true });

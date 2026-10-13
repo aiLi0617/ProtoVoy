@@ -12,14 +12,14 @@ Import or recreate in the HTTP workbench:
 
 ## With environment variable
 
-See [with-env.apivoy.json](./with-env.apivoy.json) — uses `{{baseUrl}}` resolved from an environment.
+See [with-env.protovoy.json](./with-env.protovoy.json) — uses `{{baseUrl}}` resolved from an environment.
 
 ## With assertion
 
-See [with-assertion.apivoy.json](./with-assertion.apivoy.json) — expects `status == 200`.
+See [with-assertion.protovoy.json](./with-assertion.protovoy.json) — expects `status == 200`.
 
 ## CLI
 
 ```bash
-apivoy-cli http-get https://httpbin.org/get
+protovoy-cli http-get https://httpbin.org/get
 ```

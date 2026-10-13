@@ -1,12 +1,12 @@
-plugins {
+﻿plugins {
 	java
 	id("org.springframework.boot") version "3.5.16"
 	id("io.spring.dependency-management") version "1.1.7"
 }
 
-group = "dev.apivoy"
+group = "dev.protovoy"
 version = "0.0.1-SNAPSHOT"
-description = "ApiVoy team collaboration service"
+description = "ProtoVoy team collaboration service"
 
 java {
 	toolchain {

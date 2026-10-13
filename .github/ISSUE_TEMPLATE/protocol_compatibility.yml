@@ -12,7 +12,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: ApiVoy version
+      label: ProtoVoy version
     validations:
       required: true
   - type: input

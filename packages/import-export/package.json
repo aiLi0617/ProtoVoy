@@ -1,5 +1,5 @@
 {
-  "name": "@apivoy/import-export",
+  "name": "@protovoy/import-export",
   "version": "0.2.0",
   "private": true,
   "type": "module",

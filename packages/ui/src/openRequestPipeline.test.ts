@@ -4,7 +4,7 @@ import { consumeHydrate, stashHydrate } from "./openRequestPipeline";
 const targeted = {
   workbenchId: "http",
   sessionId: "target-session",
-  envelope: { variables: { __apivoyCaseOf: "interface-id" } },
+  envelope: { variables: { __protovoyCaseOf: "interface-id" } },
 };
 
 stashHydrate(targeted);

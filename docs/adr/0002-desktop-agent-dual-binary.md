@@ -10,7 +10,7 @@ Desktop needs a UI; Agent must run headlessly for Web users and enterprise hosts
 ## Decision
 
 - One Rust workspace, one protocol-core, one product version
-- Two artifacts: `apivoy` (Desktop) and `apivoy-agent` (Agent)
+- Two artifacts: `protovoy` (Desktop) and `protovoy-agent` (Agent)
 - Desktop may bundle Agent as a Tauri sidecar
 - Version handshake includes `desktopVersion`, `agentVersion`, `protocolApiVersion`
 

@@ -22,7 +22,7 @@ export interface ResponseComponent {
   fields?: unknown[];
 }
 
-const storageKey = (projectId?: string) => `apivoy:project:${projectId || "default"}:response-components:v1`;
+const storageKey = (projectId?: string) => `protovoy:project:${projectId || "default"}:response-components:v1`;
 
 export function normalizeResponseBodyType(value: unknown): ResponseBodyType {
   if (value === "sse") return "event-stream";
@@ -40,7 +40,7 @@ export function readResponseComponents(projectId?: string): ResponseComponent[] 
 export function writeResponseComponents(projectId: string | undefined, components: ResponseComponent[]) {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(storageKey(projectId), JSON.stringify(components));
-  window.dispatchEvent(new CustomEvent("apivoy-response-components-changed", { detail: { projectId } }));
+  window.dispatchEvent(new CustomEvent("protovoy-response-components-changed", { detail: { projectId } }));
 }
 
 export function createResponseComponent(index = 0): ResponseComponent {

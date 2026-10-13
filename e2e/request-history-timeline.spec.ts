@@ -14,7 +14,7 @@ test("manages history tabs, links existing interfaces, and saves debug cases", a
   ];
   const tree = { workspaces: [{ id: "default-workspace", name: "Local" }], projects: [{ id: "default-project", name: "Personal", workspaceId: "default-workspace" }], modules: [{ id: "default-module", name: "默认模块", projectId: "default-project", isDefault: true }], collections: [{ id: "default-collection", name: "默认目录", projectId: "default-project", moduleId: "default-module", parentId: null }], requests: [{ id: "history-request", name: "用户详情接口", projectId: "default-project", collectionId: "default-collection", method: "GET", protocolId: "http", target: "https://api.example.com/users/42", envelope: interfaceEnvelope }] };
 
-  await page.route("**/health", (route) => route.fulfill({ headers, json: { service: "apivoy-agent", version: "test", agentVersion: "test", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } }));
+  await page.route("**/health", (route) => route.fulfill({ headers, json: { service: "protovoy-agent", version: "test", agentVersion: "test", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } }));
   await page.route("**/v1/session", (route) => route.request().method() === "OPTIONS" ? route.fulfill({ status: 204, headers }) : route.fulfill({ headers, json: { token: "test-session" } }));
   await page.route("**/v1/workspace-tree", (route) => route.fulfill({ headers, json: tree }));
   await page.route("**/v1/environments**", (route) => route.fulfill({ headers, json: new URL(route.request().url()).pathname.endsWith("/default") ? { variables: {}, secretRefs: [] } : [] }));
@@ -68,9 +68,9 @@ test("manages history tabs, links existing interfaces, and saves debug cases", a
   const saved = page.waitForRequest((request) => request.url().includes("/v1/requests?") && request.method() === "POST");
   await dialog.getByRole("button", { name: "保存", exact: true }).click();
   const savedEnvelope = (await saved).postDataJSON();
-  expect(savedEnvelope.variables.__apivoyCaseOf).toBe("history-request");
-  expect(savedEnvelope.metadata.__apivoyCaseType).toBe("debug");
-  expect(savedEnvelope.metadata.__apivoySavedResponse.status).toBe(200);
+  expect(savedEnvelope.variables.__protovoyCaseOf).toBe("history-request");
+  expect(savedEnvelope.metadata.__protovoyCaseType).toBe("debug");
+  expect(savedEnvelope.metadata.__protovoySavedResponse.status).toBe(200);
 
   await page.getByRole("button", { name: "打开接口 用户详情接口" }).click();
   await expect(page.getByRole("button", { name: "接口管理" })).toHaveClass(/is-active/);

@@ -917,7 +917,7 @@ async fn start_capture(
 ) -> Result<CaptureStatus, String> {
     let bind = request
         .bind
-        .unwrap_or_else(|| "127.0.0.1:39219".into())
+        .unwrap_or_else(|| "127.0.0.1:39220".into())
         .parse::<std::net::SocketAddr>()
         .map_err(|error| error.to_string())?;
     state
@@ -1417,12 +1417,12 @@ fn state_name(state: ExecutionState) -> &'static str {
 fn default_db_path(app: &AppHandle) -> PathBuf {
     app.path()
         .app_data_dir()
-        .unwrap_or_else(|_| PathBuf::from(".apivoy"))
-        .join("apivoy-local.db")
+        .unwrap_or_else(|_| PathBuf::from(".protovoy"))
+        .join("protovoy-local.db")
 }
 
 fn plugin_permission_grants() -> Vec<PluginPermission> {
-    std::env::var("APIVOY_PLUGIN_PERMISSIONS")
+    std::env::var("PROTOVOY_PLUGIN_PERMISSIONS")
         .unwrap_or_default()
         .split(',')
         .filter_map(|value| match value.trim() {
@@ -1532,5 +1532,5 @@ pub fn run() {
             invoke_plugin,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running ApiVoy desktop");
+        .expect("error while running ProtoVoy desktop");
 }

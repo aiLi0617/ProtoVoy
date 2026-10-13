@@ -11,6 +11,7 @@ import { MockWorkbench, type MockWorkbenchProps } from "./MockWorkbench";
 import type { MockDraftSeed } from "./mockGeneration";
 import { peekHydrate, stashHydrate } from "./openRequestPipeline";
 import { RESPONSE_BODY_TYPES, normalizeResponseBodyType, readResponseComponents, type ResponseBodyType } from "./responseComponents";
+import { readStorage } from "./storageMigration";
 
 export type InterfaceLifecycleTab =
   | "debug"
@@ -72,28 +73,28 @@ const EMPTY_COPY: Record<
     description:
       "\u8bbe\u8ba1\u5f53\u524d\u63a5\u53e3\u7684\u8bf7\u6c42\u3001\u54cd\u5e94\u4e0e\u6570\u636e\u7ea6\u675f\u3002",
     action: "\u5f00\u59cb\u8bbe\u8ba1",
-    event: "apivoy-bind-interface-definition",
+    event: "protovoy-bind-interface-definition",
   },
   examples: {
     title: "\u5c1a\u672a\u4fdd\u5b58\u63a5\u53e3\u7528\u4f8b",
     description:
       "\u4fdd\u5b58\u8bf7\u6c42\u548c\u54cd\u5e94\uff0c\u4f9b\u6587\u6863\u3001Mock \u548c\u81ea\u52a8\u5316\u6d4b\u8bd5\u590d\u7528\u3002",
     action: "\u65b0\u5efa\u7528\u4f8b",
-    event: "apivoy-create-interface-example",
+    event: "protovoy-create-interface-example",
   },
   docs: {
     title: "\u6682\u65e0\u53ef\u9884\u89c8\u7684\u63a5\u53e3\u6587\u6863",
     description:
       "\u5b8c\u6210\u63a5\u53e3\u8bbe\u8ba1\u540e\uff0c\u8fd9\u91cc\u4f1a\u751f\u6210\u53ea\u8bfb\u6587\u6863\u3002",
     action: "\u524d\u5f80\u8bbe\u8ba1",
-    event: "apivoy-bind-interface-definition",
+    event: "protovoy-bind-interface-definition",
   },
   mock: {
     title: "\u5c1a\u672a\u521b\u5efa Mock \u573a\u666f",
     description:
       "\u4ece\u63a5\u53e3\u5b9a\u4e49\u6216\u5df2\u4fdd\u5b58\u793a\u4f8b\u751f\u6210\u53ef\u91cd\u7528\u7684 Mock \u54cd\u5e94\u3002",
     action: "\u521b\u5efa Mock",
-    event: "apivoy-create-interface-mock",
+    event: "protovoy-create-interface-mock",
   },
 };
 
@@ -136,7 +137,7 @@ export interface InterfaceCaseRunOutcome { passed: boolean; error?: string; stat
 
 export type InterfaceCaseCategory = "positive" | "negative" | "boundary" | "security" | "other";
 export function interfaceCaseCategory(metadata?: Record<string, unknown>): InterfaceCaseCategory {
-  const value = metadata?.__apivoyCaseGroup;
+  const value = metadata?.__protovoyCaseGroup;
   if (value == null || value === "") return "positive";
   return ["positive", "negative", "boundary", "security"].includes(String(value))
     ? String(value) as InterfaceCaseCategory
@@ -224,16 +225,16 @@ export function readableDefinitionError(error: unknown, fallback: string) {
 export function agentDefinitionClient(): InterfaceDefinitionClient | undefined {
   if (typeof window === "undefined") return undefined;
   const base =
-    localStorage.getItem("apivoy:agent-url")?.trim() ||
+    readStorage("protovoy:agent-url")?.trim() ||
     "http://127.0.0.1:39217";
   const headers = () => {
     const value: Record<string, string> = {
       "Content-Type": "application/json",
-      "X-ApiVoy-Protocol-Api-Version": "1",
-      "X-ApiVoy-Client": "ui",
-      "X-ApiVoy-Client-Version": "0.1.0",
+      "X-ProtoVoy-Protocol-Api-Version": "1",
+      "X-ProtoVoy-Client": "ui",
+      "X-ProtoVoy-Client-Version": "0.1.0",
     };
-    const token = localStorage.getItem("apivoy-agent-token");
+    const token = readStorage("protovoy:agent-token");
     if (token) value.Authorization = `Bearer ${token}`;
     return value;
   };
@@ -307,7 +308,7 @@ export function InterfaceLifecycleShell({
     if (!pendingDebugHydrate) return;
     queueMicrotask(() =>
       window.dispatchEvent(
-        new CustomEvent("apivoy-hydrate-request", {
+        new CustomEvent("protovoy-hydrate-request", {
           detail: pendingDebugHydrate,
         }),
       ),
@@ -318,8 +319,8 @@ export function InterfaceLifecycleShell({
       const detail = (event as CustomEvent<{ sessionId?: string; tab?: InterfaceLifecycleTab }>).detail;
       if (detail?.sessionId === sessionId && detail.tab && availableTabs.includes(detail.tab)) setActiveTab(detail.tab);
     };
-    window.addEventListener("apivoy-open-lifecycle-tab", openTab);
-    return () => window.removeEventListener("apivoy-open-lifecycle-tab", openTab);
+    window.addEventListener("protovoy-open-lifecycle-tab", openTab);
+    return () => window.removeEventListener("protovoy-open-lifecycle-tab", openTab);
   }, [availableTabs, sessionId]);
   if (!availableTabs.length) return children;
 
@@ -433,7 +434,7 @@ function InterfaceCasesPanel({ requestId, cases, onOpenCase, onSaveCase, onDelet
   const previewLoadId = useRef(0);
   useEffect(() => {
     if (!drawer || drawer === "new") return;
-    setDraft({ name: drawer.name, group: interfaceCaseCategory(drawer.metadata), tags: Array.isArray(drawer.metadata?.__apivoyCaseTags) ? drawer.metadata.__apivoyCaseTags.join(", ") : "" });
+    setDraft({ name: drawer.name, group: interfaceCaseCategory(drawer.metadata), tags: Array.isArray(drawer.metadata?.__protovoyCaseTags) ? drawer.metadata.__protovoyCaseTags.join(", ") : "" });
   }, [drawer]);
   useEffect(() => {
     const updateTags = (event: Event) => {
@@ -441,17 +442,17 @@ function InterfaceCasesPanel({ requestId, cases, onOpenCase, onSaveCase, onDelet
       const item = (cases ?? []).find((candidate) => candidate.id === detail?.id);
       if (item && Array.isArray(detail.tags)) void saveInline(item, { tags: detail.tags });
     };
-    window.addEventListener("apivoy-update-test-case-tags", updateTags);
-    return () => window.removeEventListener("apivoy-update-test-case-tags", updateTags);
+    window.addEventListener("protovoy-update-test-case-tags", updateTags);
+    return () => window.removeEventListener("protovoy-update-test-case-tags", updateTags);
   }, [cases, onSaveCase]);
   const normalized = query.trim().toLocaleLowerCase();
   const items = cases ?? [];
   const categoryOf = (item: InterfaceCaseSummary) => interfaceCaseCategory(item.metadata);
   const categories = [["all", "全部"], ["positive", "正向"], ["negative", "负向"], ["boundary", "边界值"], ["security", "安全性"], ["other", "其他"]] as const;
-  const visibleCases = items.filter((item) => (category === "all" || categoryOf(item) === category) && (!normalized || `${item.name} ${item.metadata?.__apivoyCaseGroup ?? ""} ${(item.metadata?.__apivoyCaseTags as string[] | undefined)?.join(" ") ?? ""}`.toLocaleLowerCase().includes(normalized)));
-  function edit(item: InterfaceCaseSummary | "new") { setDrawer(item); setDraft(item === "new" ? { name: "", group: "positive", tags: "" } : { name: item.name, group: interfaceCaseCategory(item.metadata), tags: Array.isArray(item.metadata?.__apivoyCaseTags) ? item.metadata.__apivoyCaseTags.join(", ") : "" }); }
+  const visibleCases = items.filter((item) => (category === "all" || categoryOf(item) === category) && (!normalized || `${item.name} ${item.metadata?.__protovoyCaseGroup ?? ""} ${(item.metadata?.__protovoyCaseTags as string[] | undefined)?.join(" ") ?? ""}`.toLocaleLowerCase().includes(normalized)));
+  function edit(item: InterfaceCaseSummary | "new") { setDrawer(item); setDraft(item === "new" ? { name: "", group: "positive", tags: "" } : { name: item.name, group: interfaceCaseCategory(item.metadata), tags: Array.isArray(item.metadata?.__protovoyCaseTags) ? item.metadata.__protovoyCaseTags.join(", ") : "" }); }
   async function run(ids: string[]) { if (!ids.length || busy) return; setBusy(true); setResults((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [id, "running"])) })); try { const next = await onRunCases?.(ids) ?? Object.fromEntries(ids.map((id) => [id, { passed: false, error: "当前执行端不可用" }])); setRunDetails((current) => ({ ...current, ...next })); setResults((current) => ({ ...current, ...Object.fromEntries(ids.map((id) => [id, next[id]?.passed ? "passed" : "failed"])) })); } finally { setBusy(false); } }
-  async function saveInline(item: InterfaceCaseSummary, patch: Partial<{ name: string; group: string; tags: string[] }>) { await onSaveCase?.(item.id, { name: patch.name ?? item.name, group: patch.group ?? interfaceCaseCategory(item.metadata), tags: patch.tags ?? (Array.isArray(item.metadata?.__apivoyCaseTags) ? item.metadata.__apivoyCaseTags.filter((tag): tag is string => typeof tag === "string") : []) }); }
+  async function saveInline(item: InterfaceCaseSummary, patch: Partial<{ name: string; group: string; tags: string[] }>) { await onSaveCase?.(item.id, { name: patch.name ?? item.name, group: patch.group ?? interfaceCaseCategory(item.metadata), tags: patch.tags ?? (Array.isArray(item.metadata?.__protovoyCaseTags) ? item.metadata.__protovoyCaseTags.filter((tag): tag is string => typeof tag === "string") : []) }); }
   async function togglePreview(item: InterfaceCaseSummary) { const loadId = ++previewLoadId.current; if (expandedId === item.id) { setExpandedId(null); setPreviewRequest(null); return; } setExpandedId(item.id); setPreviewRequest(null); const request = await onLoadCase?.(item.id) ?? null; if (previewLoadId.current === loadId) setPreviewRequest(request); }
   function caseForRow(row: HTMLElement | null): InterfaceCaseSummary | undefined { if (!row) return undefined; const rows = Array.from(row.parentElement?.parentElement?.querySelectorAll<HTMLElement>(".interface-case-table-row") ?? []); return visibleCases[rows.indexOf(row)]; }
   return <section className="interface-cases-panel" aria-label="测试用例">
@@ -466,10 +467,10 @@ function InterfaceCasesPanel({ requestId, cases, onOpenCase, onSaveCase, onDelet
     {visibleCases.length ? <div className="interface-case-table" role="table" aria-label="测试用例列表" onClick={(event) => { const target = event.target as HTMLElement; if (target.closest("button,input,select")) return; const item = caseForRow(target.closest<HTMLElement>(".interface-case-table-row")); if (item) void togglePreview(item); }}>
       <div className="interface-case-table-head" role="row"><span><input type="checkbox" aria-label="选择全部用例" checked={visibleCases.length > 0 && visibleCases.every((item) => selected.includes(item.id))} onChange={(event) => setSelected(event.target.checked ? visibleCases.map((item) => item.id) : [])}/></span><span>名称</span><span>分组</span><span className="interface-case-inline-tags">标签</span><span>运行结果</span><span>操作</span></div>
       {visibleCases.map((item) => {
-        const tags = Array.isArray(item.metadata?.__apivoyCaseTags) ? item.metadata.__apivoyCaseTags.filter((tag): tag is string => typeof tag === "string") : [];
+        const tags = Array.isArray(item.metadata?.__protovoyCaseTags) ? item.metadata.__protovoyCaseTags.filter((tag): tag is string => typeof tag === "string") : [];
         const result = results[item.id];
         const expanded = expandedId === item.id;
-        return <div key={item.id} className={`interface-case-record${expanded ? " is-expanded" : ""}`}><div role="row" className="interface-case-table-row"><span><input type="checkbox" aria-label={`选择 ${item.name}`} checked={selected.includes(item.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...new Set([...current, item.id])] : current.filter((id) => id !== item.id))}/></span><span className="interface-case-name-cell">{editingNameId === item.id ? <input autoFocus value={inlineName} onChange={(event) => setInlineName(event.target.value)} onBlur={() => { if (inlineName.trim() && inlineName.trim() !== item.name) void saveInline(item, { name: inlineName.trim() }); setEditingNameId(null); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") setEditingNameId(null); }}/> : <><button type="button" className="interface-case-name" aria-expanded={expanded} onClick={() => void togglePreview(item)}>{item.name}</button><button type="button" className="interface-case-inline-edit" aria-label={`修改 ${item.name} 名称`} onClick={() => { setInlineName(item.name); setEditingNameId(item.id); }}><Icon name="edit"/></button></>}</span><span><select aria-label={`${item.name} 分组`} value={String(item.metadata?.__apivoyCaseGroup ?? "positive")} onChange={(event) => void saveInline(item, { group: event.target.value })}><option value="positive">正向</option><option value="negative">负向</option><option value="boundary">边界值</option><option value="security">安全性</option><option value="other">其他</option></select></span><span className="interface-case-inline-tags"><input aria-label={`${item.name} 标签`} defaultValue={tags.join(", ")} placeholder="添加标签" onBlur={(event) => void saveInline(item, { tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) })}/></span><span><i className={`interface-case-result${result ? ` is-${result}` : ""}`}>{result === "running" ? "运行中" : result === "passed" ? "通过" : result === "failed" ? "失败" : "未运行"}</i></span><span className="interface-case-row-actions"><button type="button" title="运行" onClick={() => void run([item.id])}><Icon name="send"/></button><button type="button" title="在新页签打开" onClick={() => onOpenCase?.(item.id)}><Icon name="external"/></button><button type="button" title="复制用例" onClick={() => void onDuplicateCase?.(item.id)}><Icon name="copy"/></button><button type="button" title="复制 cURL" onClick={async () => { const value = await onCopyCurl?.(item.id); if (value) await navigator.clipboard.writeText(value); }}><Icon name="command"/></button><button type="button" title="删除" className="is-danger" onClick={() => void onDeleteCase?.(item.id)}><Icon name="trash"/></button></span></div>{expanded ? <InterfaceCasePreview request={previewRequest} outcome={runDetails[item.id]} activeTab={previewTab} onTabChange={setPreviewTab}/> : null}</div>;
+        return <div key={item.id} className={`interface-case-record${expanded ? " is-expanded" : ""}`}><div role="row" className="interface-case-table-row"><span><input type="checkbox" aria-label={`选择 ${item.name}`} checked={selected.includes(item.id)} onChange={(event) => setSelected((current) => event.target.checked ? [...new Set([...current, item.id])] : current.filter((id) => id !== item.id))}/></span><span className="interface-case-name-cell">{editingNameId === item.id ? <input autoFocus value={inlineName} onChange={(event) => setInlineName(event.target.value)} onBlur={() => { if (inlineName.trim() && inlineName.trim() !== item.name) void saveInline(item, { name: inlineName.trim() }); setEditingNameId(null); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") setEditingNameId(null); }}/> : <><button type="button" className="interface-case-name" aria-expanded={expanded} onClick={() => void togglePreview(item)}>{item.name}</button><button type="button" className="interface-case-inline-edit" aria-label={`修改 ${item.name} 名称`} onClick={() => { setInlineName(item.name); setEditingNameId(item.id); }}><Icon name="edit"/></button></>}</span><span><select aria-label={`${item.name} 分组`} value={String(item.metadata?.__protovoyCaseGroup ?? "positive")} onChange={(event) => void saveInline(item, { group: event.target.value })}><option value="positive">正向</option><option value="negative">负向</option><option value="boundary">边界值</option><option value="security">安全性</option><option value="other">其他</option></select></span><span className="interface-case-inline-tags"><input aria-label={`${item.name} 标签`} defaultValue={tags.join(", ")} placeholder="添加标签" onBlur={(event) => void saveInline(item, { tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) })}/></span><span><i className={`interface-case-result${result ? ` is-${result}` : ""}`}>{result === "running" ? "运行中" : result === "passed" ? "通过" : result === "failed" ? "失败" : "未运行"}</i></span><span className="interface-case-row-actions"><button type="button" title="运行" onClick={() => void run([item.id])}><Icon name="send"/></button><button type="button" title="在新页签打开" onClick={() => onOpenCase?.(item.id)}><Icon name="external"/></button><button type="button" title="复制用例" onClick={() => void onDuplicateCase?.(item.id)}><Icon name="copy"/></button><button type="button" title="复制 cURL" onClick={async () => { const value = await onCopyCurl?.(item.id); if (value) await navigator.clipboard.writeText(value); }}><Icon name="command"/></button><button type="button" title="删除" className="is-danger" onClick={() => void onDeleteCase?.(item.id)}><Icon name="trash"/></button></span></div>{expanded ? <InterfaceCasePreview request={previewRequest} outcome={runDetails[item.id]} activeTab={previewTab} onTabChange={setPreviewTab}/> : null}</div>;
       })}
     </div> : items.length ? <div className="interface-cases-no-results"><Icon name="search"/><strong>没有匹配的测试用例</strong><span>请尝试其他关键词。</span></div> : <div className="interface-cases-empty"><span><Icon name="archive"/></span><strong>还没有测试用例</strong><p>在右侧抽屉中创建第一条测试用例。</p><button type="button" className="ui-button primary" onClick={() => edit("new")}><Icon name="plus"/>添加测试用例</button></div>}
     {drawer === "new" ? <TestCaseCreateDrawer requestId={requestId} draft={draft} onDraftChange={setDraft} onClose={() => setDrawer(null)} onLoadCase={onLoadCase} onRunRequest={onRunRequest} onSaveCase={onSaveCase}/> : drawer ? <div className="interface-case-drawer-backdrop" onMouseDown={() => setDrawer(null)}><aside className="interface-case-drawer" role="dialog" aria-modal="true" aria-label="测试用例预览" onMouseDown={(event) => event.stopPropagation()}><header><div><strong>测试用例预览</strong><small>可直接修改当前用例信息</small></div><button type="button" className="ui-icon-button" aria-label="关闭" onClick={() => setDrawer(null)}><Icon name="close"/></button></header><div className="interface-case-drawer-body"><label><span>名称</span><input autoFocus value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}/></label><label><span>分组</span><input value={draft.group} onChange={(event) => setDraft((current) => ({ ...current, group: event.target.value }))}/></label><label><span>标签</span><input value={draft.tags} onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))}/></label><button type="button" className="ui-button secondary" onClick={() => onOpenCase?.(drawer.id)}>打开完整配置</button></div><footer><button type="button" className="ui-button secondary" onClick={() => setDrawer(null)}>取消</button><button type="button" className="ui-button primary" disabled={!draft.name.trim()} onClick={async () => { await onSaveCase?.(drawer.id, { name: draft.name.trim(), group: draft.group.trim() || "未分组", tags: draft.tags.split(",").map((tag) => tag.trim()).filter(Boolean) }); setDrawer(null); }}>保存</button></footer></aside></div> : null}
@@ -495,17 +496,17 @@ function TestCaseCreateDrawer({ requestId, draft, onDraftChange, onClose, onLoad
     finally { setSaving(false); }
   };
   const editorSessionId = `create-test-case-${request?.id ?? "draft"}`;
-  return <div className="interface-case-drawer-backdrop" onMouseDown={onClose}><aside className="interface-case-drawer interface-case-create-workbench" role="dialog" aria-modal="true" aria-label="添加测试用例" onMouseDown={(event) => event.stopPropagation()}><div className="interface-case-create-topbar"><button type="button" className="ui-icon-button" aria-label="关闭" onClick={onClose}><Icon name="close"/></button><input autoFocus className="interface-case-create-name" aria-label="用例名称" value={draft.name} onChange={(event) => onDraftChange((current) => ({ ...current, name: event.target.value }))} placeholder="用例名称"/><button type="button" className="ui-button primary interface-case-create-save" disabled={!draft.name.trim() || !request || saving} onClick={() => window.dispatchEvent(new CustomEvent("apivoy-save-interface-draft", { detail: { requestId: request?.id, sessionId: editorSessionId } }))}>{saving ? "保存中…" : "保存"}</button><label><Icon name="archive"/><select aria-label="分类" value={draft.group === "未分组" ? "positive" : draft.group} onChange={(event) => onDraftChange((current) => ({ ...current, group: event.target.value }))}><option value="positive">正向</option><option value="negative">负向</option><option value="boundary">边界值</option><option value="security">安全性</option><option value="other">其他</option></select></label><label><Icon name="tag"/><input aria-label="标签" value={draft.tags} onChange={(event) => onDraftChange((current) => ({ ...current, tags: event.target.value }))} placeholder="添加标签"/></label></div><div className="interface-case-create-editor">{request && onRunRequest ? <HttpWorkbench externalRequest={request} fixedSplitDirection="vertical" workbenchSessionId={editorSessionId} onSend={onRunRequest} onSave={save}/> : <div className="interface-case-preview-loading">正在加载请求配置…</div>}</div></aside></div>;
+  return <div className="interface-case-drawer-backdrop" onMouseDown={onClose}><aside className="interface-case-drawer interface-case-create-workbench" role="dialog" aria-modal="true" aria-label="添加测试用例" onMouseDown={(event) => event.stopPropagation()}><div className="interface-case-create-topbar"><button type="button" className="ui-icon-button" aria-label="关闭" onClick={onClose}><Icon name="close"/></button><input autoFocus className="interface-case-create-name" aria-label="用例名称" value={draft.name} onChange={(event) => onDraftChange((current) => ({ ...current, name: event.target.value }))} placeholder="用例名称"/><button type="button" className="ui-button primary interface-case-create-save" disabled={!draft.name.trim() || !request || saving} onClick={() => window.dispatchEvent(new CustomEvent("protovoy-save-interface-draft", { detail: { requestId: request?.id, sessionId: editorSessionId } }))}>{saving ? "保存中…" : "保存"}</button><label><Icon name="archive"/><select aria-label="分类" value={draft.group === "未分组" ? "positive" : draft.group} onChange={(event) => onDraftChange((current) => ({ ...current, group: event.target.value }))}><option value="positive">正向</option><option value="negative">负向</option><option value="boundary">边界值</option><option value="security">安全性</option><option value="other">其他</option></select></label><label><Icon name="tag"/><input aria-label="标签" value={draft.tags} onChange={(event) => onDraftChange((current) => ({ ...current, tags: event.target.value }))} placeholder="添加标签"/></label></div><div className="interface-case-create-editor">{request && onRunRequest ? <HttpWorkbench externalRequest={request} fixedSplitDirection="vertical" workbenchSessionId={editorSessionId} onSend={onRunRequest} onSave={save}/> : <div className="interface-case-preview-loading">正在加载请求配置…</div>}</div></aside></div>;
 }
 
 function InterfaceCasePreview({ request, outcome }: { request: HttpWorkbenchRequest | null; outcome?: InterfaceCaseRunOutcome; activeTab: unknown; onTabChange: unknown }) {
   if (!request) return <div className="interface-case-preview-loading">正在加载用例…</div>;
-  const tags = Array.isArray(request.metadata?.__apivoyCaseTags) ? request.metadata.__apivoyCaseTags.filter((tag): tag is string => typeof tag === "string") : [];
+  const tags = Array.isArray(request.metadata?.__protovoyCaseTags) ? request.metadata.__protovoyCaseTags.filter((tag): tag is string => typeof tag === "string") : [];
   const requestWithResult = outcome ? {
     ...request,
     metadata: {
       ...(request.metadata ?? {}),
-      __apivoySavedResponse: {
+      __protovoySavedResponse: {
         status: outcome.status ?? null,
         durationMs: outcome.durationMs ?? 0,
         body: outcome.body ?? outcome.error ?? "",
@@ -514,7 +515,7 @@ function InterfaceCasePreview({ request, outcome }: { request: HttpWorkbenchRequ
       },
     },
   } : request;
-  return <div className="interface-case-workbench-preview"><div className="interface-case-preview-target"><b className={`is-${request.method.toLowerCase()}`}>{request.method}</b><code title={request.url}>{request.url}</code><label><Icon name="tag"/><input aria-label="测试用例标签" defaultValue={tags.join(", ")} placeholder="添加标签" onBlur={(event) => window.dispatchEvent(new CustomEvent("apivoy-update-test-case-tags", { detail: { id: request.id, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) } }))}/></label></div><div className="interface-case-preview-workbench"><HttpWorkbench embeddedPreview externalRequest={requestWithResult} workbenchSessionId={`test-case-preview-${request.id ?? "request"}`} onSend={async () => { throw new Error("请使用用例行上的运行操作"); }}/></div></div>;
+  return <div className="interface-case-workbench-preview"><div className="interface-case-preview-target"><b className={`is-${request.method.toLowerCase()}`}>{request.method}</b><code title={request.url}>{request.url}</code><label><Icon name="tag"/><input aria-label="测试用例标签" defaultValue={tags.join(", ")} placeholder="添加标签" onBlur={(event) => window.dispatchEvent(new CustomEvent("protovoy-update-test-case-tags", { detail: { id: request.id, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) } }))}/></label></div><div className="interface-case-preview-workbench"><HttpWorkbench embeddedPreview externalRequest={requestWithResult} workbenchSessionId={`test-case-preview-${request.id ?? "request"}`} onSend={async () => { throw new Error("请使用用例行上的运行操作"); }}/></div></div>;
 }
 
 const FORMAT_BY_PROTOCOL: Record<string, string> = {
@@ -586,7 +587,7 @@ function defaultResponseDefinition(statusCode = "200"): ResponseDefinition {
 }
 
 export function parseResponseDefinitions(content: string, fields: DefinitionField[]): ResponseDefinition[] {
-  const source = content.match(/^x-apivoy-responses:\s*(\[.*\])\s*$/m)?.[1];
+  const source = content.match(/^x-protovoy-responses:\s*(\[.*\])\s*$/m)?.[1];
   if (source) try {
     const parsed = JSON.parse(source) as ResponseDefinition[];
     if (Array.isArray(parsed) && parsed.length) return parsed.map((response) => ({ ...response, bodyType: normalizeResponseBodyType((response as ResponseDefinition & { bodyType?: unknown }).bodyType) }));
@@ -689,7 +690,7 @@ interface SecurityDesignConfig {
 }
 const DEFAULT_SECURITY_DESIGN: SecurityDesignConfig = { authScheme: "none", apiKeyName: "X-Api-Key", apiKeyIn: "header", scopes: "", rateLimit: 0, rateWindow: "minute", maxBodyKb: 0, requireHttps: true };
 function parseSecurityDesign(content: string): SecurityDesignConfig {
-  const source = content.match(/^x-apivoy-security:\s*(\{.*\})\s*$/m)?.[1];
+  const source = content.match(/^x-protovoy-security:\s*(\{.*\})\s*$/m)?.[1];
   if (!source) return { ...DEFAULT_SECURITY_DESIGN };
   try { return { ...DEFAULT_SECURITY_DESIGN, ...(JSON.parse(source) as Partial<SecurityDesignConfig>) }; } catch { return { ...DEFAULT_SECURITY_DESIGN }; }
 }
@@ -1007,7 +1008,7 @@ function parseOpenApiFields(content: string): DefinitionField[] {
 }
 
 function parseVisualFieldsExtension(content: string): DefinitionField[] | null {
-  const source = content.match(/^x-apivoy-visual-fields:\s*(\[.*\])\s*$/m)?.[1];
+  const source = content.match(/^x-protovoy-visual-fields:\s*(\[.*\])\s*$/m)?.[1];
   if (!source) return null;
   try {
     const value = JSON.parse(source) as unknown;
@@ -1177,10 +1178,10 @@ export function mergeDesignIntoHttpDraft(
     headers: draft.headers.map((header) => [...header] as [string, string]),
     metadata: {
       ...(draft.metadata ?? {}),
-      __apivoyResponseDefinitions: responses?.length ? responses.map((response) => ({ ...response, status: response.statusCode, fields: fields.filter((field) => field.scope.startsWith("response.") && (field.responseId ? field.responseId === response.id : (field.status || "200") === response.statusCode)) })) : responseStatuses.map((status) => ({ status, fields: fields.filter((field) => field.scope.startsWith("response.") && (field.status || "200") === status) })),
+      __protovoyResponseDefinitions: responses?.length ? responses.map((response) => ({ ...response, status: response.statusCode, fields: fields.filter((field) => field.scope.startsWith("response.") && (field.responseId ? field.responseId === response.id : (field.status || "200") === response.statusCode)) })) : responseStatuses.map((status) => ({ status, fields: fields.filter((field) => field.scope.startsWith("response.") && (field.status || "200") === status) })),
     },
   };
-  const url = new URL(draft.url || "/", "http://apivoy.local");
+  const url = new URL(draft.url || "/", "http://protovoy.local");
   for (const field of fields.filter(
     (item) => item.scope === "request.params" && item.name.trim(),
   ))
@@ -1281,7 +1282,7 @@ export function mergeDesignIntoHttpDraft(
 export function definitionFieldsFromHttpDraft(draft: HttpDebugDraft): DefinitionField[] {
   const fields: DefinitionField[] = [];
   try {
-    const url = new URL(draft.url || "/", "http://apivoy.local");
+    const url = new URL(draft.url || "/", "http://protovoy.local");
     for (const name of new Set(url.searchParams.keys())) fields.push({ id: crypto.randomUUID(), name, scope: "request.params", type: "string", required: false, description: "" });
   } catch { /* Keep the design usable while the URL is incomplete. */ }
   const ignored = new Set(["authorization", "cookie", "content-type", "content-length", "host", "connection", "user-agent", "accept", "accept-encoding"]);
@@ -1327,7 +1328,7 @@ function syncDesignToDebug(
     tlsVerify: true,
   };
   const request = mergeDesignIntoHttpDraft(draft, fields, bodyMode, responses);
-  request.metadata = { ...(request.metadata ?? {}), __apivoyProjectId: projectId };
+  request.metadata = { ...(request.metadata ?? {}), __protovoyProjectId: projectId };
   if (security) {
     const existingAuth = request.auth && typeof request.auth === "object" ? request.auth as Record<string, unknown> : {};
     request.auth = security.authScheme === "none" ? null : {
@@ -1342,7 +1343,7 @@ function syncDesignToDebug(
   stashHydrate(hydrate);
   queueMicrotask(() =>
     window.dispatchEvent(
-      new CustomEvent("apivoy-hydrate-request", { detail: hydrate }),
+      new CustomEvent("protovoy-hydrate-request", { detail: hydrate }),
     ),
   );
 }
@@ -1357,7 +1358,7 @@ function fieldsToDefinition(
 ): string {
   const liveHttpDraft = protocol === "http" ? readWorkbenchDraft<HttpDebugDraft>("http") : null;
   const liveMethod = liveHttpDraft?.method?.toLowerCase() || "get";
-  const livePath = (() => { try { return new URL(liveHttpDraft?.url || "/", "http://apivoy.local").pathname || "/"; } catch { return "/"; } })();
+  const livePath = (() => { try { return new URL(liveHttpDraft?.url || "/", "http://protovoy.local").pathname || "/"; } catch { return "/"; } })();
   if (protocol === "grpc")
     return `message Request {\n${fields.map((field, index) => `  ${field.type === "boolean" ? "bool" : field.type === "integer" ? "int64" : field.type === "number" ? "double" : field.type === "array" ? "repeated string" : field.type} ${field.name || `field_${index + 1}`} = ${index + 1};`).join("\n")}\n}`;
   if (protocol === "graphql")
@@ -1400,9 +1401,9 @@ function fieldsToDefinition(
         : ""
     }${indent}properties:\n${roots.map((field) => `${indent}  ${field.name || "field"}:\n${renderSchemaField(field, `${indent}    `)}`).join("\n")}`;
   };
-  const visualFieldsExtension = `x-apivoy-visual-fields: ${JSON.stringify(fields)}\n`;
+  const visualFieldsExtension = `x-protovoy-visual-fields: ${JSON.stringify(fields)}\n`;
   const responseDefinitions = responses?.length ? responses : parseResponseDefinitions("", fields);
-  const securityExtension = `x-apivoy-security: ${JSON.stringify(security)}\nx-apivoy-responses: ${JSON.stringify(responseDefinitions)}\n`;
+  const securityExtension = `x-protovoy-security: ${JSON.stringify(security)}\nx-protovoy-responses: ${JSON.stringify(responseDefinitions)}\n`;
   const params = fields.filter(
     (field) =>
       field.scope === "request.params" ||
@@ -1460,7 +1461,7 @@ function fieldsToDefinition(
       : bodyMode === "binary"
         ? `      requestBody:\n        content:\n          application/octet-stream:\n            schema:\n              type: string\n              format: binary\n`
         : `      requestBody:\n        content:\n          ${bodyContentType ?? "application/json"}:\n            schema:\n              type: object\n${yamlSchema(requestBody, "              ")}\n`;
-  return `openapi: ${versionLiteral}\nx-apivoy-body-mode: ${bodyMode}\n${visualFieldsExtension}${securityExtension}info:\n  title: Current API\n  version: 1.0.0\npaths:\n  ${livePath}:\n    ${liveMethod}:\n${params.length ? `      parameters:\n${params.map((field) => `        - name: ${field.name}\n          in: ${field.scope.split(".")[1] === "params" ? "query" : field.scope.split(".")[1] === "headers" ? "header" : "cookie"}\n          required: ${field.required}\n          schema:\n            type: ${field.type}`).join("\n")}\n` : ""}${requestBodyYaml}      responses:\n${(statuses.length
+  return `openapi: ${versionLiteral}\nx-protovoy-body-mode: ${bodyMode}\n${visualFieldsExtension}${securityExtension}info:\n  title: Current API\n  version: 1.0.0\npaths:\n  ${livePath}:\n    ${liveMethod}:\n${params.length ? `      parameters:\n${params.map((field) => `        - name: ${field.name}\n          in: ${field.scope.split(".")[1] === "params" ? "query" : field.scope.split(".")[1] === "headers" ? "header" : "cookie"}\n          required: ${field.required}\n          schema:\n            type: ${field.type}`).join("\n")}\n` : ""}${requestBodyYaml}      responses:\n${(statuses.length
     ? statuses
     : ["200"]
   )
@@ -1542,14 +1543,14 @@ function DefinitionPanel({
     setFields(nextFields.map((field) => field.scope.startsWith("response.") && !field.responseId ? { ...field, responseId: initialResponses.find((item) => item.statusCode === (field.status || "200"))?.id } : field));
     setSecurity(parseSecurityDesign(nextContent));
     setBodyMode(
-      (nextContent.match(/^\s*x-apivoy-body-mode:\s*([\w-]+)/m)?.[1] as
+      (nextContent.match(/^\s*x-protovoy-body-mode:\s*([\w-]+)/m)?.[1] as
         | BodyDesignMode
         | undefined) ?? (inferredFields.length ? inferredBodyMode : /requestBody\s*:/.test(nextContent) ? "json" : "none"),
     );
     lastVisualContent.current = nextContent;
     if (workbenchId === "http")
       setOpenApiVersion(detectOpenApiVersion(nextContent));
-    if (workbenchId === "http") syncDesignToDebug(workbenchId, nextFields, (nextContent.match(/^\s*x-apivoy-body-mode:\s*([\w-]+)/m)?.[1] as BodyDesignMode | undefined) ?? inferredBodyMode, parseSecurityDesign(nextContent), projectId, initialResponses);
+    if (workbenchId === "http") syncDesignToDebug(workbenchId, nextFields, (nextContent.match(/^\s*x-protovoy-body-mode:\s*([\w-]+)/m)?.[1] as BodyDesignMode | undefined) ?? inferredBodyMode, parseSecurityDesign(nextContent), projectId, initialResponses);
   }
   useEffect(() => {
     void reload().catch((error) =>
@@ -1630,7 +1631,7 @@ function DefinitionPanel({
           ? "接口定义已保存，同时保留了未完全可视化的高级结构"
           : "接口定义已保存，文档、Mock 和校验可以直接复用",
       );
-      if (workbenchId === "http") window.dispatchEvent(new CustomEvent("apivoy-save-interface-draft", { detail: { requestId } }));
+      if (workbenchId === "http") window.dispatchEvent(new CustomEvent("protovoy-save-interface-draft", { detail: { requestId } }));
     } catch (error) {
       const detail = readableDefinitionError(error, "关联服务未返回错误详情");
       setMessage(
@@ -1647,8 +1648,8 @@ function DefinitionPanel({
       const detail = (event as CustomEvent<{ requestId?: string }>).detail;
       if (detail?.requestId === requestId && !busy) void saveDefinition();
     };
-    window.addEventListener("apivoy-save-interface-definition", save);
-    return () => window.removeEventListener("apivoy-save-interface-definition", save);
+    window.addEventListener("protovoy-save-interface-definition", save);
+    return () => window.removeEventListener("protovoy-save-interface-definition", save);
   }, [requestId, content, fields, bodyMode, security, definitionId, busy]);
   function updateFields(next: DefinitionField[]) {
     const generated = fieldsToDefinition(
@@ -2182,7 +2183,7 @@ function VisualDefinitionEditor({
               <button type="button" className="interface-response-add-blank" role="menuitem" onClick={() => { setBlankResponseDraft({ statusCode: "200", name: "成功", bodyType: "json" }); setResponseAddMenuOpen(false); setBlankResponseDialogOpen(true); }}>添加空白响应</button>
               {readResponseComponents(projectId).length > 6 ? <input autoFocus type="search" value={componentQuery} onChange={(event) => setComponentQuery(event.target.value)} placeholder="搜索响应组件"/> : null}
               <div className="interface-response-component-options">{responseComponents.map((component) => <button type="button" role="menuitem" key={component.id} onClick={() => addComponentResponse(component)}><span className="interface-response-component-icon">R</span><span className="interface-response-component-label">{component.name || "未命名响应"}<small>({component.statusCode || "未设置"})</small></span>{responses.some((item) => item.componentId === component.id) ? <em>已添加</em> : null}</button>)}</div>
-              <button type="button" className="interface-response-create-component" role="menuitem" onClick={() => { setResponseAddMenuOpen(false); window.dispatchEvent(new CustomEvent("apivoy-open-project-settings", { detail: "responses" })); }}><Icon name="plus"/>新建响应组件</button>
+              <button type="button" className="interface-response-create-component" role="menuitem" onClick={() => { setResponseAddMenuOpen(false); window.dispatchEvent(new CustomEvent("protovoy-open-project-settings", { detail: "responses" })); }}><Icon name="plus"/>新建响应组件</button>
             </div> : null}
           </div>
         </div>
