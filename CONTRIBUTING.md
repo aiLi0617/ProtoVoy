@@ -47,7 +47,33 @@ cd services/collaboration-server
 
 ## Validation
 
-Before opening a pull request, run:
+For the normal edit/test loop, validate only changed workspaces and their
+in-repository dependents:
+
+```bash
+pnpm validate:changed
+# Compare a committed branch with its base:
+pnpm validate:changed --base origin/main
+# Limit a CI job or local check to one toolchain:
+pnpm validate:changed --js --base origin/main
+# Run only the browser specs mapped to changed UI features:
+pnpm test:e2e:changed --base origin/main
+```
+
+The feature-to-spec mapping lives in `scripts/test-changed-e2e.mjs`. Add or
+adjust a rule when introducing a new UI feature or browser spec. Shared and
+unmapped UI files intentionally fall back to `e2e/web-smoke.spec.ts`. Logic-only
+changes and ordinary direct e2e spec changes run desktop Chromium. CSS,
+responsive shell changes, and specs listed in the selector's `mobileSpecs` set
+also run the mobile project.
+
+UI unit tests run in isolated processes with concurrency 4. Local runs stop
+scheduling new tests after the first failure; CI collects all failures. The
+underlying runner accepts `--fail-fast` and `--no-fail-fast` for an explicit
+override.
+
+CI uses the same affected-workspace check for pull requests. Before merging to
+`main` or cutting a release, run the complete validation once:
 
 ```bash
 pnpm typecheck

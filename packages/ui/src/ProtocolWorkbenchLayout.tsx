@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { HttpRunResult } from "./HttpWorkbench";
 import { SplitPane } from "./WorkbenchFrame";
 import { RovingTabList } from "./RovingTabList";
+import { useInterfaceNameTarget } from "./InterfaceNameTarget";
 
 interface ProtocolWorkbenchLayoutProps {
   id: string; protocol: string; name: string; target: string; targetLabel: string;
@@ -12,11 +14,13 @@ interface ProtocolWorkbenchLayoutProps {
 }
 
 export function ProtocolWorkbenchLayout({ id, protocol, name, target, targetLabel, actionLabel, loadingLabel = "运行中…", loading, result, responseTitle, emptyResponse, message, controls, children, onNameChange, onTargetChange, onRun, onSave, onCancel }: ProtocolWorkbenchLayoutProps) {
+  const nameTarget = useInterfaceNameTarget();
   const metrics = result ? <span className="protocol-response-metrics">{result.summary.durationMs} ms · {result.summary.bytesReceived} B</span> : null;
-  return <div className="protocol-workbench-layout" aria-busy={loading || undefined}>
+  const nameInput = <input aria-label="接口名称" className="protocol-name-input" value={name} onChange={(event) => onNameChange(event.target.value)} />;
+  return <>{nameTarget ? createPortal(nameInput, nameTarget) : null}<div className="protocol-workbench-layout" aria-busy={loading || undefined}>
       <div className="protocol-commandbar">
         <span className="protocol-command-badge">{protocol}</span>
-        <input aria-label="请求名称" className="protocol-name-input" value={name} onChange={(event) => onNameChange(event.target.value)} />
+        {nameTarget ? null : nameInput}
         <input aria-label={targetLabel} className="protocol-target-input" value={target} onChange={(event) => onTargetChange(event.target.value)} />
         <button type="button" className="protocol-run-button" disabled={loading} onClick={onRun}>{loading ? loadingLabel : actionLabel}</button>
         {onSave ? <button type="button" className="protocol-save-button" disabled={loading} onClick={onSave}>保存</button> : null}
@@ -29,5 +33,5 @@ export function ProtocolWorkbenchLayout({ id, protocol, name, target, targetLabe
         />
       </div>
       {message ? <div className="protocol-status" role="status" aria-live="polite">{message}</div> : null}
-  </div>;
+  </div></>;
 }

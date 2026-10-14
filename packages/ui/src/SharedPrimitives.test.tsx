@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import "./controlIconGlyphs.test";
+import "./disabledContrast.test";
+import "./tabKeyboardModel.test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MessageDetailActions, MessageInspector, MessageSummary, MessageToolbar } from "./MessageInspector";
 import { ModalFrame } from "./ModalFrame";
 import { RovingTabList } from "./RovingTabList";
 
-const tabs = renderToStaticMarkup(<RovingTabList ariaLabel="Modes"><button role="tab" tabIndex={0}>One</button></RovingTabList>);
+const tabs = renderToStaticMarkup(<RovingTabList ariaLabel="Modes"><button type="button" role="tab" tabIndex={0}>One</button></RovingTabList>);
 assert.match(tabs, /role="tablist"/);
 assert.match(tabs, /aria-label="Modes"/);
 

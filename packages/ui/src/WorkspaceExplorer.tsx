@@ -1,5 +1,5 @@
 import { IMPORT_MAX_DOCUMENTS, IMPORT_MAX_FILE_BYTES, IMPORT_MAX_TOTAL_BYTES, importDocument, type PortableRequest } from "@protovoy/import-export";
-import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icons";
@@ -16,15 +16,183 @@ export interface CollectionRecord { id: string; projectId: string; moduleId?: st
 export interface RequestRecord { id: string; projectId: string; collectionId: string; name: string; protocolId?: string; method?: string; target: string; envelope?: { variables?: Record<string, string>; metadata?: Record<string, unknown> } }
 export interface WorkspaceTree { workspaces: WorkspaceRecord[]; projects: ProjectRecord[]; modules?: ModuleRecord[]; collections: CollectionRecord[]; requests: RequestRecord[] }
 
+export interface CollectionParentOption {
+  kind: "module" | "collection";
+  id: string;
+  moduleId?: string;
+  label: string;
+  depth: number;
+  parentKey: string | null;
+}
+
+function collectionParentOptionKey(option: CollectionParentOption): string {
+  return `${option.kind}:${option.id}`;
+}
+
+export function buildCollectionParentOptions(modules: ModuleRecord[], collections: CollectionRecord[]): CollectionParentOption[] {
+  const options: CollectionParentOption[] = [];
+  for (const module of modules) {
+    const moduleKey = `module:${module.id}`;
+    options.push({ kind: "module", id: module.id, moduleId: module.id, label: module.name, depth: 0, parentKey: null });
+    const moduleCollections = collections.filter((collection) => collection.moduleId ? collection.moduleId === module.id : module.isDefault);
+    const visited = new Set<string>();
+    const append = (collection: CollectionRecord, depth: number, parentKey: string) => {
+      if (visited.has(collection.id)) return;
+      visited.add(collection.id);
+      const optionKey = `collection:${collection.id}`;
+      options.push({ kind: "collection", id: collection.id, moduleId: collection.moduleId ?? (module.isDefault ? undefined : module.id), label: collection.name, depth, parentKey });
+      moduleCollections
+        .filter((candidate) => candidate.parentId === collection.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+        .forEach((child) => append(child, depth + 1, optionKey));
+    };
+    const ids = new Set(moduleCollections.map((collection) => collection.id));
+    moduleCollections
+      .filter((collection) => !collection.parentId || !ids.has(collection.parentId))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+      .forEach((collection) => append(collection, 1, moduleKey));
+    moduleCollections.forEach((collection) => append(collection, 1, moduleKey));
+  }
+  return options;
+}
+
+export function filterCollectionParentOptions(options: CollectionParentOption[], collapsedKeys: ReadonlySet<string>, query: string): CollectionParentOption[] {
+  const byKey = new Map(options.map((option) => [collectionParentOptionKey(option), option]));
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  if (normalizedQuery) {
+    const visibleKeys = new Set<string>();
+    for (const option of options) {
+      if (!option.label.toLocaleLowerCase().includes(normalizedQuery)) continue;
+      let current: CollectionParentOption | undefined = option;
+      const visited = new Set<string>();
+      while (current) {
+        const key = collectionParentOptionKey(current);
+        if (visited.has(key)) break;
+        visited.add(key);
+        visibleKeys.add(key);
+        current = current.parentKey ? byKey.get(current.parentKey) : undefined;
+      }
+    }
+    return options.filter((option) => visibleKeys.has(collectionParentOptionKey(option)));
+  }
+  return options.filter((option) => {
+    let parentKey = option.parentKey;
+    const visited = new Set<string>();
+    while (parentKey) {
+      if (visited.has(parentKey) || collapsedKeys.has(parentKey)) return false;
+      visited.add(parentKey);
+      parentKey = byKey.get(parentKey)?.parentKey ?? null;
+    }
+    return true;
+  });
+}
+
+export function setModuleCollectionsCollapsed(
+  current: string[],
+  moduleId: string,
+  collectionIds: string[],
+  collapsed: boolean,
+): string[] {
+  const collectionKeys = new Set(collectionIds.map((id) => `collection:${id}`));
+  const next = current.filter((key) => key !== `module:${moduleId}` && !collectionKeys.has(key));
+  return collapsed ? [...next, ...collectionKeys] : next;
+}
+
+export function isCollectionActive(
+  collectionId: string,
+  selectedCollectionId?: string | null,
+  selectedRequestId?: string | null,
+): boolean {
+  return collectionId === selectedCollectionId && !selectedRequestId;
+}
+
+function CollectionParentPicker({ options, value, onChange }: { options: CollectionParentOption[]; value: string; onChange: (option: CollectionParentOption) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(() => {
+    const next = new Set(options.filter((option) => option.kind === "collection").map(collectionParentOptionKey));
+    const byKey = new Map(options.map((option) => [collectionParentOptionKey(option), option]));
+    let parentKey = byKey.get(value)?.parentKey;
+    while (parentKey) {
+      next.delete(parentKey);
+      parentKey = byKey.get(parentKey)?.parentKey ?? null;
+    }
+    return next;
+  });
+
+  const optionsByKey = useMemo(() => new Map(options.map((option) => [collectionParentOptionKey(option), option])), [options]);
+  const selected = optionsByKey.get(value);
+  const childCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const option of options) {
+      if (option.parentKey) counts.set(option.parentKey, (counts.get(option.parentKey) ?? 0) + 1);
+    }
+    return counts;
+  }, [options]);
+  const visibleOptions = useMemo(() => filterCollectionParentOptions(options, collapsedKeys, query), [collapsedKeys, options, query]);
+  const select = (option: CollectionParentOption) => {
+    setCollapsedKeys((current) => {
+      const next = new Set(current);
+      let parentKey = option.parentKey;
+      while (parentKey) {
+        next.delete(parentKey);
+        parentKey = optionsByKey.get(parentKey)?.parentKey ?? null;
+      }
+      return next;
+    });
+    onChange(option);
+    close();
+  };
+  const close = () => { setOpen(false); setQuery(""); };
+  const toggle = (key: string) => setCollapsedKeys((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  });
+  const selectedLabel = selected ? `${selected.kind === "module" ? "模块：" : "目录："}${selected.label}` : "请选择父级目录";
+  const toggleOpen = () => {
+    if (open) close();
+    else {
+      setOpen(true);
+      window.setTimeout(() => searchInputRef.current?.focus(), 0);
+    }
+  };
+  return <div className="collection-parent-field">
+    <span id="collection-parent-label">父级目录</span>
+    <div className={`collection-parent-picker${open ? " is-open" : ""}`}>
+      <div className={`collection-parent-control${open ? " is-open" : ""}`}>
+        <Icon name={open ? "search" : selected?.kind === "module" ? "module" : "folder"}/>
+        <input ref={searchInputRef} type="text" role="combobox" readOnly={!open} value={open ? query : selectedLabel} onClick={() => { if (!open) { setOpen(true); window.setTimeout(() => searchInputRef.current?.focus(), 0); } }} onChange={(event) => { if (open) setQuery(event.target.value); }} onKeyDown={(event) => { if (event.key === "Escape" && open) close(); else if (!open && ["Enter", " ", "ArrowDown"].includes(event.key)) { event.preventDefault(); setOpen(true); } }} placeholder={open ? "搜索模块或目录" : "请选择父级目录"} aria-labelledby="collection-parent-label" aria-controls="collection-parent-options" aria-haspopup="tree" aria-expanded={open}/>
+        <button type="button" className="collection-parent-control-toggle" aria-label={open ? "收起父级目录" : "展开父级目录"} onMouseDown={(event) => event.preventDefault()} onClick={toggleOpen}><Icon name="chevron"/></button>
+      </div>
+      {open ? <div className="collection-parent-tree">
+        <div id="collection-parent-options" className="collection-parent-results" role="tree" aria-label="选择父级目录">
+          {visibleOptions.length ? visibleOptions.map((option) => {
+            const optionValue = collectionParentOptionKey(option);
+            const isSelected = optionValue === value;
+            const hasChildren = (childCounts.get(optionValue) ?? 0) > 0;
+            const expanded = query.trim() ? true : !collapsedKeys.has(optionValue);
+            const kindLabel = option.kind === "module" ? "模块" : "目录";
+            return <div key={optionValue} className={`collection-parent-option is-${option.kind}${isSelected ? " is-selected" : ""}`} role="treeitem" aria-selected={isSelected} aria-expanded={hasChildren ? expanded : undefined} style={{ paddingLeft: 6 + option.depth * 18 }}>
+              {hasChildren ? <button type="button" className="collection-parent-toggle" aria-label={`${expanded ? "收起" : "展开"}${kindLabel} ${option.label}`} onClick={() => toggle(optionValue)} disabled={Boolean(query.trim())}><Icon name="chevron"/></button> : <span className="collection-parent-toggle-spacer"/>}
+              <button type="button" className="collection-parent-select" onClick={() => select(option)}><Icon name={option.kind === "module" ? "module" : "folder"}/><span>{option.label}</span>{option.kind === "module" ? <small>模块</small> : null}</button>
+            </div>;
+          }) : <div className="collection-parent-empty">没有匹配的模块或目录</div>}
+        </div>
+      </div> : null}
+    </div>
+  </div>;
+}
+
 function isDebugCase(request: RequestRecord): boolean {
   return Boolean(request.envelope?.variables?.__protovoyCaseOf) && request.envelope?.metadata?.__protovoyCaseType !== "test";
 }
-const CREATE_PROTOCOL_GROUPS = [
-  { label: "API", items: [["http", "HTTP", "globe"], ["grpc", "gRPC", "network"]] },
-  { label: "实时通信", items: [["websocket", "WebSocket", "activity"], ["sse", "SSE", "activity"], ["tcp", "TCP", "network"], ["udp", "UDP", "network"]] },
-  { label: "消息协议", items: [["mqtt", "MQTT", "network"], ["amqp", "AMQP", "network"], ["kafka", "Kafka", "network"]] },
-  { label: "数据协议", items: [["redis", "Redis", "database"], ["sql", "SQL", "database"]] },
-] as const;
+const PRIMARY_CREATE_PROTOCOLS = [["http", "HTTP", "globe"], ["grpc", "gRPC", "network"], ["websocket", "WebSocket", "activity"], ["sse", "SSE", "activity"], ["sql", "SQL", "database"]] as const;
+const MORE_CREATE_PROTOCOLS = [["tcp", "TCP", "network"], ["udp", "UDP", "network"], ["mqtt", "MQTT", "network"], ["amqp", "AMQP", "network"], ["kafka", "Kafka", "network"], ["redis", "Redis", "database"]] as const;
+
+const CREATE_MENU_WIDTH = 320;
 
 export interface WorkspaceExplorerProps {
   tree: WorkspaceTree | null;
@@ -43,6 +211,7 @@ export interface WorkspaceExplorerProps {
   onTouchWorkspace: (id: string) => Promise<void>;
   onCreateProject: (workspaceId: string, name: string) => Promise<void>;
   onCreateModule?: (projectId: string, name: string) => Promise<void>;
+  onRenameModule?: (id: string, name: string) => Promise<void>;
   onRenameProject: (id: string, name: string) => Promise<void>;
   onDeleteProject: (id: string) => Promise<void>;
   onCreateCollection: (projectId: string, parentId: string | null, name: string, moduleId?: string) => Promise<void>;
@@ -70,6 +239,7 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [moreProtocolsOpen, setMoreProtocolsOpen] = useState(false);
   const [createMenuPos, setCreateMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const menuButtonRefs = useRef(new Map<string, HTMLButtonElement>());
   const createMenuRef = useRef<HTMLDivElement>(null);
@@ -86,13 +256,13 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
     const activeItem = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[role="treeitem"]');
     const current = Math.max(0, activeItem ? items.indexOf(activeItem) : 0);
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      const chevron = items[current].querySelector<HTMLButtonElement>(".tree-chevron");
+      const chevron = items[current].querySelector<HTMLButtonElement>(".tree-chevron, .tree-module-chevron");
       if (chevron && ((event.key === "ArrowLeft" && chevron.getAttribute("aria-expanded") === "true") || (event.key === "ArrowRight" && chevron.getAttribute("aria-expanded") === "false"))) { event.preventDefault(); chevron.click(); }
       return;
     }
     event.preventDefault();
     const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? Math.min(items.length - 1, current + 1) : Math.max(0, current - 1);
-    (items[next].querySelector<HTMLElement>(".tree-main, .tree-chevron") ?? items[next]).focus();
+    (items[next].querySelector<HTMLElement>(".tree-main, .tree-chevron, .tree-module-chevron") ?? items[next]).focus();
   }
 
   useEffect(() => {
@@ -135,7 +305,7 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
     if (!createMenuOpen) { setCreateMenuPos(null); return; }
     const rect = createMenuButtonRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setCreateMenuPos({ top: rect.bottom + 4, left: rect.left, width: Math.min(390, window.innerWidth - rect.left - 8) });
+    setCreateMenuPos({ top: rect.bottom + 4, left: rect.left, width: Math.min(CREATE_MENU_WIDTH, window.innerWidth - rect.left - 8) });
   }, [createMenuOpen]);
   useLayoutEffect(() => {
     if (!openMenuId) { setMenuPos(null); return; }
@@ -170,6 +340,28 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
         <button type="button" role="menuitem" onClick={async () => { setOpenMenuId(null); const value = (await prompt({ title: "重命名集合", initialValue: collection.name }))?.trim(); if (value) void props.onRenameCollection(collection, value); }}><Icon name="edit" />重命名</button>
         <button type="button" role="menuitem" onClick={async () => { setOpenMenuId(null); const value = await prompt({ title: "设置集合标签", initialValue: collection.tags?.join(", ") ?? "", placeholder: "标签以逗号分隔" }); if (value !== null) void props.onUpdateCollectionTags(collection, value.split(",").map((tag) => tag.trim()).filter(Boolean)); }}><Icon name="tag" />标签</button>
         {collection.id !== "default-collection" ? <button type="button" role="menuitem" onClick={async () => { setOpenMenuId(null); if (await confirm({ title: "删除集合", description: `删除集合“${collection.name}”及其中全部内容？`, tone: "danger", confirmLabel: "删除" })) void props.onDeleteCollection(collection.id); }}><Icon name="trash" />删除</button> : null}
+      </div>,
+      document.body,
+    );
+  }
+
+  function renderModuleMenu(module: ModuleRecord): ReactNode {
+    const menuId = `module:${module.id}:menu`;
+    if (openMenuId !== menuId || !menuPos || typeof document === "undefined") return null;
+    return createPortal(
+      <div className="tree-more-panel" role="menu" data-tree-menu={menuId} style={{ top: menuPos.top, left: menuPos.left }}>
+        <button type="button" role="menuitem" onClick={() => { setDraft({ kind: "collection", owner: module.projectId, parentId: null, moduleId: module.id }); setOpenMenuId(null); }}><Icon name="plus"/>新建目录</button>
+        <button type="button" role="menuitem" disabled={!props.onRenameModule} onClick={async () => {
+          setOpenMenuId(null);
+          const value = (await prompt({ title: "重命名模块", initialValue: module.name }))?.trim();
+          if (!value || value === module.name || !props.onRenameModule) return;
+          try {
+            await props.onRenameModule(module.id, value);
+            notify(`模块已重命名为“${value}”`, "success");
+          } catch (error) {
+            notify(`重命名模块失败：${error instanceof Error ? error.message : String(error)}`, "danger");
+          }
+        }}><Icon name="edit"/>重命名</button>
       </div>,
       document.body,
     );
@@ -247,22 +439,10 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
   const selectedProjectIds = [...new Set(tree.requests.filter((item) => selectedIds.includes(item.id)).map((item) => item.projectId))];
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const selectedProject = tree.projects.find((project) => project.id === props.selectedProjectId) ?? workspaceProjects[0];
-  const selectedProjectRequestCount = selectedProject ? tree.requests.filter((request) => request.projectId === selectedProject.id && !request.envelope?.variables?.__protovoyCaseOf).length : 0;
-  const projectModules = selectedProject ? (tree.modules?.filter((module) => module.projectId === selectedProject.id) ?? [{ id: `default-module-${selectedProject.id}`, projectId: selectedProject.id, name: "默认模块", isDefault: true }]) : [];
+  const storedProjectModules = selectedProject ? tree.modules?.filter((module) => module.projectId === selectedProject.id) : undefined;
+  const projectModules = selectedProject ? (storedProjectModules?.length ? storedProjectModules : [{ id: `default-module-${selectedProject.id}`, projectId: selectedProject.id, name: "默认模块", isDefault: true }]) : [];
+  const collectionParentOptions = selectedProject ? buildCollectionParentOptions(projectModules, tree.collections.filter((collection) => collection.projectId === selectedProject.id)) : [];
   const collectionInModule = (collection: CollectionRecord, module: ModuleRecord) => collection.moduleId ? collection.moduleId === module.id : module.isDefault;
-  function collectionPath(parentId: string | null): CollectionRecord[] {
-    const path: CollectionRecord[] = [];
-    const visited = new Set<string>();
-    let currentId = parentId;
-    while (currentId && !visited.has(currentId)) {
-      visited.add(currentId);
-      const current = tree!.collections.find((collection) => collection.id === currentId);
-      if (!current) break;
-      path.unshift(current);
-      currentId = current.parentId ?? null;
-    }
-    return path;
-  }
   function collectionMatches(collection: CollectionRecord): boolean {
     if (!normalizedQuery) return true;
     if (collection.name.toLocaleLowerCase().includes(normalizedQuery)) return true;
@@ -333,10 +513,10 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
     const children = tree!.collections.filter((item) => item.parentId === collection.id).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
     const isCollapsed = collapsedNodes.includes(`collection:${collection.id}`);
     return <div key={collection.id} className="tree-collection-node" data-depth={depth} role="treeitem" aria-level={depth + 1} aria-setsize={siblings.length} aria-posinset={siblingIndex + 1} aria-expanded={!isCollapsed} aria-label={`集合 ${collection.name}`}>
-      <div draggable onDragStart={(event) => setDrag(event, "collection", collection.id)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropOnCollection(event, collection)} className={`tree-row tree-collection-row${props.selectedCollectionId === collection.id ? " is-active" : ""}${openMenuId === collection.id ? " is-menu-open" : ""}`} style={{ paddingLeft: 12 + depth * 20 }}>
+      <div draggable onDragStart={(event) => setDrag(event, "collection", collection.id)} onDragOver={(event) => event.preventDefault()} onDrop={(event) => dropOnCollection(event, collection)} className={`tree-row tree-collection-row${isCollectionActive(collection.id, props.selectedCollectionId, props.selectedRequestId) ? " is-active" : ""}${openMenuId === collection.id ? " is-menu-open" : ""}`} style={{ paddingLeft: 12 + depth * 20 }}>
         <button type="button" aria-label={`${isCollapsed ? "展开" : "折叠"}集合 ${collection.name}`} aria-expanded={!isCollapsed} className={`tree-chevron${isCollapsed ? "" : " is-expanded"}`} onClick={() => toggleExplorerNode(`collection:${collection.id}`)}><Icon name="chevron" /></button>
         <button type="button" className="tree-main tree-collection-main" onClick={() => props.onSelectCollection(collection.projectId, collection.id)} title={collection.name}>
-          <Icon name="folder" />
+          <Icon className="tree-collection-icon" name="folder" />
           <span className="tree-label">{collection.name}</span>
           <small className="tree-count" title={`${requests.length} 个直接请求，${collectionRequestCount(collection.id)} 个请求（含子集合）`}>{collectionRequestCount(collection.id)}</small>
         </button>
@@ -360,29 +540,29 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
       {!isCollapsed && requests.filter((request) => !normalizedQuery || `${request.name} ${request.target}`.toLocaleLowerCase().includes(normalizedQuery)).map((request, requestIndex, visibleRequests) => <div draggable={!batchMode} onDragStart={(event) => setDrag(event, "request", request.id)} className={`tree-row tree-request-row${request.envelope?.variables?.__protovoyCaseOf ? " tree-case-row" : ""}${batchMode ? " is-batch-mode" : ""}${selectedIds.includes(request.id) ? " is-selected" : ""}${props.selectedRequestId === request.id ? " is-active" : ""}${openMenuId === `request:${request.id}` ? " is-menu-open" : ""}`} role="treeitem" aria-selected={batchMode ? selectedIds.includes(request.id) : undefined} aria-level={depth + (request.envelope?.variables?.__protovoyCaseOf ? 3 : 2)} aria-setsize={visibleRequests.length} aria-posinset={requestIndex + 1} key={request.id} style={{ paddingLeft: (request.envelope?.variables?.__protovoyCaseOf ? 73 : 38) + depth * 20 }}>
         {!request.envelope?.variables?.__protovoyCaseOf ? (collectionRequests.some((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item)) ? <span className="tree-actions-leading"><button type="button" className={`tree-chevron tree-request-chevron${collapsedNodes.includes(`request:${request.id}`) ? "" : " is-expanded"}`} aria-label={`${collapsedNodes.includes(`request:${request.id}`) ? "展开" : "收起"}调试用例 ${request.name}`} aria-expanded={!collapsedNodes.includes(`request:${request.id}`)} onClick={() => toggleExplorerNode(`request:${request.id}`)}><Icon name="chevron"/></button></span> : <span className="tree-actions-leading tree-chevron-placeholder" aria-hidden="true"><span className="tree-chevron tree-request-chevron"><Icon name="chevron"/></span></span>) : null}
         <button type="button" className="tree-main tree-request-main" onClick={() => { if (batchMode) { toggleSelected(request.id); return; } const parentId = request.envelope?.variables?.__protovoyCaseOf; const parentStructure = parentId ? readInterfaceStructureMetadata(collectionRequests.find((item) => item.id === parentId)?.envelope?.metadata) : null; if (parentStructure) stashCaseInterfaceStructure(request.id, parentStructure); props.onOpenRequest(request.id); }} title={batchMode ? (selectedIds.includes(request.id) ? "取消选择" : "选择此项") : request.target}>{request.envelope?.variables?.__protovoyCaseOf ? <span className="tree-case-icon" title="调试用例"><Icon name="bolt"/></span> : request.protocolId === "websocket" ? <span className="tree-protocol-icon tree-protocol-websocket" title="WebSocket"><Icon name="websocket" /></span> : <b className="tree-request-method" data-method={(request.method ?? request.protocolId ?? "HTTP").toUpperCase()}>{request.method ?? request.protocolId?.toUpperCase() ?? "HTTP"}</b>}<span className="tree-label">{request.name}</span>{!request.envelope?.variables?.__protovoyCaseOf && collectionRequests.some((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item)) ? <small className="tree-interface-case-count" title="调试用例数量">（{collectionRequests.filter((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item)).length}）</small> : null}</button>
-        <span className="tree-actions tree-more" data-tree-menu={`request:${request.id}`}><button type="button" className="tree-action-button" ref={(node) => { const id = `request:${request.id}`; if (node) menuButtonRefs.current.set(id, node); else menuButtonRefs.current.delete(id); }} title="更多操作" aria-label={`${request.name} 更多操作`} aria-expanded={openMenuId === `request:${request.id}`} aria-haspopup="menu" onClick={(event) => { event.stopPropagation(); openCollectionMenu(`request:${request.id}`); }}><Icon name="menu" /></button>{renderRequestMenu(request)}</span>
+        <span className="tree-actions tree-more" data-tree-menu={`request:${request.id}`}><button type="button" className="tree-action-button" ref={(node) => { const id = `request:${request.id}`; if (node) menuButtonRefs.current.set(id, node); else menuButtonRefs.current.delete(id); }} title="更多操作" aria-label={`${request.name} 更多操作`} aria-expanded={openMenuId === `request:${request.id}`} aria-haspopup="menu" onClick={(event) => { event.stopPropagation(); openCollectionMenu(`request:${request.id}`); }}><Icon name="more" /></button>{renderRequestMenu(request)}</span>
       </div>)}
     </div>;
   }
   return <section className="workspace-explorer-tree" role="tree" aria-label="工作区资源树" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight Home End" tabIndex={0} onKeyDown={onTreeKeyDown}>
     <div className="workspace-tree-heading">
-      <span>接口管理 <small className="workspace-resource-count" title="当前项目请求总数">{selectedProjectRequestCount}</small></span>
+      <span>接口管理</span>
       <input ref={importInput} hidden multiple type="file" accept=".json,.yaml,.yml,.har,.protovoy" onChange={(event) => void importFiles(event.target.files)} />
     </div>
     <div ref={createMenuRef} className="workspace-quick-actions">
       <div className="workspace-search-row">
         <span className="workspace-search-field"><Icon name="search"/><input aria-label="搜索接口" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索接口、集合或 URL" /></span>
         <button type="button" className={`workspace-batch-trigger${batchMode ? " is-active" : ""}`} aria-pressed={batchMode} title={batchMode ? "退出多选" : "进入多选"} onClick={() => { setBatchMode((value) => !value); setSelectedIds([]); setBatchTarget(""); }}>多选</button>
-        <button ref={createMenuButtonRef} className="workspace-create-trigger" type="button" aria-label="新建资源" title="新建资源" aria-haspopup="menu" aria-expanded={createMenuOpen} onClick={() => setCreateMenuOpen((value) => !value)}><Icon name="plus" /></button>
+        <button ref={createMenuButtonRef} className="workspace-create-trigger" type="button" aria-label="新建资源" title="新建资源" aria-haspopup="menu" aria-expanded={createMenuOpen} onClick={() => setCreateMenuOpen((value) => { if (!value) setMoreProtocolsOpen(false); return !value; })}><Icon name="plus" /></button>
       </div>
-      {createMenuOpen && createMenuPos && typeof document !== "undefined" ? createPortal(<div className="workspace-protocol-menu" data-workspace-create-menu role="menu" aria-label="选择接口协议" style={{ top: createMenuPos.top, left: createMenuPos.left, width: createMenuPos.width }}>
-        <div className="workspace-create-menu-title">新建</div>
-        <div className="workspace-create-menu-grid">{CREATE_PROTOCOL_GROUPS.map((group) => group.items.map(([id, label, icon]) => <button key={id} type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: id })); }}><Icon name={icon} /><span>{label === "HTTP" ? "HTTP 接口" : label}</span></button>))}</div>
+      {createMenuOpen && createMenuPos && typeof document !== "undefined" ? createPortal(<div className="workspace-protocol-menu" data-workspace-create-menu data-expanded={moreProtocolsOpen ? "true" : "false"} role="menu" aria-label="选择接口协议" style={{ top: createMenuPos.top, left: createMenuPos.left, width: createMenuPos.width }}>
+        <div className="workspace-create-menu-title">新建接口</div>
+        <div className="workspace-create-menu-grid">{PRIMARY_CREATE_PROTOCOLS.map(([id, label, icon]) => <button key={id} type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: id })); }}><Icon name={icon} /><span>{label === "HTTP" ? "HTTP 接口" : label}</span></button>)}{moreProtocolsOpen ? MORE_CREATE_PROTOCOLS.map(([id, label, icon]) => <button key={id} type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: id })); }}><Icon name={icon} /><span>{label}</span></button>) : <button type="button" className="workspace-create-menu-more" role="menuitem" aria-expanded="false" onClick={() => setMoreProtocolsOpen(true)}><Icon name="more"/><span>更多…</span></button>}</div>
         <div className="workspace-create-menu-divider"/>
         <div className="workspace-create-menu-title">项目资源</div>
         <div className="workspace-create-menu-grid">
-          <button type="button" role="menuitem" disabled={!selectedProject} onClick={() => { if (selectedProject) setDraft({ kind: "module", owner: selectedProject.id }); setCreateMenuOpen(false); }}><Icon name="folder"/><span>接口目录</span></button>
-          <button type="button" role="menuitem" disabled={!props.selectedCollectionId} onClick={() => { const selected = tree.collections.find((item) => item.id === props.selectedCollectionId); if (selected) setDraft({ kind: "collection", owner: selected.projectId, parentId: selected.id }); setCreateMenuOpen(false); }}><Icon name="folder"/><span>新建子集合</span></button>
+          <button type="button" role="menuitem" disabled={!selectedProject || !props.onCreateModule} onClick={() => { if (selectedProject) setDraft({ kind: "module", owner: selectedProject.id }); setCreateMenuOpen(false); }}><Icon name="module"/><span>新建模块</span></button>
+          <button type="button" role="menuitem" disabled={!selectedProject || !projectModules.length} onClick={() => { if (selectedProject && projectModules[0]) setDraft({ kind: "collection", owner: selectedProject.id, parentId: null, moduleId: projectModules[0].isDefault && !storedProjectModules?.length ? undefined : projectModules[0].id }); setCreateMenuOpen(false); }}><Icon name="folder"/><span>新建目录</span></button>
           <button type="button" role="menuitem" onClick={() => { setCreateMenuOpen(false); window.dispatchEvent(new CustomEvent("protovoy-open-script-library")); }}><Icon name="code"/><span>脚本库</span></button>
         </div>
         <div className="workspace-create-menu-divider"/>
@@ -400,8 +580,42 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
       <Button size="compact" variant="danger" disabled={!selectedIds.length} onClick={() => void batchDelete()}>删除</Button>
       <Button size="compact" variant="ghost" onClick={() => { setBatchMode(false); setSelectedIds([]); setBatchTarget(""); }}>取消</Button>
     </div>}
-    {selectedProject ? projectModules.map((module) => { const moduleCollapsed = collapsedNodes.includes(`module:${module.id}`); return <div key={module.id} className="tree-module" role="treeitem" aria-expanded={!moduleCollapsed} aria-label={`模块 ${module.name}`}>
-      <div className="tree-row tree-module-row"><button type="button" className={`tree-chevron${moduleCollapsed ? "" : " is-expanded"}`} aria-label={`${moduleCollapsed ? "展开" : "折叠"}模块 ${module.name}`} onClick={() => toggleExplorerNode(`module:${module.id}`)}><Icon name="chevron"/></button><Icon name="folder"/><strong className="tree-label">{module.name}</strong>{module.isDefault ? <small className="tree-module-badge">默认</small> : null}<button type="button" className="tree-action-button" title="在此模块中新建集合" onClick={() => setDraft({ kind: "collection", owner: module.projectId, parentId: null, moduleId: module.id })}><Icon name="plus"/></button></div>
+    {selectedProject ? projectModules.map((module) => {
+      const moduleCollapsed = collapsedNodes.includes(`module:${module.id}`);
+      const moduleCollectionIds = tree.collections
+        .filter((collection) => collection.projectId === module.projectId && collectionInModule(collection, module))
+        .map((collection) => collection.id);
+      const allCollectionsExpanded = !moduleCollapsed && moduleCollectionIds.every((id) => !collapsedNodes.includes(`collection:${id}`));
+      const toggleAllLabel = allCollectionsExpanded ? "收起" : "展开";
+      return <div key={module.id} className="tree-module" role="treeitem" aria-expanded={!moduleCollapsed} aria-label={`模块 ${module.name}`}>
+      <div className={`tree-row tree-module-row${openMenuId === `module:${module.id}:menu` ? " is-menu-open" : ""}`}>
+        <Icon className="tree-module-icon" name="module"/>
+        <strong className="tree-label">{module.name}</strong>
+        <button type="button" className={`tree-action-button tree-module-chevron${moduleCollapsed ? "" : " is-expanded"}`} aria-label={`${moduleCollapsed ? "展开" : "折叠"}模块 ${module.name}`} aria-expanded={!moduleCollapsed} onClick={() => toggleExplorerNode(`module:${module.id}`)}><Icon name="triangle"/></button>
+        <span className="tree-actions tree-module-actions">
+          <button
+            type="button"
+            className="tree-action-button tree-module-toggle-all"
+            disabled={!moduleCollectionIds.length}
+            title={`全部${toggleAllLabel}`}
+            aria-label={`${toggleAllLabel}模块 ${module.name} 的全部目录`}
+            onClick={() => useAppStore.setState({ collapsedExplorerNodes: setModuleCollectionsCollapsed(collapsedNodes, module.id, moduleCollectionIds, allCollectionsExpanded) })}
+          ><Icon name={allCollectionsExpanded ? "collapse-all" : "expand-all"}/></button>
+          <span className="tree-more" data-tree-menu={`module:${module.id}:menu`}>
+            <button
+              type="button"
+              className="tree-action-button"
+              ref={(node) => { const id = `module:${module.id}:menu`; if (node) menuButtonRefs.current.set(id, node); else menuButtonRefs.current.delete(id); }}
+              title="更多操作"
+              aria-label={`${module.name} 模块更多操作`}
+              aria-expanded={openMenuId === `module:${module.id}:menu`}
+              aria-haspopup="menu"
+              onClick={(event) => { event.stopPropagation(); openCollectionMenu(`module:${module.id}:menu`); }}
+            ><Icon name="more"/></button>
+            {renderModuleMenu(module)}
+          </span>
+        </span>
+      </div>
       {!moduleCollapsed ? <div className="tree-module-content">
 
         {tree.collections.filter((item) => item.projectId === selectedProject.id && collectionInModule(item, module) && !item.parentId && collectionMatches(item)).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)).map((collection) => renderCollection(collection, 1))}
@@ -409,7 +623,7 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
 
       </div> : null}
     </div>; }) : null}
-    {draft?.kind === "module" && typeof document !== "undefined" ? createPortal(<ModalFrame open onClose={() => setDraft(null)} className="collection-create-dialog" ariaLabel="新建接口目录"><header><div><h2>新建接口目录</h2><p>请选择要创建的目录类型</p></div><IconButton label="关闭" icon="close" onClick={() => setDraft(null)} /></header><div className="interface-directory-options"><button type="button" onClick={() => { setDraft({ kind: "module", owner: draft.owner }); }} className="is-selected"><Icon name="folder"/><span><strong>模块</strong><small>划分独立业务域，可包含多个目录</small></span></button><button type="button" onClick={() => setDraft({ kind: "collection", owner: draft.owner, parentId: null })}><Icon name="folder"/><span><strong>目录</strong><small>直接创建项目根目录</small></span></button></div><label><span>模块名称</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} placeholder="例如：用户中心"/></label><footer><Button variant="secondary" onClick={() => setDraft(null)}>取消</Button><Button variant="primary" disabled={!name.trim() || !props.onCreateModule} onClick={() => void submit()}>创建模块</Button></footer></ModalFrame>, document.body) : null}
-    {draft?.kind === "collection" && typeof document !== "undefined" ? createPortal(<ModalFrame open onClose={() => setDraft(null)} className="collection-create-dialog" ariaLabelledBy="collection-create-title"><header><div><h2 id="collection-create-title">新建集合</h2><p>{collectionPath(draft.parentId).length ? `父级：${collectionPath(draft.parentId).map((item) => item.name).join(" / ")}` : `项目根目录：${selectedProject?.name ?? "当前项目"}`}</p></div><IconButton label="关闭" icon="close" onClick={() => setDraft(null)} /></header><div className="collection-create-level"><Icon name="folder"/><span>新集合将位于第 <strong>{collectionPath(draft.parentId).length + 1}</strong> 层</span></div><label><span>集合名称</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} placeholder="请输入集合名称"/></label><footer><Button variant="secondary" onClick={() => { setDraft(null); setName(""); }}>取消</Button><Button variant="primary" disabled={!name.trim()} onClick={() => void submit()}>创建集合</Button></footer></ModalFrame>, document.body) : null}
+    {draft?.kind === "module" && typeof document !== "undefined" ? createPortal(<ModalFrame open onClose={() => setDraft(null)} closeOnBackdrop={!name.trim()} closeOnEscape={!name.trim()} className="collection-create-dialog" ariaLabelledBy="module-create-title"><header><div><h2 id="module-create-title">新建模块</h2><p>模块用于划分独立业务域，可包含多个目录。</p></div><IconButton label="关闭" icon="close" onClick={() => setDraft(null)} /></header><label><span>模块名称</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} placeholder="例如：用户中心"/></label><footer><Button variant="secondary" onClick={() => setDraft(null)}>取消</Button><Button variant="primary" disabled={!name.trim() || !props.onCreateModule} onClick={() => void submit()}>创建模块</Button></footer></ModalFrame>, document.body) : null}
+    {draft?.kind === "collection" && typeof document !== "undefined" ? createPortal(<ModalFrame open onClose={() => setDraft(null)} closeOnBackdrop={!name.trim()} closeOnEscape={!name.trim()} className="collection-create-dialog" ariaLabelledBy="collection-create-title"><header><div><h2 id="collection-create-title">新建目录</h2><p>选择模块或已有目录作为父级。</p></div><IconButton label="关闭" icon="close" onClick={() => setDraft(null)} /></header><label><span>目录名称</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submit(); }} placeholder="请输入目录名称"/></label><CollectionParentPicker options={collectionParentOptions} value={draft.parentId ? `collection:${draft.parentId}` : `module:${draft.moduleId ?? projectModules.find((module) => module.isDefault)?.id ?? projectModules[0]?.id ?? ""}`} onChange={(option) => setDraft({ ...draft, parentId: option.kind === "collection" ? option.id : null, moduleId: option.moduleId })}/><footer><Button variant="secondary" onClick={() => { setDraft(null); setName(""); }}>取消</Button><Button variant="primary" disabled={!name.trim() || !collectionParentOptions.length} onClick={() => void submit()}>创建目录</Button></footer></ModalFrame>, document.body) : null}
   </section>;
 }

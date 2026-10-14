@@ -12,6 +12,7 @@ import type { MockDraftSeed } from "./mockGeneration";
 import { peekHydrate, stashHydrate } from "./openRequestPipeline";
 import { RESPONSE_BODY_TYPES, normalizeResponseBodyType, readResponseComponents, type ResponseBodyType } from "./responseComponents";
 import { readStorage } from "./storageMigration";
+import { InterfaceNameTargetProvider } from "./InterfaceNameTarget";
 
 export type InterfaceLifecycleTab =
   | "debug"
@@ -300,6 +301,7 @@ export function InterfaceLifecycleShell({
 }: InterfaceLifecycleShellProps) {
   const availableTabs = visibleLifecycleTabsFor(workbenchId, isSaved);
   const [activeTab, setActiveTab] = useState<InterfaceLifecycleTab>("debug");
+  const [nameTarget, setNameTarget] = useState<HTMLDivElement | null>(null);
   const client = definitionClient ?? agentDefinitionClient();
   const pendingDebugHydrate =
     activeTab === "debug" ? peekHydrate(workbenchId) : null;
@@ -349,30 +351,33 @@ export function InterfaceLifecycleShell({
 
   const active = availableTabs.includes(activeTab) ? activeTab : "debug";
   return (
+    <InterfaceNameTargetProvider target={nameTarget}>
     <section
       className={`interface-lifecycle${active === "debug" || active === "definition" ? " has-commandbar" : ""}`}
       aria-label={`${title} \u63a5\u53e3\u5de5\u4f5c\u53f0`}
     >
-      <RovingTabList className="interface-lifecycle-tabs" ariaLabel="\u63a5\u53e3\u751f\u547d\u5468\u671f">
-        {availableTabs.map((id) => {
-          const tab = TABS[id];
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              tabIndex={active === id ? 0 : -1}
-              aria-selected={active === id}
-              aria-controls={`interface-lifecycle-${sessionId}-${id}`}
-              className={active === id ? "is-active" : ""}
-              onClick={() => setActiveTab(id)}
-            >
-              <Icon name={tab.icon} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </RovingTabList>
+      <div className="interface-lifecycle-header" style={{ minWidth: 0, display: "flex", alignItems: "center", borderBottom: "1px solid var(--protovoy-border)", background: "color-mix(in srgb,var(--protovoy-bg-elevated) 62%,var(--protovoy-workspace))" }}>
+        <RovingTabList className="interface-lifecycle-tabs" ariaLabel="接口生命周期" style={{ flex: "0 1 auto", paddingRight: 0, borderBottom: 0, background: "transparent" }}>
+          {availableTabs.map((id) => {
+            const tab = TABS[id];
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                tabIndex={active === id ? 0 : -1}
+                aria-selected={active === id}
+                aria-controls={`interface-lifecycle-${sessionId}-${id}`}
+                className={active === id ? "is-active" : ""}
+                onClick={() => setActiveTab(id)}
+              >
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </RovingTabList>
+        <div ref={setNameTarget} id={`interface-name-${sessionId}`} className="interface-lifecycle-name-slot" style={{ width: "min(280px, 30vw)", minWidth: 140, marginLeft: 8, paddingLeft: 16, borderLeft: "1px solid var(--protovoy-border)" }} />
+      </div>
       <div id={`interface-commandbar-${sessionId}`} data-active-tab={active} className={`interface-lifecycle-commandbar${active === "debug" || active === "definition" ? "" : " is-hidden"}`} />
       <div
         id={`interface-lifecycle-${sessionId}-debug`}
@@ -399,6 +404,7 @@ export function InterfaceLifecycleShell({
         )}
       </div> : null}
     </section>
+    </InterfaceNameTargetProvider>
   );
 }
 

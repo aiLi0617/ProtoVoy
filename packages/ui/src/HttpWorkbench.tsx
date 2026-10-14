@@ -14,7 +14,7 @@ import type {
 } from "@protovoy/request-model";
 import { Icon } from "./Icons";
 import { CodeEditor } from "./CodeEditor";
-import { CodeGenerator } from "./CodeGenerator";
+import { HttpLiveRequestView } from "./HttpLiveRequestView";
 import { SplitPane, WorkbenchFrame } from "./WorkbenchFrame";
 import { VirtualList } from "./VirtualList";
 import { RovingTabList } from "./RovingTabList";
@@ -30,9 +30,11 @@ import { alignRequestToInterface, captureHttpInterfaceStructure, diffHttpInterfa
 import { DEFAULT_RESPONSE_VALIDATION_SETTINGS, readResponseValidationSettings, RESPONSE_VALIDATION_SETTINGS_EVENT, type ProjectResponseValidationSettings } from "./responseValidationSettings";
 import { validateDesignedResponse, type DesignedResponse } from "./designedResponseValidator";
 import { KeyValueRows, cookieRowsFromHeaders, createHeaderRow, createQueryRow, headerRowsFromPairs, keyValueRowHasContent, queryRowsFromUrl, urlWithQueryRows, type HeaderRow, type RowValueType } from "./KeyValueEditor";
+import { useInterfaceNameTarget } from "./InterfaceNameTarget";
 
 export { KeyValueRows, createQueryRow, queryRowsFromUrl, urlWithQueryRows } from "./KeyValueEditor";
 export type { HeaderRow, RowValueType } from "./KeyValueEditor";
+export { HttpLiveRequestView } from "./HttpLiveRequestView";
 
 export type AuthKind = "none" | "bearer" | "basic" | "api_key" | "oauth2_client_credentials" | "oauth2_authorization_code";
 type BearerTokenSource = "direct" | "secret_ref";
@@ -397,16 +399,6 @@ function requestBodySize(request: HttpWorkbenchRequest | null): number {
   return new TextEncoder().encode(request?.body ?? "").length;
 }
 
-export function HttpLiveRequestView({ request }: { request: HttpWorkbenchRequest }) {
-  const contentType = request.headers.find(([header]) => header.toLowerCase() === "content-type")?.[1] ?? formatBytes(requestBodySize(request));
-  return <div className="http-live-request">
-    <section className="http-live-url-section"><h4>请求 URL:</h4><div className="http-request-summary" data-method={request.method.toUpperCase()}><strong>{request.method}</strong><code title={request.url}>{request.url}</code></div></section>
-    <section className="http-live-data-section"><h4>Header:</h4><div className="http-request-data" role="table" aria-label="实时请求 Header">{request.headers.length ? <><div className="http-request-data-heading" role="row"><strong role="columnheader">名称</strong><span role="columnheader">值</span></div>{request.headers.map(([name, value], index) => <div role="row" key={`${name}-${index}`}><strong role="cell">{name}</strong><span role="cell">{value}</span></div>)}</> : <p>（空）</p>}</div></section>
-    <section className="http-live-data-section"><h4>Body <span>{contentType}</span></h4><pre className={`http-request-body${request.body ? "" : " is-empty"}`}>{request.body || "（空）"}</pre></section>
-    <section className="http-live-code-section"><CodeGenerator request={request}/></section>
-  </div>;
-}
-
 function responseHeaderSize(meta: ResponseMeta | null | undefined): number {
   return meta?.headers.reduce((size, [name, value]) => size + new TextEncoder().encode(`${name}: ${value}\r\n`).length, 0) ?? 0;
 }
@@ -671,10 +663,13 @@ export function HttpWorkbench({
   const [environmentRef,setEnvironmentRef]=useState<string>(defaultEnvironmentId);
   const [toolbarTarget, setToolbarTarget] = useState<HTMLElement | null>(null);
   const [commandbarTarget, setCommandbarTarget] = useState<HTMLElement | null>(null);
+  const nameTarget = useInterfaceNameTarget();
   const [lifecycleTab, setLifecycleTab] = useState("debug");
   void toolbarTarget;
   useEffect(() => { setToolbarTarget(toolbarTargetId ? document.getElementById(toolbarTargetId) : null); }, [toolbarTargetId]);
-  useEffect(() => { setCommandbarTarget(commandbarTargetId ? document.getElementById(commandbarTargetId) : null); }, [commandbarTargetId]);
+  useEffect(() => {
+    setCommandbarTarget(commandbarTargetId ? document.getElementById(commandbarTargetId) : null);
+  }, [commandbarTargetId]);
   useEffect(() => {
     if (!commandbarTarget) return;
     const sync = () => setLifecycleTab(commandbarTarget.dataset.activeTab || "debug");
@@ -1616,8 +1611,9 @@ export function HttpWorkbench({
   </div>;
   const environmentControl = <div className="http-environment-select"><select aria-label="请求环境" value={environmentRef} onChange={(event)=>setEnvironmentRef(event.target.value)} disabled={loading}>{environmentOptions.map((environment)=><option key={environment.id} value={environment.id}>{environment.name}{environment.id===defaultEnvironmentId?" · 默认":""}</option>)}</select><button type="button" className="http-environment-manage" aria-label="编辑环境变量" title="编辑环境变量" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-environment"))}><Icon name="menu"/></button></div>;
 
+  const requestNameField = <label className="http-request-name-field" style={nameTarget ? { display: "block" } : undefined}><input aria-label={openedCaseParentId ? "接口及用例名称" : "接口名称"} style={nameTarget ? { ...styles.input, width: "100%", height: 30, padding: "5px 9px", borderRadius: 6, background: "transparent", fontSize: 11, fontWeight: 600, textOverflow: "ellipsis" } : styles.input} value={openedCaseParentId && openedCaseInterfaceName ? `${openedCaseInterfaceName}（${name}）` : name} onChange={(event) => { const value = event.target.value; if (openedCaseParentId && openedCaseInterfaceName) { const prefix = `${openedCaseInterfaceName}（`; setName(value.startsWith(prefix) ? value.slice(prefix.length).replace(/）$/, "") : value); } else setName(value); }} placeholder="接口名称" disabled={loading} /></label>;
   const requestCommandbar = <div className="http-request-commandbar">
-    <label className="http-request-name-field"><input aria-label={openedCaseParentId ? "接口及用例名称" : "接口名称"} style={styles.input} value={openedCaseParentId && openedCaseInterfaceName ? `${openedCaseInterfaceName}（${name}）` : name} onChange={(event) => { const value = event.target.value; if (openedCaseParentId && openedCaseInterfaceName) { const prefix = `${openedCaseInterfaceName}（`; setName(value.startsWith(prefix) ? value.slice(prefix.length).replace(/）$/, "") : value); } else setName(value); }} placeholder="接口名称" disabled={loading} /></label>
+    {nameTarget ? null : requestNameField}
     <div className="http-request-primary-actions">
       <select aria-label="HTTP 方法" style={styles.select} value={method} onChange={(e) => setMethod(e.target.value)} disabled={loading}>
         {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -1627,7 +1623,7 @@ export function HttpWorkbench({
         <button type="button" className="http-send-button" style={styles.button} disabled={loading} onClick={() => void handleSave(true)}><Icon name="archive"/>保存</button>
         <button type="button" className="http-save-button" style={styles.secondaryButton} onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-lifecycle-tab", { detail: { sessionId: workbenchSessionId, tab: "debug" } }))}><Icon name="send"/>调试</button>
       </> : <>
-        <button className={`http-send-button${loading ? " is-cancel" : ""}`} style={styles.button} disabled={loading && (!onCancel || !executionId)} aria-label={loading ? t("action.cancel") : t("action.send")} onClick={() => loading ? void handleCancel() : void handleSend()}>
+        <button type="button" className={`http-send-button${loading ? " is-cancel" : ""}`} style={styles.button} disabled={loading && (!onCancel || !executionId)} aria-label={loading ? t("action.cancel") : t("action.send")} onClick={() => loading ? void handleCancel() : void handleSend()}>
           <Icon name={loading ? "close" : "send"}/>{loading ? t("action.cancel") : t("action.send")}
         </button>
       {onSave && <div className="http-save-split" ref={saveMenuRef}>
@@ -1664,7 +1660,7 @@ export function HttpWorkbench({
           <span><strong>同时保存响应</strong><small>{hasResponseResult ? "包含状态码、Headers、Content-Type、耗时和响应正文" : "当前没有响应，仅保存请求配置"}</small></span>
         </label> : null}
         <footer><button type="button" className="ui-button secondary" disabled={caseSaving} onClick={() => setCaseDialogOpen(false)}>取消</button><button type="submit" className="ui-button primary" disabled={caseSaving || !caseName.trim()}>{caseSaving ? "保存中…" : "保存"}</button></footer>
-      </ModalFrame>, document.body) : null}{toolbarTarget ? createPortal(environmentControl, toolbarTarget) : null}{commandbarTarget ? createPortal(requestCommandbar, commandbarTarget) : null}<WorkbenchFrame title="HTTP" hideHeader busy={loading} status={embeddedPreview ? undefined : statusMsg ? <span role="status">{statusMsg}</span> : <span>{t("status.ready")}</span>}>
+      </ModalFrame>, document.body) : null}{toolbarTarget ? createPortal(environmentControl, toolbarTarget) : null}{nameTarget ? createPortal(requestNameField, nameTarget) : null}{commandbarTarget ? createPortal(requestCommandbar, commandbarTarget) : null}<WorkbenchFrame title="HTTP" hideHeader busy={loading} status={embeddedPreview ? undefined : statusMsg ? <span role="status">{statusMsg}</span> : <span>{t("status.ready")}</span>}>
       <div className={`http-workbench-layout${commandbarTarget || embeddedPreview ? " has-external-commandbar" : ""}${embeddedPreview ? " is-embedded-preview" : ""}`}>
       {commandbarTarget || embeddedPreview ? null : requestCommandbar}
       {historyStartedAt ? <div className="http-history-sent-at">{historyInterfaceName && onOpenHistoryInterface ? <button type="button" className="http-history-interface-link" aria-label={"\u6253\u5f00\u63a5\u53e3 " + historyInterfaceName} onClick={onOpenHistoryInterface}><Icon name="folder"/><span>{historyInterfaceName}</span></button> : null}<span className="http-history-time"><Icon name="activity"/><span>{"\u5386\u53f2\u53d1\u9001\u65f6\u95f4"}</span><time dateTime={historyStartedAt}>{new Date(historyStartedAt).toLocaleString("zh-CN", { hour12: false })}</time></span></div> : null}
@@ -1817,7 +1813,7 @@ export function HttpWorkbench({
           <div style={styles.row}>
             <strong style={{ color: "var(--protovoy-text)" }}>执行历史</strong>
             <button type="button" className="ui-icon-button" aria-label="关闭执行历史" onClick={() => setHistoryOpen(false)}><Icon name="close"/></button>
-            <button style={styles.secondaryButton} disabled={loading} onClick={handleRefreshHistory}>
+            <button type="button" style={styles.secondaryButton} disabled={loading} onClick={handleRefreshHistory}>
               刷新
             </button>
           </div>
@@ -1844,7 +1840,7 @@ export function HttpWorkbench({
                 placeholder="如 200"
               />
             </label>
-            <button style={styles.secondaryButton} disabled={loading} onClick={handleRefreshHistory}>
+            <button type="button" style={styles.secondaryButton} disabled={loading} onClick={handleRefreshHistory}>
               筛选
             </button>
           </div>
@@ -1872,7 +1868,7 @@ export function HttpWorkbench({
                   </span>
                   <span style={styles.muted}>{item.target ?? item.protocolId}</span>
                   {onReplayHistory && (
-                    <button
+                    <button type="button"
                       style={styles.linkButton}
                       disabled={loading}
                       onClick={() => handleReplay(item.id)}
@@ -1919,18 +1915,18 @@ export function HttpWorkbench({
           ) : (
             <>
               <RovingTabList style={styles.responseTabs} ariaLabel="响应内容视图">
-                <button role="tab" tabIndex={responseTab === "body" ? 0 : -1} aria-selected={responseTab === "body"} style={responseTab === "body" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("body")}>Body</button>
-                <button role="tab" tabIndex={responseTab === "cookies" ? 0 : -1} aria-selected={responseTab === "cookies"} style={responseTab === "cookies" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("cookies")}>Cookie <span style={styles.count}>{responseCookies.length}</span></button>
-                <button role="tab" tabIndex={responseTab === "headers" ? 0 : -1} aria-selected={responseTab === "headers"} style={responseTab === "headers" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("headers")}>Header <span style={styles.count}>{result.responseMeta?.headers.length ?? 0}</span></button>
-                <button role="tab" tabIndex={responseTab === "console" ? 0 : -1} aria-selected={responseTab === "console"} style={responseTab === "console" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("console")}>控制台</button>
-                <button role="tab" tabIndex={responseTab === "request" ? 0 : -1} aria-selected={responseTab === "request"} style={responseTab === "request" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("request")}>实时请求</button>
+                <button type="button" role="tab" tabIndex={responseTab === "body" ? 0 : -1} aria-selected={responseTab === "body"} style={responseTab === "body" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("body")}>Body</button>
+                <button type="button" role="tab" tabIndex={responseTab === "cookies" ? 0 : -1} aria-selected={responseTab === "cookies"} style={responseTab === "cookies" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("cookies")}>Cookie <span style={styles.count}>{responseCookies.length}</span></button>
+                <button type="button" role="tab" tabIndex={responseTab === "headers" ? 0 : -1} aria-selected={responseTab === "headers"} style={responseTab === "headers" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("headers")}>Header <span style={styles.count}>{result.responseMeta?.headers.length ?? 0}</span></button>
+                <button type="button" role="tab" tabIndex={responseTab === "console" ? 0 : -1} aria-selected={responseTab === "console"} style={responseTab === "console" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("console")}>控制台</button>
+                <button type="button" role="tab" tabIndex={responseTab === "request" ? 0 : -1} aria-selected={responseTab === "request"} style={responseTab === "request" ? styles.tabActive : styles.tab} onClick={() => setResponseTab("request")}>实时请求</button>
               </RovingTabList>
               {responseTab === "body" && responseHasBody && <RovingTabList className="http-response-view-toolbar" ariaLabel="响应显示模式">
-                  <button role="tab" tabIndex={responseView === "pretty" ? 0 : -1} aria-selected={responseView === "pretty"} style={responseView === "pretty" ? styles.tabActive : styles.tab} onClick={() => setResponseView("pretty")}>美化</button>
-                  <button role="tab" tabIndex={responseView === "raw" ? 0 : -1} aria-selected={responseView === "raw"} style={responseView === "raw" ? styles.tabActive : styles.tab} onClick={() => setResponseView("raw")}>原文</button>
-                  <button role="tab" tabIndex={responseView === "hex" ? 0 : -1} aria-selected={responseView === "hex"} style={responseView === "hex" ? styles.tabActive : styles.tab} onClick={() => setResponseView("hex")}>Hex</button>
-                  <button role="tab" tabIndex={responseView === "table" ? 0 : -1} aria-selected={responseView === "table"} style={responseView === "table" ? styles.tabActive : styles.tab} disabled={!responseTable} onClick={() => setResponseView("table")}>表格</button>
-                  <button role="tab" tabIndex={responseView === "preview" ? 0 : -1} aria-selected={responseView === "preview"} style={responseView === "preview" ? styles.tabActive : styles.tab} disabled={!responsePreviewKind} onClick={() => setResponseView("preview")}>预览</button>
+                  <button type="button" role="tab" tabIndex={responseView === "pretty" ? 0 : -1} aria-selected={responseView === "pretty"} style={responseView === "pretty" ? styles.tabActive : styles.tab} onClick={() => setResponseView("pretty")}>美化</button>
+                  <button type="button" role="tab" tabIndex={responseView === "raw" ? 0 : -1} aria-selected={responseView === "raw"} style={responseView === "raw" ? styles.tabActive : styles.tab} onClick={() => setResponseView("raw")}>原文</button>
+                  <button type="button" role="tab" tabIndex={responseView === "hex" ? 0 : -1} aria-selected={responseView === "hex"} style={responseView === "hex" ? styles.tabActive : styles.tab} onClick={() => setResponseView("hex")}>Hex</button>
+                  <button type="button" role="tab" tabIndex={responseView === "table" ? 0 : -1} aria-selected={responseView === "table"} style={responseView === "table" ? styles.tabActive : styles.tab} disabled={!responseTable} onClick={() => setResponseView("table")}>表格</button>
+                  <button type="button" role="tab" tabIndex={responseView === "preview" ? 0 : -1} aria-selected={responseView === "preview"} style={responseView === "preview" ? styles.tabActive : styles.tab} disabled={!responsePreviewKind} onClick={() => setResponseView("preview")}>预览</button>
                   {responseView === "pretty" && <select className="http-response-tool-select" aria-label="响应内容类型" value={responseFormat} onChange={(event) => setResponseFormat(event.target.value as typeof responseFormat)}><option value="auto">自动类型</option><option value="json">JSON</option><option value="xml">XML</option><option value="html">HTML</option><option value="text">Text</option></select>}
                   {(responseView === "pretty" || responseView === "raw") && <select className="http-response-tool-select" aria-label="响应字符集" value={responseCharset} onChange={(event) => setResponseCharset(event.target.value)}><option value="auto">自动字符集</option><option value="utf-8">UTF-8</option><option value="gb18030">GBK / GB18030</option><option value="utf-16le">UTF-16 LE</option><option value="utf-16be">UTF-16 BE</option><option value="windows-1252">Windows-1252</option><option value="iso-8859-1">ISO-8859-1</option></select>}
                   {(responseView === "pretty" || responseView === "raw") && <button type="button" className={responseWrap ? "http-response-icon-button is-active" : "http-response-icon-button"} aria-label="自动换行" title="自动换行" aria-pressed={responseWrap} onClick={() => setResponseWrap((wrap) => !wrap)}><Icon name="wrap"/></button>}

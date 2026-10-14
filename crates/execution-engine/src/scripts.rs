@@ -232,7 +232,7 @@ mod tests {
         );
         assert_eq!(
             result.variables.get("encoded").map(String::as_str),
-            Some("QXBpVm95")
+            Some("UHJvdG9Wb3k=")
         );
         assert_eq!(
             result.variables.get("decoded").map(String::as_str),

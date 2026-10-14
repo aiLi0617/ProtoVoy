@@ -38,8 +38,9 @@ use driver_sse::SseDriver;
 use driver_tcp_udp::{TcpDriver, UdpDriver};
 use driver_websocket::WebSocketDriver;
 use execution_engine::{
-    run_ai_assistant, sample_http_get, AiAssistRequest, AiAssistResponse, DriverDescriptor,
-    ExecutionEngine, VariableScope,
+    orchestrate_collection_to_completion, run_ai_assistant, sample_http_get, AiAssistRequest,
+    AiAssistResponse, CollectionCaseOutcome, CollectionRunCase, CollectionRunItem,
+    DriverDescriptor, ExecutionEngine, VariableScope,
 };
 use futures::stream::{self, Stream};
 use futures::{SinkExt, StreamExt};
@@ -319,6 +320,14 @@ struct UpdateCollectionBody {
     name: String,
     parent_id: Option<String>,
     sort_order: i64,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct RunCollectionBody {
+    #[serde(default)]
+    fail_fast: bool,
+    environment_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -608,9 +617,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/projects/{id}", patch(rename_project))
         .route("/v1/projects/{id}", delete(delete_project))
         .route("/v1/modules", post(create_module))
+        .route("/v1/modules/{id}", patch(rename_module))
         .route("/v1/collections", post(create_collection))
         .route("/v1/collections/{id}", patch(update_collection))
         .route("/v1/collections/{id}", delete(delete_collection))
+        .route("/v1/collections/{id}/runs", post(run_collection))
         .route("/v1/collections/{id}/tags", patch(update_collection_tags))
         .route(
             "/v1/mock-rules",
@@ -2322,6 +2333,22 @@ async fn create_module(
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
 }
 
+async fn rename_module(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<NamedBody>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    check_protocol_version(&headers)?;
+    state
+        .store
+        .lock()
+        .await
+        .rename_module(&id, &body.name)
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
+}
+
 async fn create_workspace(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -2514,6 +2541,173 @@ async fn delete_collection(
         .delete_collection(&id)
         .map(|_| StatusCode::NO_CONTENT)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
+}
+
+async fn run_collection(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<RunCollectionBody>,
+) -> Result<Json<Vec<CollectionRunCase>>, (StatusCode, String)> {
+    check_protocol_version(&headers)?;
+    let requests = state
+        .store
+        .lock()
+        .await
+        .list_collection_requests_for_run(&id)
+        .map_err(internal_store_error)?;
+    let mut items = Vec::with_capacity(requests.len());
+    for stored in requests {
+        let environment_id = body
+            .environment_id
+            .as_deref()
+            .or(stored.envelope.environment_ref.as_deref())
+            .unwrap_or("default-env");
+        let mut scope = VariableScope::default();
+        if let Some(environment) = state
+            .store
+            .lock()
+            .await
+            .get_environment(environment_id)
+            .map_err(internal_store_error)?
+        {
+            scope.environment = environment.variables;
+            for secret_name in environment.secret_refs {
+                if let Ok(value) = state.secrets.resolve(&secret_name) {
+                    scope.secrets.insert(secret_name.clone(), value.clone());
+                    scope.environment.insert(secret_name, value);
+                }
+            }
+        }
+        if let Some(auth) = &stored.envelope.auth_ref {
+            if let Some(name) = auth.secret_ref.as_deref().filter(|name| !name.is_empty()) {
+                if let Ok(value) = state.secrets.resolve(name) {
+                    scope.secrets.insert(name.to_string(), value);
+                }
+            }
+        }
+        items.push(CollectionRunItem {
+            request_id: stored.id,
+            request: stored.envelope,
+            scope,
+        });
+    }
+
+    let state_ref = &state;
+    let result =
+        orchestrate_collection_to_completion(items, body.fail_fast, |request, scope| async move {
+            execute_collection_case(state_ref, request, scope).await
+        })
+        .await;
+    Ok(Json(result.cases))
+}
+
+async fn execute_collection_case(
+    state: &AppState,
+    request: RequestEnvelope,
+    scope: VariableScope,
+) -> CollectionCaseOutcome {
+    let mut snapshot = request.clone();
+    if snapshot.auth_ref.is_some() {
+        if let ProtocolPayload::Http(payload) = &mut snapshot.payload {
+            payload
+                .headers
+                .retain(|(name, _)| !name.eq_ignore_ascii_case("Authorization"));
+        }
+    }
+    let result = state
+        .engine
+        .read()
+        .await
+        .execute_collect_with_scope(request, scope)
+        .await;
+    match result {
+        Ok((execution_id, summary, mut events)) => {
+            let failed_assertions = events
+                .iter()
+                .filter_map(|event| match event {
+                    ExecutionEvent::AssertionResult(result) if !result.passed => {
+                        Some(result.name.clone())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let extracted_variables = events
+                .iter()
+                .filter_map(|event| match event {
+                    ExecutionEvent::VariablesExtracted { variables } => Some(variables.clone()),
+                    _ => None,
+                })
+                .fold(HashMap::new(), |mut collected, variables| {
+                    collected.extend(variables);
+                    collected
+                });
+            let preview = events.iter().rev().find_map(|event| match event {
+                ExecutionEvent::ResponseChunk {
+                    preview: Some(preview),
+                    done: true,
+                    ..
+                } => Some(preview.clone()),
+                _ => None,
+            });
+            let response_content_type = events.iter().find_map(|event| match event {
+                ExecutionEvent::ResponseMeta(meta) => meta.content_type.clone(),
+                _ => None,
+            });
+            let mut response_bytes = Vec::new();
+            for event in &mut events {
+                if let ExecutionEvent::ResponseChunk {
+                    data_base64: Some(encoded),
+                    ..
+                } = event
+                {
+                    if let Ok(decoded) = BASE64.decode(encoded) {
+                        let remaining =
+                            MAX_PERSISTED_RESPONSE_BYTES.saturating_sub(response_bytes.len());
+                        response_bytes.extend_from_slice(&decoded[..decoded.len().min(remaining)]);
+                    }
+                }
+            }
+            let store = state.store.lock().await;
+            let response_blob_id = if response_bytes.is_empty() {
+                None
+            } else {
+                store
+                    .put_blob(&response_bytes, response_content_type.as_deref())
+                    .ok()
+                    .map(|blob| blob.id)
+            };
+            let record = ExecutionRecord {
+                id: execution_id.0.to_string(),
+                request_id: snapshot.id.0.to_string(),
+                protocol_id: summary.protocol_id.clone(),
+                state: state_name(summary.state).into(),
+                status: summary.status,
+                duration_ms: summary.duration_ms,
+                bytes_received: summary.bytes_received,
+                started_at: summary.started_at,
+                finished_at: summary.finished_at,
+                request_snapshot: Some(snapshot),
+                preview,
+                response_blob_id,
+            };
+            if let Err(error) = store.record_execution(&record) {
+                warn!(error = %error, "failed to persist collection execution history");
+            }
+            CollectionCaseOutcome {
+                passed: summary.state == ExecutionState::Completed && failed_assertions.is_empty(),
+                status: summary.status,
+                duration_ms: summary.duration_ms,
+                error: None,
+                failed_assertions,
+                extracted_variables,
+            }
+        }
+        Err(error) => CollectionCaseOutcome {
+            error: Some(error.to_string()),
+            ..CollectionCaseOutcome::default()
+        },
+    }
 }
 
 async fn load_latest_request(
@@ -2833,5 +3027,16 @@ mod tests {
             HeaderValue::from_static("protovoy, protovoy-ticket.abc123"),
         );
         assert_eq!(tcp_session_ticket_from_headers(&headers), Some("abc123"));
+    }
+
+    #[test]
+    fn collection_run_body_supports_fail_fast_and_environment_override() {
+        let body: RunCollectionBody = serde_json::from_value(serde_json::json!({
+            "failFast": true,
+            "environmentId": "staging"
+        }))
+        .expect("collection run body");
+        assert!(body.fail_fast);
+        assert_eq!(body.environment_id.as_deref(), Some("staging"));
     }
 }

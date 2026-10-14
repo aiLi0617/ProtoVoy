@@ -11,14 +11,24 @@ During implementation:
 - Run the smallest relevant test or package-level typecheck after changes.
 - Do not rerun unchanged full-workspace suites after every edit.
 - Group related edits before validation.
+- `pnpm validate:changed` checks changed JavaScript/TypeScript and Rust workspaces
+  plus their in-repository dependents. Use `--base <git-ref>` to validate a branch.
+- `pnpm test:e2e:changed` runs browser specs mapped to changed UI features. It
+  falls back to the browser smoke suite for shared or unmapped UI source files.
+- UI unit tests selected by `pnpm validate:changed` follow relative imports and
+  run in up to four isolated processes. Full `pnpm test` uses the same concurrency.
+  Local UI runs stop scheduling new tests after the first failure; CI keeps
+  collecting failures. Pass `--no-fail-fast` to the TSX runner when needed.
 
-Before completing the task, run the applicable full validation once:
+Before completing a routine task, run `pnpm validate:changed`. Run the applicable
+full validation once before merging to `main`, cutting a release, or after changing
+shared manifests/toolchain configuration:
 
 - TypeScript changes: `pnpm typecheck` and `pnpm test`.
 - Rust changes: `cargo test --workspace --locked` and
   `cargo clippy --workspace --all-targets --locked -- -D warnings`.
-- UI changes: attach screenshots and run browser smoke tests (`pnpm test:e2e`)
-  after the UI is stable.
+- UI changes: attach screenshots and run the smallest relevant browser smoke test
+  after the UI is stable. Run the complete `pnpm test:e2e` before merge.
 - Documentation-only changes do not require code tests.
 - If final full validation has passed and subsequent edits do not affect code,
   do not rerun it.

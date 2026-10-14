@@ -3,12 +3,33 @@ name: Installer lifecycle
 on:
   pull_request:
     paths:
+      # Keep installer-specific changes protected without rebuilding six
+      # platform jobs for ordinary application code changes.
+      - "apps/desktop/src-tauri/tauri.conf.json"
+      - "apps/desktop/src-tauri/tauri.sidecar.conf.json"
+      - "scripts/prepare-sidecar.mjs"
+      - ".github/workflows/installer-lifecycle.yml"
+  push:
+    branches: [main]
+    paths:
       - "apps/desktop/**"
       - "apps/local-agent/**"
       - "apps/cli/**"
       - "apps/protocol-gateway/**"
+      - "packages/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".npmrc"
       - "scripts/prepare-sidecar.mjs"
       - ".github/workflows/installer-lifecycle.yml"
+  schedule:
+    # Full install/upgrade/uninstall coverage runs once each night (UTC).
+    - cron: "30 18 * * *"
   workflow_dispatch:
 
 concurrency:

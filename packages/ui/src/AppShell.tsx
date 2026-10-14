@@ -15,6 +15,7 @@ import { DEFAULT_RESPONSE_VALIDATION_SETTINGS, readResponseValidationSettings, w
 import { RESPONSE_BODY_TYPES, createResponseComponent, readResponseComponents, writeResponseComponents, type ResponseComponent, type ResponseBodyType } from "./responseComponents";
 import { RequestHistoryPanel, type RequestHistoryPanelProps } from "./RequestHistoryPanel";
 import { ModalFrame } from "./ModalFrame";
+import { shortcutLabel } from "./platform";
 
 export interface AppShellProps {
   title?: string;
@@ -150,6 +151,9 @@ export function AppShell({ title = "ProtoVoy", channelLabel, children, explorer,
     return workbench ? "resources" : "home";
   });
   const [search, setSearch] = useState("");
+  const commandShortcut = shortcutLabel("K");
+  const settingsShortcut = shortcutLabel(",");
+  const commandTitle = t("command.title").replace(" Ctrl/⌘ K", "");
   const [activeCommand, setActiveCommand] = useState(0);
   const paletteRef = useRef<HTMLDivElement>(null);
   const paletteInputRef = useRef<HTMLInputElement>(null);
@@ -368,10 +372,10 @@ export function AppShell({ title = "ProtoVoy", channelLabel, children, explorer,
       </div>
       <div className="header-actions">
         <IconButton label={t("command.history")} title={t("command.history")} icon="activity" onClick={() => openProjectModule("history")} />
-        <button data-testid="command-trigger" className="command-trigger" aria-label={t("command.open")} onClick={() => setPaletteOpen(true)}><Icon name="search"/><span>{t("command.open")}</span><kbd>⌘ K</kbd></button>
+        <button type="button" data-testid="command-trigger" className="command-trigger" aria-label={`${t("command.open")} (${commandShortcut})`} onClick={() => setPaletteOpen(true)}><Icon name="search"/><span>{t("command.open")}</span><kbd>{commandShortcut}</kbd></button>
         <IconButton data-testid="theme-toggle" label={t("command.theme")} title={`${t("settings.theme")}: ${themeMode}`} icon={themeMode === "light" ? "sun" : "moon"} onClick={cycleTheme} />
         {collaboration ? <IconButton label={t("collaboration.open")} title={t("collaboration.open")} icon="users" active={collaborationOpen} onClick={() => openCollaboration("team")} /> : null}
-        <IconButton label={applicationSettingsLabel} title={`${applicationSettingsLabel} Ctrl/⌘ ,`} icon="sliders" onClick={openSettings} />
+        <IconButton label={applicationSettingsLabel} title={`${applicationSettingsLabel} ${settingsShortcut}`} icon="sliders" onClick={openSettings} />
       </div>
     </header>
     <div ref={workspaceRef} className={`app-workspace${showProjectRail ? " has-project-rail" : ""} ${showExplorer ? "explorer-open" : "explorer-collapsed"}`} style={{ "--explorer-width": `${explorerWidth}px` } as CSSProperties}>
@@ -390,11 +394,11 @@ export function AppShell({ title = "ProtoVoy", channelLabel, children, explorer,
         {projectModule === "history" ? (requestHistory ? <RequestHistoryPanel {...requestHistory}/> : <section className="request-history-page"><div className="request-history-empty"><Icon name="activity"/><strong>请求历史不可用</strong><span>当前执行通道未提供历史查询能力。</span></div></section>) : projectModule === "settings" ? <ProjectSettingsPage projectId={projectContext?.selectedProjectId} projectName={projectContext?.projects.find((project) => project.id === projectContext.selectedProjectId)?.name} initialCategory={projectSettingsCategory} onCloneProject={projectContext?.onCloneProject}/> : children}
       </main>
     </div>
-    {paletteOpen ? <div className="command-overlay" role="presentation" onMouseDown={() => setPaletteOpen(false)}><div ref={paletteRef} className="command-palette" role="dialog" aria-modal="true" aria-label={t("command.title")} onMouseDown={(event) => event.stopPropagation()}><div className="command-input-wrap"><Icon name="search"/><input ref={paletteInputRef} role="combobox" aria-expanded="true" aria-controls="protovoy-command-results" aria-activedescendant={commandResults[activeCommand] ? `command-${commandResults[activeCommand].id}` : undefined} autoComplete="off" value={search} onKeyDown={onCommandKeyDown} onChange={(event) => setSearch(event.target.value)} placeholder={t("command.placeholder")} aria-label={t("command.open")}/></div>
-      <div id="protovoy-command-results" role="listbox" aria-label={t("command.title")}>
+    {paletteOpen ? <div className="command-overlay" role="presentation" onMouseDown={() => setPaletteOpen(false)}><div ref={paletteRef} className="command-palette" role="dialog" aria-modal="true" aria-label={`${commandTitle} (${commandShortcut})`} onMouseDown={(event) => event.stopPropagation()}><div className="command-input-wrap"><Icon name="search"/><input ref={paletteInputRef} role="combobox" aria-expanded="true" aria-controls="protovoy-command-results" aria-activedescendant={commandResults[activeCommand] ? `command-${commandResults[activeCommand].id}` : undefined} autoComplete="off" value={search} onKeyDown={onCommandKeyDown} onChange={(event) => setSearch(event.target.value)} placeholder={t("command.placeholder")} aria-label={t("command.open")}/></div>
+      <div id="protovoy-command-results" role="listbox" aria-label={commandTitle}>
       {actions.length ? <><div className="command-group-label">{t("command.actions")}</div>{actions.map((action, index) => <button id={`command-${action.id}`} role="option" aria-selected={activeCommand === index} className={activeCommand === index ? "is-active" : undefined} key={action.id} type="button" onMouseEnter={() => setActiveCommand(index)} onClick={() => runCommand(index)}><span><Icon name={action.icon}/>{action.label}</span></button>)}</> : null}
       <div className="command-group-label">{t("command.workbenches")}</div>
-      {workbenchCommands.map((command, index) => { const resultIndex = actions.length + index; return <button id={`command-workbench-${command.id}`} role="option" aria-selected={activeCommand === resultIndex} className={activeCommand === resultIndex ? "is-active" : undefined} key={command.id} onMouseEnter={() => setActiveCommand(resultIndex)} onClick={() => runCommand(resultIndex)}><span><Icon name="bolt"/>{command.label}</span><kbd>Enter</kbd></button>; })}
+      {workbenchCommands.map((command, index) => { const resultIndex = actions.length + index; return <button type="button" id={`command-workbench-${command.id}`} role="option" aria-selected={activeCommand === resultIndex} className={activeCommand === resultIndex ? "is-active" : undefined} key={command.id} onMouseEnter={() => setActiveCommand(resultIndex)} onClick={() => runCommand(resultIndex)}><span><Icon name="bolt"/>{command.label}</span><kbd>Enter</kbd></button>; })}
       {workbenchCommands.length === 0 && actions.length === 0 ? <div className="command-empty">{t("command.empty")}</div> : null}
     </div></div></div> : null}
     <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} channelLabel={channelLabel} />

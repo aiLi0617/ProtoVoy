@@ -12,10 +12,11 @@ function constrainWorkspaceCreateMenu() {
   const menu = document.querySelector<HTMLElement>("[data-workspace-create-menu]");
   if (!menu) return;
   const menuBounds = menu.getBoundingClientRect();
-  const boundary = Array.from(document.querySelectorAll<HTMLElement>(".workbench-panel:not([hidden]) .split-handle"))
+  const panelBoundary = Array.from(document.querySelectorAll<HTMLElement>(".workbench-panel:not([hidden]) .split-handle"))
     .map((element) => element.getBoundingClientRect())
     .filter((bounds) => bounds.width > 80 && bounds.top > menuBounds.top && bounds.left < menuBounds.right && bounds.right > menuBounds.left)
     .reduce((nearest, bounds) => Math.min(nearest, bounds.top), window.innerHeight - 8);
+  const boundary = menu.dataset.expanded === "true" ? window.innerHeight - 8 : panelBoundary;
   menu.style.maxHeight = `${Math.max(80, Math.min(520, boundary - menuBounds.top - 8))}px`;
 }
 
@@ -38,7 +39,7 @@ export function SplitPane({ id, primary, secondary, primaryActions, secondaryAct
   useEffect(() => setRatio(saved?.ratio ?? .42), [saved?.ratio]);
   useEffect(() => {
     const observer = new MutationObserver(constrainWorkspaceCreateMenu);
-    observer.observe(document.body, { childList: true });
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-expanded"] });
     window.addEventListener("resize", constrainWorkspaceCreateMenu);
     return () => { observer.disconnect(); window.removeEventListener("resize", constrainWorkspaceCreateMenu); };
   }, []);

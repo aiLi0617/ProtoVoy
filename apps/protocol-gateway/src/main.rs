@@ -1,4 +1,4 @@
-﻿use axum::{
+use axum::{
     extract::{Path as AxumPath, Request, State},
     http::{header, HeaderMap, StatusCode},
     middleware::{self, Next},
@@ -20,7 +20,10 @@ use driver_sql::SqlDriver;
 use driver_sse::SseDriver;
 use driver_tcp_udp::{TcpDriver, UdpDriver};
 use driver_websocket::WebSocketDriver;
-use execution_engine::ExecutionEngine;
+use execution_engine::{
+    run_collection_to_completion, CollectionRunCase, CollectionRunItem, ExecutionEngine,
+    VariableScope,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -112,6 +115,23 @@ struct CiRunResponse {
     exit_code: i32,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CiCollectionRunRequest {
+    requests: Vec<RequestEnvelope>,
+    #[serde(default)]
+    fail_fast: bool,
+    #[serde(default)]
+    variables: HashMap<String, String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CiCollectionRunResponse {
+    cases: Vec<CollectionRunCase>,
+    exit_code: i32,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -139,8 +159,7 @@ fn build_state() -> Result<AppState, Box<dyn std::error::Error>> {
         return Err("PROTOVOY_GATEWAY_API_KEY must contain at least 24 characters".into());
     }
     let data_dir = PathBuf::from(
-        std::env::var("PROTOVOY_GATEWAY_DATA_DIR")
-            .unwrap_or_else(|_| ".protovoy-gateway".into()),
+        std::env::var("PROTOVOY_GATEWAY_DATA_DIR").unwrap_or_else(|_| ".protovoy-gateway".into()),
     );
     fs::create_dir_all(&data_dir)?;
     let jobs_path = data_dir.join("jobs.json");
@@ -184,6 +203,7 @@ fn app(state: AppState) -> Router {
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/executions", get(list_executions).post(remote_execute))
         .route("/v1/runner/execute", post(ci_execute))
+        .route("/v1/runner/collection", post(ci_collection_execute))
         .route("/v1/jobs", get(list_jobs).post(create_job))
         .route("/v1/jobs/{id}", delete(delete_job))
         .layer(middleware::from_fn_with_state(state.clone(), authenticate));
@@ -251,6 +271,55 @@ async fn ci_execute(
         StatusCode::OK,
         Json(CiRunResponse {
             execution,
+            exit_code,
+        }),
+    )
+}
+
+async fn ci_collection_execute(
+    State(state): State<AppState>,
+    Json(body): Json<CiCollectionRunRequest>,
+) -> impl IntoResponse {
+    let _permit = match state.permits.acquire().await {
+        Ok(permit) => permit,
+        Err(error) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(CiCollectionRunResponse {
+                    cases: vec![CollectionRunCase {
+                        request_id: String::new(),
+                        name: "collection".into(),
+                        protocol_id: String::new(),
+                        passed: false,
+                        status: None,
+                        duration_ms: 0,
+                        error: Some(error.to_string()),
+                        failed_assertions: Vec::new(),
+                    }],
+                    exit_code: 1,
+                }),
+            );
+        }
+    };
+    let items = body
+        .requests
+        .into_iter()
+        .map(|request| CollectionRunItem {
+            request_id: request.id.0.to_string(),
+            scope: VariableScope {
+                environment: body.variables.clone(),
+                ..VariableScope::default()
+            },
+            request,
+        })
+        .collect();
+    let engine = state.engine.read().await;
+    let result = run_collection_to_completion(&engine, items, body.fail_fast).await;
+    let exit_code = i32::from(result.cases.iter().any(|case| !case.passed));
+    (
+        StatusCode::OK,
+        Json(CiCollectionRunResponse {
+            cases: result.cases,
             exit_code,
         }),
     )
@@ -446,23 +515,41 @@ fn load_jobs(path: &Path) -> Result<HashMap<Uuid, ScheduledJob>, Box<dyn std::er
         Err(error) => return Err(error.into()),
     };
     let jobs: Vec<ScheduledJob> = serde_json::from_slice(&bytes)?;
-    if jobs.iter().any(|job| scheduled_request_contains_credentials(&job.request)) {
+    if jobs
+        .iter()
+        .any(|job| scheduled_request_contains_credentials(&job.request))
+    {
         return Err("jobs.json contains scheduled requests with inline credentials; remove them and rotate exposed credentials before restarting".into());
     }
     Ok(jobs.into_iter().map(|job| (job.id, job)).collect())
 }
 
 fn sensitive_name(name: &str) -> bool {
-    let normalized: String = name.chars().filter(|ch| ch.is_ascii_alphanumeric()).flat_map(char::to_lowercase).collect();
-    ["authorization", "cookie", "token", "secret", "password", "passwd", "apikey", "credential"]
-        .iter()
-        .any(|part| normalized.contains(part))
+    let normalized: String = name
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect();
+    [
+        "authorization",
+        "cookie",
+        "token",
+        "secret",
+        "password",
+        "passwd",
+        "apikey",
+        "credential",
+    ]
+    .iter()
+    .any(|part| normalized.contains(part))
 }
 
 fn has_sensitive_fields(value: &Value) -> bool {
     match value {
         Value::Object(fields) => fields.iter().any(|(key, value)| {
-            (sensitive_name(key) && !matches!(key.as_str(), "secretRef" | "secretRefs") && !value.is_null())
+            (sensitive_name(key)
+                && !matches!(key.as_str(), "secretRef" | "secretRefs")
+                && !value.is_null())
                 || has_sensitive_fields(value)
         }),
         Value::Array(items) => {
@@ -477,12 +564,20 @@ fn has_sensitive_fields(value: &Value) -> bool {
 
 fn scheduled_request_contains_credentials(request: &RequestEnvelope) -> bool {
     let original = serde_json::to_value(request).expect("RequestEnvelope serializes");
-    let sanitized = serde_json::to_value(request.sanitized_for_persistence()).expect("RequestEnvelope serializes");
+    let sanitized = serde_json::to_value(request.sanitized_for_persistence())
+        .expect("RequestEnvelope serializes");
     if original != sanitized {
         return true;
     }
-    let target_query = request.target.split_once('?').map(|(_, query)| query.split('#').next().unwrap_or(""));
-    if target_query.is_some_and(|query| query.split('&').any(|pair| sensitive_name(pair.split('=').next().unwrap_or("")))) {
+    let target_query = request
+        .target
+        .split_once('?')
+        .map(|(_, query)| query.split('#').next().unwrap_or(""));
+    if target_query.is_some_and(|query| {
+        query
+            .split('&')
+            .any(|pair| sensitive_name(pair.split('=').next().unwrap_or("")))
+    }) {
         return true;
     }
     let payload = original.get("payload").unwrap_or(&Value::Null);
@@ -545,7 +640,9 @@ mod tests {
         assert!(scheduled_request_contains_credentials(&request));
         request.target = "https://example.com".into();
         if let core_domain::ProtocolPayload::Http(payload) = &mut request.payload {
-            payload.headers.push(("Authorization".into(), "Bearer literal".into()));
+            payload
+                .headers
+                .push(("Authorization".into(), "Bearer literal".into()));
         }
         assert!(scheduled_request_contains_credentials(&request));
         if let core_domain::ProtocolPayload::Http(payload) = &mut request.payload {
@@ -564,9 +661,14 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("jobs.json");
         let job = ScheduledJob {
-            id: Uuid::new_v4(), name: "unsafe".into(), enabled: true, interval_seconds: 60,
-            next_run_at: Utc::now(), request: execution_engine::sample_http_get("https://example.com?token=literal"),
-            created_at: Utc::now(), last_execution_id: None,
+            id: Uuid::new_v4(),
+            name: "unsafe".into(),
+            enabled: true,
+            interval_seconds: 60,
+            next_run_at: Utc::now(),
+            request: execution_engine::sample_http_get("https://example.com?token=literal"),
+            created_at: Utc::now(),
+            last_execution_id: None,
         };
         persist_jobs(&path, &HashMap::from([(job.id, job)])).unwrap();
         assert!(load_jobs(&path).is_err());
@@ -597,6 +699,26 @@ mod tests {
         ] {
             assert!(ids.contains(&expected.to_string()), "missing {expected}")
         }
+    }
+
+    #[test]
+    fn collection_runner_request_accepts_ordered_envelopes_and_variables() {
+        let first = execution_engine::sample_http_get("https://{{host}}/first");
+        let second = execution_engine::sample_http_get("https://{{host}}/second");
+        let body = serde_json::json!({
+            "requests": [first, second],
+            "failFast": true,
+            "variables": { "host": "example.com" }
+        });
+
+        let request: CiCollectionRunRequest = serde_json::from_value(body).expect("request");
+
+        assert_eq!(request.requests.len(), 2);
+        assert!(request.fail_fast);
+        assert_eq!(
+            request.variables.get("host").map(String::as_str),
+            Some("example.com")
+        );
     }
 
     #[test]

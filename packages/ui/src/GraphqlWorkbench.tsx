@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { HttpRunResult, HttpSendHooks } from "./HttpWorkbench";
 import { CodeEditor } from "./CodeEditor";
 import { ProtocolCodeGenerator } from "./ProtocolCodeGenerator";
 import { readWorkbenchDraft, useAutosaveDraft } from "./draftRecovery";
 import { useWorkbenchHydration } from "./useWorkbenchHydration";
 import { Button, StatusBadge, TextInput } from "./Components";
+import { useInterfaceNameTarget } from "./InterfaceNameTarget";
 
 export interface GraphqlWorkbenchRequest {
   name: string;
@@ -25,6 +27,8 @@ export interface GraphqlWorkbenchProps {
 const INTROSPECTION_QUERY = `query ProtoVoyIntrospection { __schema { queryType { name } mutationType { name } subscriptionType { name } types { name kind fields { name } } } }`;
 
 export function GraphqlWorkbench({ onSend, onCancel, onSave, externalRequest }: GraphqlWorkbenchProps) {
+  const nameTarget = useInterfaceNameTarget();
+  const [name, setName] = useState("GraphQL Request");
   const [url, setUrl] = useState("https://");
   const [query, setQuery] = useState("query Example {\n  __typename\n}");
   const [variables, setVariables] = useState("{}");
@@ -36,6 +40,7 @@ export function GraphqlWorkbench({ onSend, onCancel, onSave, externalRequest }: 
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const apply = (value: GraphqlWorkbenchRequest) => {
+      setName(value.name ?? "");
       setUrl(value.url);
       setQuery(value.query);
       setVariables(JSON.stringify(value.variables ?? {}, null, 2));
@@ -51,6 +56,7 @@ export function GraphqlWorkbench({ onSend, onCancel, onSave, externalRequest }: 
   useWorkbenchHydration("graphql", (envelope) => {
     const detail = envelope as { name?: string; target?: string; payload?: { type?: string; query?: string; variables?: unknown; operationName?: string | null; headers?: Array<[string, string]> } };
     if (detail?.payload?.type !== "graphql") return;
+    setName(detail.name ?? "");
     setUrl(detail.target ?? "https://");
     setQuery(detail.payload.query ?? "");
     setVariables(JSON.stringify(detail.payload.variables ?? {}, null, 2));
@@ -62,7 +68,7 @@ export function GraphqlWorkbench({ onSend, onCancel, onSave, externalRequest }: 
     const index = line.indexOf(":");
     return index < 0 ? [line.trim(), ""] : [line.slice(0, index).trim(), line.slice(index + 1).trim()];
   });
-  const currentRequest = (nextQuery = query, nextVariables: unknown = JSON.parse(variables || "{}"), nextOperation = operationName || undefined): GraphqlWorkbenchRequest => ({ name: nextOperation || "GraphQL Request", url, query: nextQuery, variables: nextVariables, operationName: nextOperation, headers: headers() });
+  const currentRequest = (nextQuery = query, nextVariables: unknown = JSON.parse(variables || "{}"), nextOperation = operationName || undefined): GraphqlWorkbenchRequest => ({ name: name.trim() || nextOperation || "GraphQL Request", url, query: nextQuery, variables: nextVariables, operationName: nextOperation, headers: headers() });
   useAutosaveDraft("graphql", currentRequest);
 
   async function send(nextQuery: string, nextVariables: unknown, nextOperation?: string) {
@@ -109,12 +115,14 @@ export function GraphqlWorkbench({ onSend, onCancel, onSave, externalRequest }: 
     }
   }
 
-  return <section className="graphql-workbench">
+  const nameInput = <TextInput aria-label="接口名称" className="websocket-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="接口名称" />;
+  return <>{nameTarget ? createPortal(nameInput, nameTarget) : null}<section className="graphql-workbench">
     <div className="legacy-workbench-hero graphql-title">
       <div><small>SCHEMA API</small><h2>GraphQL</h2></div>
       <StatusBadge tone="info">QUERY · MUTATION · SUBSCRIPTION</StatusBadge>
     </div>
     <div className="graphql-commandbar">
+      {nameTarget ? null : nameInput}
       <TextInput aria-label="GraphQL Endpoint" className="graphql-url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="GraphQL endpoint" />
       <TextInput aria-label="GraphQL Operation Name" className="graphql-operation" value={operationName} onChange={(event) => setOperationName(event.target.value)} placeholder="operationName（可选）" />
       <Button variant="primary" loading={busy} onClick={() => void run()}>执行</Button>
@@ -135,5 +143,5 @@ export function GraphqlWorkbench({ onSend, onCancel, onSave, externalRequest }: 
     <div className="graphql-response-head"><span>RESPONSE</span><span>{busy ? "LIVE" : "READY"}</span></div>
     <ProtocolCodeGenerator input={{ protocol: "graphql", request: currentRequest() }} />
     <pre className="graphql-output">{output}</pre>
-  </section>;
+  </section></>;
 }

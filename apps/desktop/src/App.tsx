@@ -329,6 +329,7 @@ export function App() {
       onDeleteWorkspace={async (id) => { await invoke("delete_workspace", { id }); await refreshTree(); }}
       onCreateProject={async (workspaceId, name) => { await invoke("create_project", { workspaceId, name }); await refreshTree(); }}
       onCreateModule={async (projectId, name) => { await invoke("create_module", { projectId, name }); await refreshTree(); }}
+      onRenameModule={async (id, name) => { await invoke("rename_module", { id, name }); await refreshTree(); }}
       onRenameProject={async (id, name) => { await invoke("rename_project", { id, name }); await refreshTree(); }}
       onDeleteProject={async (id) => { await invoke("delete_project", { id }); await refreshTree(); }}
       onCreateCollection={async (projectId, parentId, name, moduleId) => { await invoke("create_collection", { projectId, parentId, name, moduleId }); await refreshTree(); }}

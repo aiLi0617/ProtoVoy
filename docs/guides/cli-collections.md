@@ -32,3 +32,21 @@ Collections may be:
 
 - An array of `{ "name", "url", "method", "headers", "body" }` portable objects, or
 - Full `RequestEnvelope` JSON objects with `protocolId`
+
+## Run through Protocol Gateway
+
+For a CI worker that cannot reach the target network directly, send expanded full envelopes to the authenticated Gateway collection endpoint. The existing single-request endpoint remains compatible.
+
+```http
+POST /v1/runner/collection
+Authorization: Bearer <gateway-api-key>
+Content-Type: application/json
+
+{
+  "requests": [/* full RequestEnvelope objects in execution order */],
+  "failFast": true,
+  "variables": { "baseUrl": "https://staging.example.com" }
+}
+```
+
+The response contains ordered `cases` and `exitCode`. `exitCode` is `1` when any request, assertion, or variable resolution fails; otherwise it is `0`. Variables extracted by post-scripts are available to later requests in the same run only and are not persisted by the Gateway.

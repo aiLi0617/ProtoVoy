@@ -4,6 +4,7 @@ import {
   cancelViaAgent,
   createCollectionViaAgent,
   createModuleViaAgent,
+  renameModuleViaAgent,
   createProjectViaAgent,
   createWorkspaceViaAgent,
   renameWorkspaceViaAgent,
@@ -25,7 +26,6 @@ import {
   renameCollectionViaAgent,
   updateCollectionTagsViaAgent,
   renameProjectViaAgent,
-  runCollectionViaAgent,
   putSecretViaAgent,
   saveEnvironmentViaAgent,
   saveRequestViaAgent,
@@ -54,6 +54,7 @@ import {
   clearCapturesViaAgent,
   tcpSessionConnectionViaAgent,
 } from "./agentClient";
+import { runCollectionViaAgent } from "./collectionRunnerClient";
 import { useEffect, useRef, useState } from "react";
 import { describeWorkspaceBootstrapError, getWorkspaceTreeAbortable } from "./workspaceTreeClient";
 
@@ -164,6 +165,7 @@ export function App() {
       onDeleteWorkspace={async (id) => { await deleteWorkspaceViaAgent(id); await refreshTree(); }}
       onCreateProject={async (workspaceId, name) => { await createProjectViaAgent(workspaceId, name); await refreshTree(); }}
       onCreateModule={async (projectId, name) => { await createModuleViaAgent(projectId, name); await refreshTree(); }}
+      onRenameModule={async (id, name) => { await renameModuleViaAgent(id, name); await refreshTree(); }}
       onRenameProject={async (id, name) => { await renameProjectViaAgent(id, name); await refreshTree(); }}
       onDeleteProject={async (id) => { await deleteProjectViaAgent(id); await refreshTree(); }}
       onCreateCollection={async (projectId, parentId, name, moduleId) => { await createCollectionViaAgent(projectId, parentId, name, moduleId); await refreshTree(); }}
