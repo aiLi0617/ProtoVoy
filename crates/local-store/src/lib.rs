@@ -823,6 +823,20 @@ impl LocalStore {
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
     }
 
+    pub fn rename_module(&self, id: &str, name: &str) -> StoreResult<()> {
+        if name.trim().is_empty() {
+            return Err(StoreError::InvalidId("module name is required".into()));
+        }
+        let changed = self.conn.execute(
+            "UPDATE modules SET name = ?2 WHERE id = ?1",
+            params![id, name.trim()],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound(id.into()));
+        }
+        Ok(())
+    }
+
     pub fn list_projects(&self, workspace_id: &str) -> StoreResult<Vec<ProjectRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, workspace_id, name, created_at FROM projects WHERE workspace_id = ?1 ORDER BY created_at, name",
@@ -2603,6 +2617,17 @@ mod tests {
         assert!(modules[0].is_default);
 
         let custom = store.create_module(&project.id, "Fulfillment").unwrap();
+        store.rename_module(&custom.id, "Shipping").unwrap();
+        assert_eq!(
+            store
+                .list_modules(&project.id)
+                .unwrap()
+                .into_iter()
+                .find(|module| module.id == custom.id)
+                .unwrap()
+                .name,
+            "Shipping"
+        );
         let root = store
             .create_collection_in_module(&project.id, Some(&custom.id), None, "API")
             .unwrap();

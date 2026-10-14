@@ -10,16 +10,26 @@
 
 ## 0. PR / 最终交付前必跑验证（按改动类型）
 
-以下全量验证在 PR 或任务最终交付前集中运行一次，不要求在每次代码编辑后重复执行。
-开发过程中优先运行受影响包、模块或用例的最小相关检查；相关修改稳定后再执行全量验证。
+日常开发与 PR 先运行 `pnpm validate:changed`（PR 可加 `--base <git-ref>`），只检查
+发生变化的 workspace 及其仓库内下游依赖。以下全量验证在合并 `main` 或发布前集中运行一次，
+不要求在每次代码编辑或普通 PR 后重复执行。
 纯文档改动无需运行代码测试。若全量验证通过后仅修改了不影响代码的内容，无需重跑。
 
-| 改动 | PR / 最终交付前至少跑一次 |
+| 改动 | 合并 `main` / 发布前至少跑一次 |
 |------|------------|
 | TypeScript / UI | `pnpm typecheck`、`pnpm test`；UI 再加 `pnpm test:e2e` + 截图 |
 | Rust / Cargo.lock | `cargo test --workspace --locked`、`cargo clippy --workspace --all-targets --locked -- -D warnings`、`cargo audit -D warnings` |
 | 工作流 YAML | 对照下方「流水线断言」；必要时 `workflow_dispatch` 全量 |
 | Local Agent / 安装冒烟 | `/health` 断言必须匹配真实 `service` 字段（见 §3） |
+
+日常 PR 采用快速门禁：JS/TS 与 Rust 只验证受影响 workspace/crate 及其下游，普通 UI
+源码变更通过 `pnpm test:e2e:changed` 运行对应功能的浏览器用例；未映射的共享 UI 回退到
+smoke，修改 Playwright 配置或 e2e 公共支持代码时仍运行全套浏览器测试。UI 单测按相对
+import 关系选择，并以最多 4 个隔离进程执行；本地首次失败后停止派发新单测，CI 继续收集
+全部失败。移动端浏览器项目只由 CSS、响应式壳层或 `mobileSpecs` 中的用例触发。桌面编译只跑
+Linux，Cargo 安全审计只在依赖与工具链配置变化时运行。
+完整的跨平台安装、升级和卸载验证由 `Installer lifecycle` 每晚运行，也可通过
+`workflow_dispatch` 随时手动触发。发布标签仍执行完整的跨平台发布验证。
 
 ---
 

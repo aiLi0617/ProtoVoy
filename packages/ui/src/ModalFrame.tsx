@@ -12,15 +12,16 @@ export interface ModalFrameProps {
   ariaDescribedBy?: string;
   initialFocusRef?: RefObject<HTMLElement | null>;
   closeOnBackdrop?: boolean;
+  closeOnEscape?: boolean;
   role?: "dialog" | "alertdialog";
   as?: "div" | "form";
   onSubmit?: FormEventHandler<HTMLFormElement>;
 }
 
 /** Headless modal shell for product-specific dialog layouts. */
-export function ModalFrame({ open, onClose, children, className, overlayClassName = "dialog-backdrop", ariaLabel, ariaLabelledBy, ariaDescribedBy, initialFocusRef, closeOnBackdrop = true, role = "dialog", as = "div", onSubmit }: ModalFrameProps) {
+export function ModalFrame({ open, onClose, children, className, overlayClassName = "dialog-backdrop", ariaLabel, ariaLabelledBy, ariaDescribedBy, initialFocusRef, closeOnBackdrop = true, closeOnEscape = true, role = "dialog", as = "div", onSubmit }: ModalFrameProps) {
   const dialogRef = useRef<HTMLElement>(null);
-  useDialogFocus(open, dialogRef, onClose, initialFocusRef);
+  useDialogFocus(open, dialogRef, closeOnEscape ? onClose : () => undefined, initialFocusRef);
   if (!open) return null;
   return <div className={overlayClassName} role="presentation" onMouseDown={() => { if (closeOnBackdrop) onClose(); }}>
     {as === "form"

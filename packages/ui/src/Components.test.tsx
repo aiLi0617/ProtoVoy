@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Accordion, Breadcrumbs, Button, ButtonGroup, Checkbox, DataTable, EmptyState, Field, IconButton, InlineAlert, LoadingState, Pagination, ProgressBar, SearchInput, SegmentedControl, Select, Skeleton, StatusBadge, Switch, Tabs, Tag, Textarea, TextInput, Toolbar } from "./Components";
-import "./CodeEditor.test";
-import "./MockWorkbench.test";
-import "./mockGeneration.test";
+if (!process.argv.includes("--split-component-tests")) {
+  await Promise.all([
+    import("./CodeEditor.test"),
+    import("./MockWorkbench.test"),
+    import("./mockGeneration.test"),
+  ]);
+}
 
 const button = renderToStaticMarkup(<Button variant="primary" loading>Save</Button>);
 assert.match(button, /class="ui-button primary"/);

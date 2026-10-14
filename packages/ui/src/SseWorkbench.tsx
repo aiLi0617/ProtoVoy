@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ExecutionEvent, ResponseMeta } from "@protovoy/request-model";
 import { requestNameFromUrl, type HttpRunResult, type HttpSendHooks, type HttpWorkbenchRequest } from "./HttpWorkbench";
 import { KeyValueRows, createQueryRow, queryRowsFromUrl, urlWithQueryRows, type HeaderRow } from "./KeyValueEditor";
@@ -11,6 +12,7 @@ import { Icon } from "./Icons";
 import { MessageDetailActions } from "./MessageInspector";
 import { RovingTabList } from "./RovingTabList";
 import { useMessageDetailResize } from "./useMessageDetailResize";
+import { useInterfaceNameTarget } from "./InterfaceNameTarget";
 
 export interface SseWorkbenchRequest { name:string; url:string; headers:Array<[string,string]>; lastEventId?:string; reconnectMax:number; reconnectDelayMs:number; timeoutMs:number }
 export interface SseWorkbenchProps {
@@ -34,6 +36,7 @@ function parseEventBlock(block:string):SseEventRecord|null{
 function prettyData(value:string):string{try{return JSON.stringify(JSON.parse(value),null,2)}catch{return value}}
 
 export function SseWorkbench({onConnect,onCancel,onSave,externalRequest}:SseWorkbenchProps){
+  const nameTarget=useInterfaceNameTarget();
   const [name,setName]=useState(""),[url,setUrl]=useState(""),[lastEventId,setLastEventId]=useState("");
   const [queryRows,setQueryRows]=useState<HeaderRow[]>(()=>[createQueryRow()]),[headerRows,setHeaderRows]=useState<HeaderRow[]>(()=>[createQueryRow()]);
   const [reconnectMax,setReconnectMax]=useState(3),[reconnectDelayMs,setReconnectDelayMs]=useState(1000);
@@ -70,5 +73,6 @@ export function SseWorkbench({onConnect,onCancel,onSave,externalRequest}:SseWork
     {responseTab==="headers"?<div className="websocket-response-table">{responseMeta?.headers.length?responseMeta.headers.map(([name,value],index)=><div key={`${name}-${index}`}><strong>{name}</strong><span>{value}</span></div>):<div className="websocket-response-empty">暂无响应 Header</div>}</div>:null}
     {responseTab==="request"?<div className="websocket-response-table"><div><strong>Method</strong><span>GET</span></div><div><strong>URL</strong><span>{actualRequest.url}</span></div>{actualRequest.headers.map(([name,value],index)=><div key={`${name}-${index}`}><strong>{name}</strong><span>{value}</span></div>)}{actualRequest.lastEventId?<div><strong>Last-Event-ID</strong><span>{actualRequest.lastEventId}</span></div>:null}</div>:null}</div></>}</section>;
   const connectionStatus=<span className={`websocket-status ${busy&&hasConnected?"is-open":busy?"is-connecting":""}`}>{busy&&hasConnected?`已连接 · ${events.length} 个事件`:busy?"连接中":"未连接"}</span>;
-  return <section className="sse-workbench-layout"><div className="sse-request-commandbar"><div className="sse-target-row"><span className="sse-method">GET</span><input aria-label="SSE 接收地址" value={url} onChange={(event)=>setUrl(event.target.value)} onBlur={(event)=>setQueryRows(queryRowsFromUrl(event.target.value))} placeholder="https://example.com/events"/>{!busy?<button className="ui-button primary" disabled={!url.trim()} onClick={()=>void connect()}>连接</button>:null}{runningId?<button className="ui-button danger" onClick={()=>void onCancel(runningId)}>断开</button>:null}{onSave?<button className="ui-button secondary" disabled={busy} onClick={()=>void onSave(request())}>保存</button>:null}</div></div><div className="sse-workbench-split"><SplitPane id="sse-workbench" primary={primary} secondary={secondary} primaryLabel="SSE 请求" secondaryLabel="响应检查器" secondaryActions={connectionStatus}/></div></section>;
+  const nameInput=<input className="websocket-name" aria-label="接口名称" value={name} onChange={(event)=>setName(event.target.value)} placeholder="接口名称"/>;
+  return <>{nameTarget?createPortal(nameInput,nameTarget):null}<section className="sse-workbench-layout"><div className="sse-request-commandbar">{nameTarget?null:nameInput}<div className="sse-target-row"><span className="sse-method">GET</span><input aria-label="SSE 接收地址" value={url} onChange={(event)=>setUrl(event.target.value)} onBlur={(event)=>setQueryRows(queryRowsFromUrl(event.target.value))} placeholder="https://example.com/events"/>{!busy?<button type="button" className="ui-button primary" disabled={!url.trim()} onClick={()=>void connect()}>连接</button>:null}{runningId?<button type="button" className="ui-button danger" onClick={()=>void onCancel(runningId)}>断开</button>:null}{onSave?<button type="button" className="ui-button secondary" disabled={busy} onClick={()=>void onSave(request())}>保存</button>:null}</div></div><div className="sse-workbench-split"><SplitPane id="sse-workbench" primary={primary} secondary={secondary} primaryLabel="SSE 请求" secondaryLabel="响应检查器" secondaryActions={connectionStatus}/></div></section></>;
 }

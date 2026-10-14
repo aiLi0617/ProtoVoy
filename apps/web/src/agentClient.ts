@@ -336,7 +336,7 @@ export async function getWorkspaceTreeViaAgent(): Promise<WorkspaceTree> {
   const raw = await res.json() as Omit<WorkspaceTree, "requests"> & { requests: Array<WorkspaceTree["requests"][number] & { envelope?: RequestEnvelope }> };
   return { ...raw, requests: raw.requests.map((item) => ({
     ...item,
-    method: item.envelope?.payload.type === "http" ? item.envelope.payload.method : item.method,
+    method: item.envelope?.payload?.type === "http" ? item.envelope.payload.method : item.method,
   })) };
 }
 
@@ -408,6 +408,7 @@ async function createWorkspaceRecord<T>(path: string, body: unknown): Promise<T>
 
 export const createProjectViaAgent = (workspaceId: string, name: string) => createWorkspaceRecord<WorkspaceTree["projects"][number]>("/v1/projects", { workspaceId, name });
 export const createModuleViaAgent = (projectId: string, name: string) => createWorkspaceRecord<NonNullable<WorkspaceTree["modules"]>[number]>("/v1/modules", { projectId, name });
+export const renameModuleViaAgent = (id: string, name: string) => mutateWorkspace(`/v1/modules/${id}`, "PATCH", { name });
 export const createWorkspaceViaAgent = (name: string) => createWorkspaceRecord<WorkspaceTree["workspaces"][number]>("/v1/workspaces", { name });
 export const renameWorkspaceViaAgent = (id: string, name: string) => mutateWorkspace(`/v1/workspaces/${id}`, "PATCH", { name });
 export const archiveWorkspaceViaAgent = (id: string, archived: boolean) => mutateWorkspace(`/v1/workspaces/${id}/archive`, "PATCH", { archived });

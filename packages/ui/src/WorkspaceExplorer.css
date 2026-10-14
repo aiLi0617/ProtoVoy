@@ -1,4 +1,4 @@
-.workspace-explorer-tree { min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.workspace-explorer-tree { min-height: 0; display: flex; flex-direction: column; gap: 0; }
 .workspace-tree-empty { padding: 10px; color: var(--protovoy-muted); font-size: 12px; }
 .workspace-tree-heading { display: flex; align-items: center; justify-content: space-between; padding: 12px 10px 7px; color: var(--protovoy-muted); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
 .workspace-tree-heading > span { display: inline-flex; align-items: center; gap: 6px; }
@@ -6,12 +6,26 @@
 .workspace-batch-bar .ui-select { flex: 1; min-height: 26px; padding: 2px 5px; font-size: 10px; }
 .tree-chevron, .tree-action-button { flex-shrink: 0; display: inline-flex; align-items: center; padding: 2px; border: 0; background: transparent; color: var(--protovoy-muted); }
 .tree-action-button { padding: 3px; }.tree-action-button:hover { color: var(--protovoy-accent); }
-.tree-module-row { display: flex; align-items: center; gap: 6px; margin: 4px 6px 2px; padding: 7px 6px; border-radius: 7px; color: var(--protovoy-text); font-size: 12px; }
-.tree-module-badge { margin-left: auto; color: var(--protovoy-muted); font-size: 9px; font-weight: 500; }
-.tree-collection-row { width: 100%; display: flex; align-items: center; gap: 4px; padding-block: 2px; padding-right: 5px; border-radius: 7px; background: transparent; color: var(--protovoy-text); font-size: 12px; }
-.tree-collection-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 18px minmax(0,1fr) auto; align-items: center; gap: 5px; padding: 5px 4px; overflow: hidden; border: 0; background: transparent; color: inherit; text-align: left; }
+.tree-action-button:disabled { cursor: default; opacity: .35; }
+.tree-module-row { display: flex; align-items: center; gap: 5px; margin: 0 6px; padding: 5px 6px; border-radius: 7px; color: var(--protovoy-text); font-size: 12px; }
+.tree-module-row > .tree-label { flex: 0 1 auto; }
+.tree-module-icon { width: 14px; height: 14px; flex: 0 0 14px; color: var(--protovoy-accent); }
+.tree-module-chevron { width: 16px; height: 20px; justify-content: center; padding: 0; transition: transform .15s ease; transform: rotate(90deg); }
+.tree-module-chevron.is-expanded { transform: rotate(180deg); }
+.tree-module-chevron svg { width: 8px; height: 8px; fill: currentColor; stroke-width: 1.5; }
+.workspace-explorer-tree .tree-module-row .tree-module-actions { display: inline-flex; margin-left: auto; opacity: 0; transition: opacity .15s ease; }
+.workspace-explorer-tree .tree-module-row:hover .tree-module-actions,
+.workspace-explorer-tree .tree-module-row:focus-within .tree-module-actions,
+.workspace-explorer-tree .tree-module-row.is-menu-open .tree-module-actions { opacity: 1; }
+.tree-module-toggle-all svg { width: 13px; height: 13px; }
+.tree-collection-row { width: 100%; display: flex; align-items: center; gap: 3px; padding-block: 0; padding-right: 5px; border-radius: 7px; background: transparent; color: var(--protovoy-text); font-size: 12px; }
+.tree-collection-main { flex: 1; min-width: 0; display: grid; grid-template-columns: 14px minmax(0,1fr) auto; align-items: center; gap: 5px; padding: 4px; overflow: hidden; border: 0; background: transparent; color: inherit; text-align: left; }
+.tree-collection-icon { width: 13px; height: 13px; }
 .tree-tags { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: 3px; color: var(--protovoy-subtle); font-size: 9px; }
 .tree-request-row { min-width: 0; display: flex; align-items: center; gap: 4px; border-radius: 7px; }
+.workspace-explorer-tree .tree-row.tree-request-row .tree-actions { display: none; }
+.workspace-explorer-tree .tree-row.tree-request-row:hover .tree-actions,
+.workspace-explorer-tree .tree-row.tree-request-row.is-menu-open .tree-actions { display: inline-flex; }
 .tree-request-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 7px 4px; overflow: hidden; border: 0; background: transparent; color: inherit; text-align: left; }
 .tree-request-method { min-width: 31px; flex: 0 0 auto; color: var(--protovoy-accent); font: 750 11px var(--protovoy-mono); }
 .tree-request-method[data-method="GET"] { color: var(--protovoy-success); }

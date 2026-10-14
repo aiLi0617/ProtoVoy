@@ -214,6 +214,37 @@ test("switches theme and keeps visible keyboard focus", async ({ page }) => {
   await expect(page.locator(".command-palette")).toBeVisible();
   await expect(page.locator(".command-input-wrap input")).toBeFocused();
 });
+test("shows shortcuts for the current platform", async ({ page }) => {
+  const modifier = await page.evaluate(() => /mac|iphone|ipad|ipod/i.test(navigator.platform) ? "⌘" : "Ctrl");
+  const commandTrigger = page.getByTestId("command-trigger");
+  await expect(commandTrigger.locator("kbd")).toHaveText(`${modifier} K`);
+  await expect(commandTrigger).toHaveAttribute("aria-label", new RegExp(`${modifier} K`));
+});
+
+test("uses one named lifecycle tablist", async ({ page }) => {
+  await expect(page.getByRole("tablist", { name: "接口生命周期" })).toHaveCount(1);
+});
+
+test("moves project navigation below the workspace on narrow screens", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 });
+  const navigation = page.locator(".project-module-nav");
+  const main = page.locator("#protovoy-main");
+  await expect(navigation).toBeVisible();
+  const [navigationBox, mainBox] = await Promise.all([navigation.boundingBox(), main.boundingBox()]);
+  expect(navigationBox).not.toBeNull();
+  expect(mainBox).not.toBeNull();
+  expect(navigationBox!.y).toBeGreaterThanOrEqual(mainBox!.y + mainBox!.height - 1);
+  expect(mainBox!.width).toBeGreaterThanOrEqual(389);
+});
+
+test("keeps capture proxy instructions separated and copyable", async ({ page }) => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "capture" })));
+  const panel = page.locator(".capture-workbench:visible");
+  await expect(panel.getByText("在目标应用中配置", { exact: true })).toBeVisible();
+  await expect(panel.locator(".capture-proxy-instruction code")).toContainText("HTTP_PROXY=http://");
+  await expect(panel.getByRole("button", { name: "复制代理地址" })).toBeVisible();
+  await expect(panel.locator(".capture-control-actions .ui-status-badge")).toHaveText(/抓包中|已停止/);
+});
 
 test("keeps project settings separate from application settings", async ({ page }) => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-open-project-settings")));

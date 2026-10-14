@@ -21,8 +21,9 @@ use driver_sse::SseDriver;
 use driver_tcp_udp::{TcpDriver, UdpDriver};
 use driver_websocket::WebSocketDriver;
 use execution_engine::{
-    run_ai_assistant as execute_ai_assistant, AiAssistRequest, AiAssistResponse, ExecutionEngine,
-    VariableScope,
+    orchestrate_collection_to_completion, run_ai_assistant as execute_ai_assistant,
+    AiAssistRequest, AiAssistResponse, CollectionCaseOutcome, CollectionRunCase, CollectionRunItem,
+    ExecutionEngine, VariableScope,
 };
 use local_store::{
     ApiDefinitionRecord, CollectionRecord, EnvironmentRecord, ExecutionFilter, ExecutionRecord,
@@ -68,19 +69,6 @@ struct CookieItem {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CollectionRunCase {
-    request_id: String,
-    name: String,
-    protocol_id: String,
-    passed: bool,
-    status: Option<u16>,
-    duration_ms: u64,
-    error: Option<String>,
-    failed_assertions: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct VersionInfo {
     desktop_version: &'static str,
     protocol_api_version: &'static str,
@@ -97,6 +85,8 @@ struct ExecuteResponse {
     response_body: Option<String>,
     assertions: Vec<core_domain::AssertionResultEvent>,
     response_meta: Option<ResponseMeta>,
+    #[serde(skip_serializing)]
+    extracted_variables: HashMap<String, String>,
     protocol_api_version: &'static str,
     desktop_version: &'static str,
 }
@@ -338,7 +328,7 @@ async fn execute_request(
     envelope.environment_ref = Some(env_id.to_string());
     envelope.auth_ref = request.auth.map(Into::into);
 
-    execute_envelope(envelope, scope, &app, &state).await
+    execute_envelope(envelope, scope, &app, &state, true).await
 }
 
 async fn execute_envelope(
@@ -346,6 +336,7 @@ async fn execute_envelope(
     scope: VariableScope,
     app: &AppHandle,
     state: &AppState,
+    persist_extracted_variables: bool,
 ) -> Result<ExecuteResponse, String> {
     let engine = state.engine.read().await;
     let (id, mut rx, handle) = engine
@@ -445,17 +436,19 @@ async fn execute_envelope(
         response_blob_id,
     };
     store.record_execution(&record).map_err(|e| e.to_string())?;
-    if let Some(variables) = extracted_variables {
-        let environment_id = envelope.environment_ref.as_deref().unwrap_or("default-env");
-        if let Some(mut environment) = store
-            .get_environment(environment_id)
-            .map_err(|e| e.to_string())?
-        {
-            environment.variables.extend(variables);
-            environment.updated_at = chrono::Utc::now();
-            store
-                .save_environment(&environment)
-                .map_err(|e| e.to_string())?;
+    if persist_extracted_variables {
+        if let Some(variables) = extracted_variables.as_ref() {
+            let environment_id = envelope.environment_ref.as_deref().unwrap_or("default-env");
+            if let Some(mut environment) = store
+                .get_environment(environment_id)
+                .map_err(|e| e.to_string())?
+            {
+                environment.variables.extend(variables.clone());
+                environment.updated_at = chrono::Utc::now();
+                store
+                    .save_environment(&environment)
+                    .map_err(|e| e.to_string())?;
+            }
         }
     }
 
@@ -467,6 +460,7 @@ async fn execute_envelope(
         response_body,
         assertions,
         response_meta,
+        extracted_variables: extracted_variables.unwrap_or_default(),
         protocol_api_version: PROTOCOL_API_VERSION,
         desktop_version: env!("CARGO_PKG_VERSION"),
     })
@@ -506,7 +500,7 @@ async fn execute_sse(
         }
     }
     scope.request = request.variables;
-    execute_envelope(envelope, scope, &app, &state).await
+    execute_envelope(envelope, scope, &app, &state, true).await
 }
 
 #[tauri::command]
@@ -544,7 +538,7 @@ async fn execute_socket(
         }
         _ => return Err("protocol must be tcp or udp".into()),
     }
-    execute_envelope(envelope, VariableScope::default(), &app, &state).await
+    execute_envelope(envelope, VariableScope::default(), &app, &state, true).await
 }
 
 #[tauri::command]
@@ -580,7 +574,7 @@ async fn execute_protocol(
         }
     }
     scope.request = request.variables.clone();
-    execute_envelope(request, scope, &app, &state).await
+    execute_envelope(request, scope, &app, &state, true).await
 }
 
 /// Backward-compatible GET smoke command.
@@ -1067,6 +1061,16 @@ async fn create_module(
 }
 
 #[tauri::command]
+async fn rename_module(id: String, name: String, state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .store
+        .lock()
+        .await
+        .rename_module(&id, &name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn rename_project(
     id: String,
     name: String,
@@ -1249,9 +1253,13 @@ async fn run_collection(
         .await
         .list_collection_requests_for_run(&collection_id)
         .map_err(|error| error.to_string())?;
-    let mut cases = Vec::new();
+    let mut items = Vec::with_capacity(requests.len());
     for stored in requests {
-        let environment_id = stored.envelope.environment_ref.as_deref().unwrap_or("default-env");
+        let environment_id = stored
+            .envelope
+            .environment_ref
+            .as_deref()
+            .unwrap_or("default-env");
         let mut scope = VariableScope::default();
         if let Some(env) = state
             .store
@@ -1267,51 +1275,42 @@ async fn run_collection(
                 }
             }
         }
-        let request_id = stored.id.clone();
-        let name = stored.name.clone();
-        let protocol_id = stored.protocol_id.clone();
-        match execute_envelope(stored.envelope, scope, &app, &state).await {
-            Ok(result) => {
-                let failed_assertions = result
-                    .assertions
-                    .iter()
-                    .filter(|assertion| !assertion.passed)
-                    .map(|assertion| assertion.name.clone())
-                    .collect::<Vec<_>>();
-                let passed = result.summary.state == ExecutionState::Completed
-                    && failed_assertions.is_empty();
-                cases.push(CollectionRunCase {
-                    request_id,
-                    name,
-                    protocol_id,
-                    passed,
-                    status: result.summary.status,
-                    duration_ms: result.summary.duration_ms,
-                    error: None,
-                    failed_assertions,
-                });
-                if fail_fast && !passed {
-                    break;
-                }
-            }
-            Err(error) => {
-                cases.push(CollectionRunCase {
-                    request_id,
-                    name,
-                    protocol_id,
-                    passed: false,
-                    status: None,
-                    duration_ms: 0,
-                    error: Some(error),
-                    failed_assertions: vec![],
-                });
-                if fail_fast {
-                    break;
-                }
-            }
-        }
+        items.push(CollectionRunItem {
+            request_id: stored.id,
+            request: stored.envelope,
+            scope,
+        });
     }
-    Ok(cases)
+    let app_ref = &app;
+    let state_ref = &*state;
+    let result =
+        orchestrate_collection_to_completion(items, fail_fast, |envelope, scope| async move {
+            match execute_envelope(envelope, scope, app_ref, state_ref, false).await {
+                Ok(result) => {
+                    let failed_assertions = result
+                        .assertions
+                        .iter()
+                        .filter(|assertion| !assertion.passed)
+                        .map(|assertion| assertion.name.clone())
+                        .collect::<Vec<_>>();
+                    CollectionCaseOutcome {
+                        passed: result.summary.state == ExecutionState::Completed
+                            && failed_assertions.is_empty(),
+                        status: result.summary.status,
+                        duration_ms: result.summary.duration_ms,
+                        error: None,
+                        failed_assertions,
+                        extracted_variables: result.extracted_variables,
+                    }
+                }
+                Err(error) => CollectionCaseOutcome {
+                    error: Some(error),
+                    ..CollectionCaseOutcome::default()
+                },
+            }
+        })
+        .await;
+    Ok(result.cases)
 }
 
 #[tauri::command]
@@ -1512,6 +1511,7 @@ pub fn run() {
             delete_workspace,
             create_project,
             create_module,
+            rename_module,
             rename_project,
             delete_project,
             create_collection,

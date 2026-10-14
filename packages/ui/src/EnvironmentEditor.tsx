@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createEnvironmentResource, deleteEnvironmentResource, listEnvironmentResources, updateEnvironmentResource, type EnvironmentResource } from "./agentResources";
 import { Icon } from "./Icons";
 import { Button } from "./Components";
+import { useFeedback } from "./Feedback";
 
 export interface EnvironmentEditorProps {
   onLoad: () => Promise<{ variables: Record<string, string>; secretRefs?: string[] }>;
@@ -53,6 +54,7 @@ function KeyValueEditor({ value, onChange, disabled, kind }: { value: string; on
 }
 
 export function EnvironmentEditor({ onLoad, onSave, onPutSecret }: EnvironmentEditorProps) {
+  const { confirm } = useFeedback();
   const [environments, setEnvironments] = useState<EnvironmentResource[]>([]);
   const [defaultVariables, setDefaultVariables] = useState<Record<string, string>>({});
   const [defaultSecretRefs, setDefaultSecretRefs] = useState<string[]>([]);
@@ -144,7 +146,7 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret }: EnvironmentEd
   }
 
   async function removeEnvironment() {
-    if (!selectedEnvironment || !window.confirm(`删除环境“${selectedEnvironment.name}”？`)) return;
+    if (!selectedEnvironment || !await confirm({ title: "删除环境", description: `删除环境“${selectedEnvironment.name}”后无法恢复。`, confirmLabel: "删除环境", tone: "danger" })) return;
     if (selectedEnvironment.id.startsWith("draft-")) {
       setEnvironments((items) => items.filter((item) => item.id !== selectedEnvironment.id));
       setActive("global-variables");
@@ -182,13 +184,13 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret }: EnvironmentEd
   return <div className="environment-manager">
     <aside className="environment-manager-nav" aria-label="环境配置导航">
       <section><div className="environment-nav-label">全局</div>
-        <button className={active === "global-variables" ? "is-active" : undefined} onClick={() => setActive("global-variables")}><Icon name="globe"/><span>全局变量</span></button>
-        <button className={active === "global-parameters" ? "is-active" : undefined} onClick={() => setActive("global-parameters")}><Icon name="sliders"/><span>全局参数</span></button>
-        <button className={active === "vault" ? "is-active" : undefined} onClick={() => setActive("vault")}><Icon name="archive"/><span>Vault Secrets（密钥库）</span></button>
+        <button type="button" className={active === "global-variables" ? "is-active" : undefined} onClick={() => setActive("global-variables")}><Icon name="globe"/><span>全局变量</span></button>
+        <button type="button" className={active === "global-parameters" ? "is-active" : undefined} onClick={() => setActive("global-parameters")}><Icon name="sliders"/><span>全局参数</span></button>
+        <button type="button" className={active === "vault" ? "is-active" : undefined} onClick={() => setActive("vault")}><Icon name="archive"/><span>Vault Secrets（密钥库）</span></button>
       </section>
       <section className="environment-list"><div className="environment-nav-label">环境</div>
-        {environments.map((environment) => <button key={environment.id} className={active === environment.id ? "is-active" : undefined} onClick={() => setActive(environment.id)}><b>{environmentBadge(environment.name)}</b><span>{environment.name || "未命名环境"}</span></button>)}
-        <button className="environment-add" disabled={busy} onClick={() => void addEnvironment()}><Icon name="plus"/><span>新建环境</span></button>
+        {environments.map((environment) => <button type="button" key={environment.id} className={active === environment.id ? "is-active" : undefined} onClick={() => setActive(environment.id)}><b>{environmentBadge(environment.name)}</b><span>{environment.name || "未命名环境"}</span></button>)}
+        <button type="button" className="environment-add" disabled={busy} onClick={() => void addEnvironment()}><Icon name="plus"/><span>新建环境</span></button>
       </section>
     </aside>
     <main className="environment-manager-content">

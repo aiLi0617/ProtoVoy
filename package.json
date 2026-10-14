@@ -10,10 +10,12 @@
     "dev:desktop": "pnpm --filter @protovoy/desktop tauri:dev",
     "build:desktop": "pnpm --filter @protovoy/desktop tauri:build",
     "prepare:sidecar": "node scripts/prepare-sidecar.mjs",
+    "validate:changed": "node scripts/validate-changed.mjs",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "test": "pnpm -r test",
+    "test": "pnpm --filter=!@protovoy/ui -r test && node scripts/run-tsx-tests.mjs --cwd packages/ui --concurrency 4",
     "test:e2e": "playwright test",
+    "test:e2e:changed": "node scripts/test-changed-e2e.mjs",
     "screenshots": "node scripts/capture-screenshots.mjs",
     "rust:check": "cargo check --workspace",
     "rust:test": "cargo test --workspace"

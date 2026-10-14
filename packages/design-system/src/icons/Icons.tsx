@@ -6,8 +6,11 @@ import {
   ArrowDown,
   ArrowUp,
   Bolt,
+  Boxes,
   Brush as BroomIcon,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Code2,
   Command,
   Copy,
@@ -31,6 +34,7 @@ import {
   Star,
   Sun,
   Tag,
+  Triangle,
   Trash2,
   Users,
   WrapText,
@@ -48,6 +52,7 @@ export type IconName =
   | "bolt"
   | "broom"
   | "chevron"
+  | "collapse-all"
   | "close"
   | "code"
   | "command"
@@ -56,10 +61,12 @@ export type IconName =
   | "download"
   | "edit"
   | "external"
+  | "expand-all"
   | "folder"
   | "gitBranch"
   | "globe"
   | "menu"
+  | "module"
   | "more"
   | "moon"
   | "network"
@@ -71,6 +78,7 @@ export type IconName =
   | "star"
   | "sun"
   | "tag"
+  | "triangle"
   | "trash"
   | "users"
   | "websocket"
@@ -84,6 +92,7 @@ const map: Record<IconName, ComponentType<LucideProps>> = {
   bolt: Bolt,
   broom: BroomIcon,
   chevron: ChevronRight,
+  "collapse-all": ChevronsDownUp,
   close: X,
   code: Code2,
   command: Command,
@@ -92,10 +101,12 @@ const map: Record<IconName, ComponentType<LucideProps>> = {
   download: Download,
   edit: Pencil,
   external: ExternalLink,
+  "expand-all": ChevronsUpDown,
   folder: Folder,
   gitBranch: GitBranch,
   globe: Globe2,
   menu: Menu,
+  module: Boxes,
   more: MoreHorizontal,
   moon: Moon,
   network: Network,
@@ -107,6 +118,7 @@ const map: Record<IconName, ComponentType<LucideProps>> = {
   star: Star,
   sun: Sun,
   tag: Tag,
+  triangle: Triangle,
   trash: Trash2,
   users: Users,
   websocket: RadioTower,
