@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState, type ReactPortal } from "react";
 import { createPortal } from "react-dom";
 import type { HttpWorkbenchRequest } from "./HttpWorkbench";
 import { Icon } from "./Icons";
@@ -9,7 +9,7 @@ import { ModalFrame } from "./ModalFrame";
 export interface CurlImportDialogProps { open: boolean; onClose: () => void; onCreate: (request: HttpWorkbenchRequest) => void | Promise<void> }
 const C = { title: "\u5bfc\u5165 cURL", intro: "\u89e3\u6790 cURL \u5e76\u521b\u5efa\u65b0\u63a5\u53e3\uff0c\u540c\u65f6\u751f\u6210\u9ed8\u8ba4\u8c03\u8bd5\u7528\u4f8b\u3002\u4e0d\u4f1a\u81ea\u52a8\u53d1\u9001\u3002", close: "\u5173\u95ed\u5bfc\u5165 cURL", command: "cURL \u547d\u4ee4", inspect: "\u9700\u8981\u68c0\u67e5", ready: "\u5df2\u8bc6\u522b\u63a5\u53e3\u7ed3\u6784\u548c\u9ed8\u8ba4\u7528\u4f8b", hint: "\u8ba4\u8bc1\u51ed\u636e\u4e0d\u4f1a\u5199\u5165\u63a5\u53e3\u6587\u6863", cancel: "\u53d6\u6d88", submit: "\u521b\u5efa\u63a5\u53e3" };
 
-export function CurlImportDialog({ open, onClose, onCreate }: CurlImportDialogProps) {
+export function CurlImportDialog({ open, onClose, onCreate }: CurlImportDialogProps): ReactPortal | null {
   const titleId = useId(), inputRef = useRef<HTMLTextAreaElement>(null);
   const [source, setSource] = useState("");
   const [busy, setBusy] = useState(false);

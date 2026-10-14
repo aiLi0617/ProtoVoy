@@ -1253,7 +1253,10 @@ export function HttpWorkbench({
         ?? designedResponses[0]
         ?? { status: selectedDesignedResponse || "200", fields: [] };
       const designAssertions = validationEnabled ? validateDesignedResponse(designedResponse, next, responseValidationSettings) : [];
-      const combinedAssertions = designAssertions.length ? [...designAssertions, ...(next.assertions ?? [])] : next.assertions;
+      const designAssertionNames = new Set(designAssertions.map((assertion) => assertion.name));
+      const combinedAssertions = designAssertions.length
+        ? [...designAssertions, ...(next.assertions ?? []).filter((assertion) => !designAssertionNames.has(assertion.name))]
+        : next.assertions;
       setResult(combinedAssertions ? { ...next, assertions: combinedAssertions } : next);
       setRequestWallMs(Math.round(performance.now() - wallStartedAt));
       if (onListHistory) {

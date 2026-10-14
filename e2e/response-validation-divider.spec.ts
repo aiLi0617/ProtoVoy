@@ -31,7 +31,7 @@ test("response validation divider is visible after a completed request", async (
 
   const divider = page.getByRole("separator", { name: "调整返回响应和校验响应区域大小" });
   await expect(divider).toBeVisible();
-  await expect(page.getByText("接口设计 · HTTP 状态码")).toBeVisible();
+  await expect(page.locator(".workbench-panel:not([hidden]) .http-validation-name", { hasText: "接口设计 · HTTP 状态码" })).toBeVisible();
   const geometry = await divider.evaluate((element) => {
     const bounds = element.getBoundingClientRect();
     const line = getComputedStyle(element);

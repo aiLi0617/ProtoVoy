@@ -19,11 +19,42 @@ test("starts with zero tabs and the project overview", async ({ page }) => {
   await expect(page.locator(".workbench-tabs")).toHaveCount(0);
   await expect(page.locator(".workbench-tab")).toHaveCount(0);
   await expect(page.locator(".workbench-session-stack [role=tabpanel]")).toHaveCount(1);
-  await expect(page.getByRole("main", { name: "项目" })).toBeVisible();
+  await expect(page.locator(".project-launcher")).toBeVisible();
   await expect(page.getByRole("heading", { name: "项目", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "新建项目" })).toBeVisible();
 });
 
+test("applies saved appearance before the app renders", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("protovoy:ui-state", JSON.stringify({ state: { themeMode: "light" }, version: 5 }));
+    localStorage.setItem("protovoy:locale", "en-US");
+    (window as Window & { __themeTransitions?: string[] }).__themeTransitions = [];
+    new MutationObserver(() => {
+      const theme = document.documentElement.dataset.theme;
+      if (theme) (window as Window & { __themeTransitions?: string[] }).__themeTransitions?.push(theme);
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  });
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+  expect(await page.evaluate(() => (window as Window & { __themeTransitions?: string[] }).__themeTransitions)).not.toContain("dark");
+});
+
+test("turns Agent bootstrap failures into actionable guidance", async ({ page }) => {
+  const explorerToggle = page.locator(".explorer-edge-toggle");
+  if (await explorerToggle.isVisible()) await explorerToggle.click();
+  const alert = page.getByRole("alert").filter({ hasText: "无法加载工作区" });
+  await expect(alert).toContainText("无法连接 Local Agent");
+  await expect(alert).not.toContainText("Failed to fetch");
+  await expect(alert.getByRole("button", { name: "检查 Local Agent 设置" })).toBeVisible();
+});
+
+test("opens collection automation from the project rail", async ({ page }) => {
+  await page.getByRole("button", { name: "自动化测试" }).click();
+  await expect(page.locator(".collection-runner")).toBeVisible();
+  await expect(page).toHaveURL(/view=automation/);
+  await expect(page).toHaveURL(/workbench=runner/);
+});
 test("opens the grouped protocol workspace without horizontal overflow", async ({ page }) => {
   await expect(page).toHaveTitle("ProtoVoy");
   await expect(page.locator(".workbench-tabs")).toBeVisible();

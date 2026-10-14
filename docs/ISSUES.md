@@ -18,8 +18,8 @@
 | [ISS-004](#iss-004-workbench-直达链接被项目主页吞掉) | Workbench 直达链接被项目主页吞掉 | P1 | done | 2026-08-18 |
 | [ISS-005](#iss-005-workbench-会话刷新后丢失) | Workbench 会话刷新后丢失 | P1 | done | 2026-08-18 |
 | [ISS-006](#iss-006-冒烟测试未实际覆盖工作台页面) | 冒烟测试未实际覆盖工作台页面 | P1 | done | 2026-08-18 |
-| [ISS-007](#iss-007-local-agent-失败态暴露原始错误和内部-id) | Local Agent 失败态暴露原始错误和内部 ID | P2 | open | 2026-08-15 |
-| [ISS-008](#iss-008-首页形成嵌套-main-landmark) | 首页形成嵌套 main landmark | P2 | open | 2026-08-15 |
+| [ISS-007](#iss-007-local-agent-失败态暴露原始错误和内部-id) | Local Agent 失败态暴露原始错误和内部 ID | P2 | done | 2026-10-13 |
+| [ISS-008](#iss-008-首页形成嵌套-main-landmark) | 首页形成嵌套 main landmark | P2 | done | 2026-10-13 |
 | [ISS-009](#iss-009-wss-执行因-rustls-cryptoprovider-未初始化而崩溃) | WSS 执行因 Rustls CryptoProvider 未初始化而崩溃 | P0 | done | 2026-08-15 |
 | [ISS-010](#iss-010-glib-安全修复被-tauri-gtk3-栈挡住无法自动升级) | glib 安全修复被 Tauri GTK3 栈挡住，无法自动升级 | P2 | open | 2026-08-18 |
 | [ISS-011](#iss-011-集合运行按最近修改倒序执行) | 集合运行按最近修改倒序执行 | P1 | done | 2026-09-17 |
@@ -237,7 +237,7 @@
 | 字段 | 内容 |
 |------|------|
 | **等级** | P2 |
-| **状态** | open |
+| **状态** | done |
 | **模块** | Web 首页 / 资源管理器错误态 |
 | **记录日期** | 2026-08-15 |
 | **关联** | `apps/web/src/App.tsx:77-105`、`WorkbenchDeck` 首页 |
@@ -252,6 +252,10 @@ Local Agent 未启动时，左侧错误卡直接显示英文底层错误 `Failed
 - 工作区树未加载成功时，不显示内部默认 ID；改为“工作区尚未加载”或隐藏保存位置。
 - “检查 Local Agent 设置”应能直达对应设置项，并保留重试入口。
 
+### 处理说明
+
+- 已将超时、鉴权/配对、网络不可达、错误地址和 5xx 映射为可操作提示。`WorkspaceExplorer` 保留“重试”和“检查 Local Agent 设置”。`WorkbenchDeck` 仅在项目和集合解析成功后显示可读保存路径。桌面与移动 E2E 已覆盖。
+
 ---
 
 ## ISS-008 首页形成嵌套 main landmark
@@ -259,7 +263,7 @@ Local Agent 未启动时，左侧错误卡直接显示英文底层错误 `Failed
 | 字段 | 内容 |
 |------|------|
 | **等级** | P2 |
-| **状态** | open |
+| **状态** | done |
 | **模块** | `AppShell` / `WorkbenchDeck` / 可访问性 |
 | **记录日期** | 2026-08-15 |
 | **关联** | `packages/ui/src/WorkbenchDeck.tsx:236` |
@@ -273,6 +277,10 @@ Local Agent 未启动时，左侧错误卡直接显示英文底层错误 `Failed
 - 页面只保留一个顶级 `main` landmark。
 - 首页容器改用 `section`/`div`，并通过 `aria-labelledby="workbench-home-title"` 保留可识别名称。
 - 为首页补充自动化可访问性断言。
+
+### 处理说明
+
+- 项目启动页、工作台首页改用带 `aria-labelledby` 的 `section`，项目设置内容改用命名 `region`；AppShell 保留唯一顶级 `main`。语义浏览器冒烟已通过。
 
 ---
 
