@@ -1,7 +1,7 @@
-ApiVoy
-Copyright 2026 ApiVoy Contributors
+ProtoVoy
+Copyright 2026 ProtoVoy Contributors
 
-This product includes software developed for the ApiVoy project.
+This product includes software developed for the ProtoVoy project.
 
 Licensed under the Apache License, Version 2.0.
 See the LICENSE file for the full license text.
@@ -10,13 +10,13 @@ See the LICENSE file for the full license text.
 Brand & Trademark Notice
 ---------------------------------------------------------------------------
 
-The product name "ApiVoy", the slogan "Explore Every Protocol.",
+The product name "ProtoVoy", the slogan "Explore Every Protocol.",
 associated logos, icons, and other brand assets are NOT licensed under
 Apache-2.0 by default.
 
-Use of ApiVoy branding requires a separate brand / trademark grant.
+Use of ProtoVoy branding requires a separate brand / trademark grant.
 Redistribution of modified software must not imply official endorsement
-by the ApiVoy project unless expressly permitted.
+by the ProtoVoy project unless expressly permitted.
 
 ---------------------------------------------------------------------------
 Open Source Scope
@@ -34,5 +34,5 @@ Apache License 2.0, including but not limited to:
   - Protocol gateway (optional self-hosted deployment)
   - Private deployment tooling under deploy/
 
-ApiVoy may offer separately developed hosted services in the future.
+ProtoVoy may offer separately developed hosted services in the future.
 Those services are not part of this repository.

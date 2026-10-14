@@ -4,7 +4,7 @@ export type InterfaceFieldLocation = "query" | "header" | "body";
 export interface InterfaceStructureField { key: string; name: string; location: InterfaceFieldLocation; type: "string" | "integer" | "number" | "boolean" | "array" | "object" | "null"; }
 export interface HttpInterfaceStructure { version: 1; method: string; path: string; fields: InterfaceStructureField[]; }
 export interface InterfaceStructureDifference { kind: "added" | "removed" | "changed"; key: string; field: InterfaceStructureField; baseline?: InterfaceStructureField; }
-export const INTERFACE_STRUCTURE_METADATA_KEY = "__apivoyInterfaceStructure";
+export const INTERFACE_STRUCTURE_METADATA_KEY = "__protovoyInterfaceStructure";
 
 function valueType(value: unknown): InterfaceStructureField["type"] {
   if (value === null) return "null";
@@ -25,7 +25,7 @@ function bodyFields(value: unknown, prefix = ""): InterfaceStructureField[] {
 }
 
 export function captureHttpInterfaceStructure(request: Pick<HttpWorkbenchRequest, "method" | "url" | "headers" | "body">): HttpInterfaceStructure {
-  const url = new URL(request.url || "/", "http://apivoy.local");
+  const url = new URL(request.url || "/", "http://protovoy.local");
   const query = [...new Set([...url.searchParams.keys()])].map((name) => ({ key: `query:${name.toLowerCase()}`, name, location: "query" as const, type: "string" as const }));
   const ignoredHeaders = new Set(["authorization", "cookie", "content-length", "host", "connection", "user-agent", "accept-encoding", "content-type", "accept"]);
   const headers = request.headers.filter(([name]) => name.trim() && !ignoredHeaders.has(name.trim().toLowerCase())).map(([name]) => ({ key: `header:${name.trim().toLowerCase()}`, name: name.trim(), location: "header" as const, type: "string" as const }));
@@ -77,7 +77,7 @@ function setAtPath(root: Record<string, unknown>, path: string, value: unknown) 
 }
 
 export function alignRequestToInterface(request: HttpWorkbenchRequest, baseline: HttpInterfaceStructure): HttpWorkbenchRequest {
-  const url = new URL(request.url || "/", "http://apivoy.local"); const existingQuery = new Map(url.searchParams); url.pathname = baseline.path; url.search = "";
+  const url = new URL(request.url || "/", "http://protovoy.local"); const existingQuery = new Map(url.searchParams); url.pathname = baseline.path; url.search = "";
   for (const field of baseline.fields.filter((item) => item.location === "query")) url.searchParams.set(field.name, existingQuery.get(field.name) ?? "");
   const base = request.url.match(/^[a-z][a-z\d+.-]*:\/\/[^/]+/i)?.[0] ?? "";
   const nextHeaders = baseline.fields.filter((item) => item.location === "header").map((field) => { const existing = request.headers.find(([name]) => name.toLowerCase() === field.name.toLowerCase()); return [field.name, existing?.[1] ?? ""] as [string, string]; });

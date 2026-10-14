@@ -1,8 +1,8 @@
-# Install ApiVoy
+# Install ProtoVoy
 
 ## Desktop (recommended)
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/aiLi0617/ApiVoy/releases):
+Download the latest release for your platform from [GitHub Releases](https://github.com/aiLi0617/ProtoVoy/releases):
 
 | Platform | Package |
 |----------|---------|
@@ -17,8 +17,8 @@ Verify downloads using the `SHA256SUMS.txt` file attached to each release.
 The Web UI requires the Local Agent on the same machine:
 
 ```bash
-# After installing or building apivoy-agent
-apivoy-agent
+# After installing or building protovoy-agent
+protovoy-agent
 ```
 
 Default listen address: `127.0.0.1:39217`. Pair from the Web UI on first connect.
@@ -26,8 +26,8 @@ Default listen address: `127.0.0.1:39217`. Pair from the Web UI on first connect
 ## CLI
 
 ```bash
-apivoy-cli drivers
-apivoy-cli http-get https://httpbin.org/get
+protovoy-cli drivers
+protovoy-cli http-get https://httpbin.org/get
 ```
 
 CLI binaries are published alongside Desktop releases.

@@ -1,6 +1,6 @@
 # Import from Postman and OpenAPI
 
-ApiVoy can import common API description formats into collections.
+ProtoVoy can import common API description formats into collections.
 
 ## Supported formats
 
@@ -8,7 +8,7 @@ ApiVoy can import common API description formats into collections.
 - OpenAPI 3.x (JSON or YAML)
 - HAR
 - Postman Collection v2.x
-- ApiVoy project packages
+- ProtoVoy project packages
 
 ## OpenAPI
 
@@ -21,7 +21,7 @@ Internal and external `$ref` links are resolved with cycle detection.
 
 ## Postman
 
-Postman environment and collection variables map to ApiVoy environments where possible. Replace `{{token}}` values with `secret_ref` entries after import.
+Postman environment and collection variables map to ProtoVoy environments where possible. Replace `{{token}}` values with `secret_ref` entries after import.
 
 ## After import
 

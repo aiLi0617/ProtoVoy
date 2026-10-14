@@ -1,10 +1,10 @@
 # WASM plugins
 
-Third-party ApiVoy plugins must ship as **WebAssembly Components** (not native binaries).
+Third-party ProtoVoy plugins must ship as **WebAssembly Components** (not native binaries).
 
 ## SDK
 
-- WIT definition: [plugins/sdk/apivoy-plugin.wit](../../plugins/sdk/apivoy-plugin.wit)
+- WIT definition: [plugins/sdk/protovoy-plugin.wit](../../plugins/sdk/protovoy-plugin.wit)
 - Host runtime: `crates/plugin-runtime`
 - UI: **Plugins** workbench (Desktop and Web via Agent)
 
@@ -20,7 +20,7 @@ Third-party ApiVoy plugins must ship as **WebAssembly Components** (not native b
 ## Security
 
 - SHA-256 integrity check on install
-- Ed25519 publisher signatures required in production (`APIVOY_PLUGIN_TRUSTED_KEYS`)
+- Ed25519 publisher signatures required in production (`PROTOVOY_PLUGIN_TRUSTED_KEYS`)
 - Memory and fuel limits enforced by Wasmtime
 - Permissions must be declared in manifest and granted by host
 

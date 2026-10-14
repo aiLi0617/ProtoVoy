@@ -8,8 +8,8 @@ Requires [GitHub CLI](https://cli.github.com/) authenticated as a repository adm
 Set topics and homepage (use the GitHub repo URL until a project site is live):
 
 ```bash
-gh repo edit aiLi0617/ApiVoy \
-  --homepage "https://github.com/aiLi0617/ApiVoy" \
+gh repo edit aiLi0617/ProtoVoy \
+  --homepage "https://github.com/aiLi0617/ProtoVoy" \
   --add-topic api-client --add-topic api-testing --add-topic developer-tools \
   --add-topic http-client --add-topic grpc --add-topic graphql --add-topic websocket \
   --add-topic mqtt --add-topic kafka --add-topic rust --add-topic tauri \
@@ -30,30 +30,30 @@ Do **not** use the `vulnerability-alerts` API as a substitute for Private Vulner
 
 Before linking [SECURITY.md](../../SECURITY.md) publicly, confirm the Private Vulnerability Reporting form loads at:
 
-https://github.com/aiLi0617/ApiVoy/security/advisories/new
+https://github.com/aiLi0617/ProtoVoy/security/advisories/new
 
 ## Discussions
 
 ```bash
-gh api --method PUT repos/aiLi0617/ApiVoy -f has_discussions=true
+gh api --method PUT repos/aiLi0617/ProtoVoy -f has_discussions=true
 ```
 
 Create categories (run once after Discussions is enabled):
 
 ```bash
-gh api --method POST repos/aiLi0617/ApiVoy/discussions/categories \
+gh api --method POST repos/aiLi0617/ProtoVoy/discussions/categories \
   -f name="Announcements" -f emoji=":mega:" -f description="Release and maintenance updates"
 
-gh api --method POST repos/aiLi0617/ApiVoy/discussions/categories \
+gh api --method POST repos/aiLi0617/ProtoVoy/discussions/categories \
   -f name="Ideas" -f emoji=":bulb:" -f description="Feature ideas and product feedback"
 
-gh api --method POST repos/aiLi0617/ApiVoy/discussions/categories \
+gh api --method POST repos/aiLi0617/ProtoVoy/discussions/categories \
   -f name="Q&A" -f emoji=":question:" -f description="Help and usage questions"
 
-gh api --method POST repos/aiLi0617/ApiVoy/discussions/categories \
+gh api --method POST repos/aiLi0617/ProtoVoy/discussions/categories \
   -f name="Show and tell" -f emoji=":sparkles:" -f description="Share workflows and integrations"
 
-gh api --method POST repos/aiLi0617/ApiVoy/discussions/categories \
+gh api --method POST repos/aiLi0617/ProtoVoy/discussions/categories \
   -f name="Protocol compatibility" -f emoji=":satellite:" -f description="Broker and server compatibility reports"
 ```
 
@@ -70,42 +70,42 @@ Recommended:
 ## Milestones
 
 ```bash
-gh api repos/aiLi0617/ApiVoy/milestones -f title="v0.1 Public Alpha" -f description="First public alpha release and installers"
-gh api repos/aiLi0617/ApiVoy/milestones -f title="v0.2 Protocol Stability" -f description="gRPC/MQ broker tests and compatibility matrix"
-gh api repos/aiLi0617/ApiVoy/milestones -f title="v0.3 Plugin Ecosystem" -f description="Example WASM plugins and publisher docs"
-gh api repos/aiLi0617/ApiVoy/milestones -f title="v1.0 Stable" -f description="i18n completion, auto-update, hardened defaults"
+gh api repos/aiLi0617/ProtoVoy/milestones -f title="v0.1 Public Alpha" -f description="First public alpha release and installers"
+gh api repos/aiLi0617/ProtoVoy/milestones -f title="v0.2 Protocol Stability" -f description="gRPC/MQ broker tests and compatibility matrix"
+gh api repos/aiLi0617/ProtoVoy/milestones -f title="v0.3 Plugin Ecosystem" -f description="Example WASM plugins and publisher docs"
+gh api repos/aiLi0617/ProtoVoy/milestones -f title="v1.0 Stable" -f description="i18n completion, auto-update, hardened defaults"
 ```
 
 ## Labels
 
 ```bash
 for label in "good first issue" "help wanted" protocol security documentation desktop cli; do
-  gh label create "$label" --repo aiLi0617/ApiVoy --force
+  gh label create "$label" --repo aiLi0617/ProtoVoy --force
 done
 ```
 
 ## Seed issues (real work items)
 
 ```bash
-gh issue create --repo aiLi0617/ApiVoy --title "[Desktop] Fix narrow-screen workbench layout compression" --label "desktop,bug" --milestone "v0.1 Public Alpha" --body "See docs/ISSUES.md ISS-003. Main workbench collapses to sidebar width on narrow viewports."
+gh issue create --repo aiLi0617/ProtoVoy --title "[Desktop] Fix narrow-screen workbench layout compression" --label "desktop,bug" --milestone "v0.1 Public Alpha" --body "See docs/ISSUES.md ISS-003. Main workbench collapses to sidebar width on narrow viewports."
 
-gh issue create --repo aiLi0617/ApiVoy --title "[Testing] Extend Playwright smoke to execute HTTP requests" --label "documentation,desktop" --milestone "v0.1 Public Alpha" --body "See docs/ISSUES.md ISS-006. Current smoke only checks layout, not send/receive."
+gh issue create --repo aiLi0617/ProtoVoy --title "[Testing] Extend Playwright smoke to execute HTTP requests" --label "documentation,desktop" --milestone "v0.1 Public Alpha" --body "See docs/ISSUES.md ISS-006. Current smoke only checks layout, not send/receive."
 
-gh issue create --repo aiLi0617/ApiVoy --title "[gRPC] Expand reflection compatibility tests" --label "protocol,help wanted" --milestone "v0.2 Protocol Stability" --body "Add integration tests against a local gRPC echo service; mark public matrix accordingly."
+gh issue create --repo aiLi0617/ProtoVoy --title "[gRPC] Expand reflection compatibility tests" --label "protocol,help wanted" --milestone "v0.2 Protocol Stability" --body "Add integration tests against a local gRPC echo service; mark public matrix accordingly."
 
-gh issue create --repo aiLi0617/ApiVoy --title "[Release] Add checksum verification docs" --label "documentation" --milestone "v0.1 Public Alpha" --body "Document SHA256SUMS.txt verification for Windows/macOS/Linux downloads."
+gh issue create --repo aiLi0617/ProtoVoy --title "[Release] Add checksum verification docs" --label "documentation" --milestone "v0.1 Public Alpha" --body "Document SHA256SUMS.txt verification for Windows/macOS/Linux downloads."
 
-gh issue create --repo aiLi0617/ApiVoy --title "[Security] Document local-agent threat model in user docs" --label "security,documentation" --milestone "v0.2 Protocol Stability" --body "Expand docs/security/local-agent.md with pairing flow diagrams."
+gh issue create --repo aiLi0617/ProtoVoy --title "[Security] Document local-agent threat model in user docs" --label "security,documentation" --milestone "v0.2 Protocol Stability" --body "Expand docs/security/local-agent.md with pairing flow diagrams."
 
-gh issue create --repo aiLi0617/ApiVoy --title "[Plugin] Publish an example WASM transformer plugin" --label "protocol,good first issue" --milestone "v0.3 Plugin Ecosystem" --body "Ship a buildable example under examples/plugins/ with CI build step."
+gh issue create --repo aiLi0617/ProtoVoy --title "[Plugin] Publish an example WASM transformer plugin" --label "protocol,good first issue" --milestone "v0.3 Plugin Ecosystem" --body "Ship a buildable example under examples/plugins/ with CI build step."
 
-gh issue create --repo aiLi0617/ApiVoy --title "[i18n] Complete English and Chinese workbench strings" --label "documentation,help wanted" --milestone "v1.0 Stable" --body "Migrate remaining hardcoded Chinese strings in workbench panels to i18n resources."
+gh issue create --repo aiLi0617/ProtoVoy --title "[i18n] Complete English and Chinese workbench strings" --label "documentation,help wanted" --milestone "v1.0 Stable" --body "Migrate remaining hardcoded Chinese strings in workbench panels to i18n resources."
 
-gh issue create --repo aiLi0617/ApiVoy --title "[Desktop] Add automatic update verification" --label "desktop" --milestone "v1.0 Stable" --body "Design and implement signed update channel for Tauri desktop builds."
+gh issue create --repo aiLi0617/ProtoVoy --title "[Desktop] Add automatic update verification" --label "desktop" --milestone "v1.0 Stable" --body "Design and implement signed update channel for Tauri desktop builds."
 
-gh issue create --repo aiLi0617/ApiVoy --title "[Testing] Add protocol compatibility test matrix" --label "protocol,documentation" --milestone "v0.2 Protocol Stability" --body "Track broker/server versions with reproducible docker-compose fixtures."
+gh issue create --repo aiLi0617/ProtoVoy --title "[Testing] Add protocol compatibility test matrix" --label "protocol,documentation" --milestone "v0.2 Protocol Stability" --body "Track broker/server versions with reproducible docker-compose fixtures."
 
-gh issue create --repo aiLi0617/ApiVoy --title "[Docs] Add protocol-specific getting started tutorials" --label "documentation,good first issue" --milestone "v0.1 Public Alpha" --body "Expand docs/protocols/ with step-by-step walkthroughs linked from README."
+gh issue create --repo aiLi0617/ProtoVoy --title "[Docs] Add protocol-specific getting started tutorials" --label "documentation,good first issue" --milestone "v0.1 Public Alpha" --body "Expand docs/protocols/ with step-by-step walkthroughs linked from README."
 ```
 
 ## Release v0.1.0
@@ -131,4 +131,4 @@ Download and verify all platform assets, then **manually publish** the release f
 
 Release title:
 
-`ApiVoy v0.1.0`
+`ProtoVoy v0.1.0`

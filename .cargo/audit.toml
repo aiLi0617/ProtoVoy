@@ -1,7 +1,7 @@
 [advisories]
 ignore = [
   # Tauri/Wry still use the gtk-rs GTK3 bindings on Linux. These entries are
-  # accepted only while apivoy-desktop remains on that upstream backend.
+  # accepted only while protovoy-desktop remains on that upstream backend.
   "RUSTSEC-2024-0411",
   "RUSTSEC-2024-0412",
   "RUSTSEC-2024-0413",
@@ -24,7 +24,7 @@ ignore = [
   "RUSTSEC-2025-0100",
 
   # glib 0.18 enters only through the Tauri Linux dependency graph. The
-  # affected VariantStrIter API is not referenced by ApiVoy or Tauri/Wry.
+  # affected VariantStrIter API is not referenced by ProtoVoy or Tauri/Wry.
   "RUSTSEC-2024-0429",
 ]
 

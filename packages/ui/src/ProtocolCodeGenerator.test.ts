@@ -4,7 +4,7 @@ import { generateProtocolCode, listCodeTemplates, registerCodeTemplate } from ".
 import { generateHttpCode, registerHttpCodeTemplate } from "./CodeGenerator.js";
 import { setLocale, translate } from "./i18n.js";
 import { exportTeamSnapshot, restoreTeamSnapshot } from "./teamSnapshot.js";
-import { createHttpRequest } from "@apivoy/request-model";
+import { createHttpRequest } from "@protovoy/request-model";
 import type { WorkspaceTree } from "./WorkspaceExplorer.js";
 
 test("generates protocol-specific snippets for all non-HTTP MVP protocols", () => {

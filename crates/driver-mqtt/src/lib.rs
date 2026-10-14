@@ -88,7 +88,7 @@ fn request_payload(request: &RequestEnvelope) -> Result<MqttRequest, DriverError
             .get("clientId")
             .and_then(Value::as_str)
             .filter(|value| !value.is_empty())
-            .unwrap_or("apivoy-client")
+            .unwrap_or("protovoy-client")
             .to_owned(),
         username: value
             .get("username")

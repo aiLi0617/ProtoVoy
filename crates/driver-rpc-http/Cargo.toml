@@ -3,7 +3,7 @@ name = "driver-rpc-http"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "SOAP and JSON-RPC drivers for ApiVoy"
+description = "SOAP and JSON-RPC drivers for ProtoVoy"
 
 [dependencies]
 async-trait = { workspace = true }

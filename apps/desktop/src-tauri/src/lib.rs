@@ -732,11 +732,17 @@ async fn save_api_definition(
     state: State<'_, AppState>,
 ) -> Result<ApiDefinitionRecord, String> {
     let id = request.id.unwrap_or_else(|| Uuid::new_v4().to_string());
-    let existing = state
-        .store
-        .lock()
-        .await
+    let store = state.store.lock().await;
+    let existing = store
         .get_api_definition(&id)
+        .map_err(|error| error.to_string())?;
+    let canonical_content = store
+        .canonicalize_mock_response_ids(
+            &request.content,
+            existing
+                .as_ref()
+                .map(|definition| definition.content.as_str()),
+        )
         .map_err(|error| error.to_string())?;
     let now = chrono::Utc::now();
     let record = ApiDefinitionRecord {
@@ -746,14 +752,11 @@ async fn save_api_definition(
         name: request.name,
         format: request.format,
         file_name: request.file_name,
-        content: request.content,
+        content: canonical_content,
         created_at: existing.map(|item| item.created_at).unwrap_or(now),
         updated_at: now,
     };
-    state
-        .store
-        .lock()
-        .await
+    store
         .save_api_definition(&record)
         .map_err(|error| error.to_string())?;
     Ok(record)
@@ -779,16 +782,21 @@ async fn bind_request_definition(
     operation_ref: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<RequestDefinitionBinding, String> {
+    let store = state.store.lock().await;
+    let mock_operation_id = store
+        .get_request_definition_binding(&request_id)
+        .map_err(|error| error.to_string())?
+        .map(|binding| binding.mock_operation_id)
+        .map(Ok)
+        .unwrap_or_else(|| store.allocate_mock_id().map_err(|error| error.to_string()))?;
     let binding = RequestDefinitionBinding {
         request_id,
         definition_id,
+        mock_operation_id,
         operation_ref,
         updated_at: chrono::Utc::now(),
     };
-    state
-        .store
-        .lock()
-        .await
+    store
         .bind_request_definition(&binding)
         .map_err(|error| error.to_string())?;
     Ok(binding)
@@ -909,7 +917,7 @@ async fn start_capture(
 ) -> Result<CaptureStatus, String> {
     let bind = request
         .bind
-        .unwrap_or_else(|| "127.0.0.1:39219".into())
+        .unwrap_or_else(|| "127.0.0.1:39220".into())
         .parse::<std::net::SocketAddr>()
         .map_err(|error| error.to_string())?;
     state
@@ -1239,16 +1247,17 @@ async fn run_collection(
         .store
         .lock()
         .await
-        .list_requests(Some(&collection_id))
+        .list_collection_requests_for_run(&collection_id)
         .map_err(|error| error.to_string())?;
     let mut cases = Vec::new();
     for stored in requests {
+        let environment_id = stored.envelope.environment_ref.as_deref().unwrap_or("default-env");
         let mut scope = VariableScope::default();
         if let Some(env) = state
             .store
             .lock()
             .await
-            .get_environment("default-env")
+            .get_environment(environment_id)
             .map_err(|error| error.to_string())?
         {
             scope.environment = env.variables;
@@ -1408,12 +1417,12 @@ fn state_name(state: ExecutionState) -> &'static str {
 fn default_db_path(app: &AppHandle) -> PathBuf {
     app.path()
         .app_data_dir()
-        .unwrap_or_else(|_| PathBuf::from(".apivoy"))
-        .join("apivoy-local.db")
+        .unwrap_or_else(|_| PathBuf::from(".protovoy"))
+        .join("protovoy-local.db")
 }
 
 fn plugin_permission_grants() -> Vec<PluginPermission> {
-    std::env::var("APIVOY_PLUGIN_PERMISSIONS")
+    std::env::var("PROTOVOY_PLUGIN_PERMISSIONS")
         .unwrap_or_default()
         .split(',')
         .filter_map(|value| match value.trim() {
@@ -1523,5 +1532,5 @@ pub fn run() {
             invoke_plugin,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running ApiVoy desktop");
+        .expect("error while running ProtoVoy desktop");
 }

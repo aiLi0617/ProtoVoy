@@ -1,6 +1,7 @@
 import { defaultCollaborationUrl, runtimeConfig } from "./runtimeConfig";
+import { readStorage } from "./storageMigration";
 
-export const PREFERENCES_CHANGED_EVENT = "apivoy-preferences-changed";
+export const PREFERENCES_CHANGED_EVENT = "protovoy-preferences-changed";
 
 export type PreferenceKey =
   | "collaborationUrl"
@@ -13,14 +14,14 @@ export type PreferenceKey =
   | "agentToken";
 
 const KEYS = {
-  collaborationUrl: "apivoy:collaboration-url",
-  aiEndpoint: "apivoy:ai-endpoint",
-  aiModel: "apivoy:ai-model",
-  aiSecretRef: "apivoy:ai-secret-ref",
-  gatewayUrl: "apivoy:gateway-url",
-  gatewayKey: "apivoy:gateway-key",
-  agentUrl: "apivoy:agent-url",
-  agentToken: "apivoy-agent-token",
+  collaborationUrl: "protovoy:collaboration-url",
+  aiEndpoint: "protovoy:ai-endpoint",
+  aiModel: "protovoy:ai-model",
+  aiSecretRef: "protovoy:ai-secret-ref",
+  gatewayUrl: "protovoy:gateway-url",
+  gatewayKey: "protovoy:gateway-key",
+  agentUrl: "protovoy:agent-url",
+  agentToken: "protovoy:agent-token",
 } as const;
 
 const DEFAULT_AI = {
@@ -30,11 +31,7 @@ const DEFAULT_AI = {
 } as const;
 
 function readLocal(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+  return readStorage(key);
 }
 
 function writeLocal(key: string, value: string): void {

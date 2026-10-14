@@ -19,7 +19,7 @@ test("sanitizes transient credentials before persistence", () => {
   );
   request.auth = { kind: "bearer", token: "top-secret" };
   request.metadata = {
-    __apivoySavedActualRequest: {
+    __protovoySavedActualRequest: {
       auth: { token: "top-secret", secret_ref: "vault-token" },
       headers: [["X-Api-Key", "top-secret"], ["Accept", "application/json"]],
     },
@@ -30,11 +30,11 @@ test("sanitizes transient credentials before persistence", () => {
   assert.deepEqual(saved.headers, [["Accept", "application/json"]]);
   assert.equal(saved.auth?.token, null);
   assert.deepEqual(saved.metadata, {
-    __apivoySavedActualRequest: {
+    __protovoySavedActualRequest: {
       auth: { secret_ref: "vault-token" },
       headers: [["Accept", "application/json"]],
     },
   });
   assert.equal(request.auth.token, "top-secret");
-  assert.equal((request.metadata.__apivoySavedActualRequest as { auth: { token: string } }).auth.token, "top-secret");
+  assert.equal((request.metadata.__protovoySavedActualRequest as { auth: { token: string } }).auth.token, "top-secret");
 });

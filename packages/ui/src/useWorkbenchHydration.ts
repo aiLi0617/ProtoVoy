@@ -29,9 +29,9 @@ export function useWorkbenchHydration(
       deliver(detail.envelope);
     };
 
-    window.addEventListener("apivoy-hydrate-request", onHydrate);
+    window.addEventListener("protovoy-hydrate-request", onHydrate);
     return () => {
-      window.removeEventListener("apivoy-hydrate-request", onHydrate);
+      window.removeEventListener("protovoy-hydrate-request", onHydrate);
     };
   }, [workbenchId, sessionId]);
 }

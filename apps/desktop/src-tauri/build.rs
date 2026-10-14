@@ -15,7 +15,7 @@ fn ensure_frontend_dist() {
     std::fs::create_dir_all(dist).expect("create Tauri frontendDist");
     std::fs::write(
         dist.join("index.html"),
-        "<!doctype html><title>ApiVoy</title>",
+        "<!doctype html><title>ProtoVoy</title>",
     )
     .expect("write placeholder frontendDist");
 }

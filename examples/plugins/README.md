@@ -1,6 +1,6 @@
 # WASM plugin example
 
-This folder documents how to build a minimal **transformer** plugin. ApiVoy does not ship pre-built `.wasm` binaries in the repository.
+This folder documents how to build a minimal **transformer** plugin. ProtoVoy does not ship pre-built `.wasm` binaries in the repository.
 
 ## Manifest (`manifest.json`)
 
@@ -16,7 +16,7 @@ This folder documents how to build a minimal **transformer** plugin. ApiVoy does
 
 ## WIT interface
 
-See [plugins/sdk/apivoy-plugin.wit](../../plugins/sdk/apivoy-plugin.wit) — implement the `transformer` world export `transform`.
+See [plugins/sdk/protovoy-plugin.wit](../../plugins/sdk/protovoy-plugin.wit) — implement the `transformer` world export `transform`.
 
 ## Build (outline)
 
@@ -24,7 +24,7 @@ See [plugins/sdk/apivoy-plugin.wit](../../plugins/sdk/apivoy-plugin.wit) — imp
 2. Create a Rust crate that implements the WIT transformer export.
 3. Build a WebAssembly Component artifact.
 4. Compute SHA-256 of the component bytes.
-5. Sign with Ed25519 for production installs (`APIVOY_PLUGIN_TRUSTED_KEYS`).
+5. Sign with Ed25519 for production installs (`PROTOVOY_PLUGIN_TRUSTED_KEYS`).
 
 ## Install
 

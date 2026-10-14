@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-const PREFIX = "apivoy:workbench-draft:";
+const PREFIX = "protovoy:workbench-draft:";
 
 export function readWorkbenchDraft<T>(protocol: string): T | null {
   try {

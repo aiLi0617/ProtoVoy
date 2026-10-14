@@ -1,7 +1,10 @@
-export interface ApiVoyRuntimeConfig { agentUrl?: string; agentToken?: string; collaborationUrl?: string }
+export interface ProtoVoyRuntimeConfig { agentUrl?: string; agentToken?: string; collaborationUrl?: string }
 
-export function runtimeConfig(): ApiVoyRuntimeConfig {
-  return (window as Window & { __APIVOY_CONFIG__?: ApiVoyRuntimeConfig }).__APIVOY_CONFIG__ ?? {};
+export function runtimeConfig(): ProtoVoyRuntimeConfig {
+  const win = window as Window & {
+    __PROTOVOY_CONFIG__?: ProtoVoyRuntimeConfig;
+  };
+  return win.__PROTOVOY_CONFIG__ ?? {};
 }
 
 export function defaultCollaborationUrl(): string {

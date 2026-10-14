@@ -19,7 +19,7 @@ git push origin v0.2.0
 
 Release notes source: [CHANGELOG.md](../../CHANGELOG.md)
 
-Release title: **ApiVoy v0.2.0 — Interface lifecycle & workbench polish**
+Release title: **ProtoVoy v0.2.0 — Interface lifecycle & workbench polish**
 
 ## Verify downloads
 
@@ -34,14 +34,14 @@ This release provides SHA-256 checksums only (`SHA256SUMS.txt`), not cryptograph
 ### CLI smoke test
 
 ```bash
-apivoy-cli --version
-apivoy-cli http-get https://httpbin.org/get
-apivoy-cli run examples/collections/httpbin-smoke.json
+protovoy-cli --version
+protovoy-cli http-get https://httpbin.org/get
+protovoy-cli run examples/collections/httpbin-smoke.json
 ```
 
 ### Windows MSI
 
-Install the `.msi` from the release page, launch ApiVoy, send `https://httpbin.org/get` from the HTTP workbench.
+Install the `.msi` from the release page, launch ProtoVoy, send `https://httpbin.org/get` from the HTTP workbench.
 
 WiX/MSI only accepts numeric versions (`major.minor.patch.build`). This release uses `0.2.0`, so MSI bundling is directly compatible.
 

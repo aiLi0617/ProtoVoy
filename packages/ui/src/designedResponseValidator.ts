@@ -1,4 +1,4 @@
-import type { AssertionResultEvent, ExecutionSummary, ResponseMeta } from "@apivoy/request-model";
+import type { AssertionResultEvent, ExecutionSummary, ResponseMeta } from "@protovoy/request-model";
 import type { ResponseBodyType } from "./responseComponents";
 import type { ProjectResponseValidationSettings } from "./responseValidationSettings";
 

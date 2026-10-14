@@ -20,9 +20,9 @@ use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "apivoy-cli",
+    name = "protovoy-cli",
     version,
-    about = "ApiVoy CLI — Explore Every Protocol."
+    about = "ProtoVoy CLI — Explore Every Protocol."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -201,7 +201,7 @@ fn junit(cases: &[RunCase]) -> String {
             )
         })
         .collect::<String>();
-    format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><testsuite name=\"ApiVoy\" tests=\"{}\" failures=\"{}\">{}</testsuite>", cases.len(), failures, body)
+    format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?><testsuite name=\"ProtoVoy\" tests=\"{}\" failures=\"{}\">{}</testsuite>", cases.len(), failures, body)
 }
 fn xml_escape(value: &str) -> String {
     value

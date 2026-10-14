@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Assertion } from "@apivoy/request-model";
+import type { Assertion } from "@protovoy/request-model";
 import { ASSERTION_SCHEMA_VERSION, assertionValid, generatedAssertions } from "./HttpWorkbench";
 
 test("uses an explicit schema version and rejects incomplete rules", () => {

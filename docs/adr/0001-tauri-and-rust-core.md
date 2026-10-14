@@ -5,14 +5,14 @@
 
 ## Context
 
-ApiVoy needs a cross-platform desktop shell, a small install footprint, and one execution kernel reused by CLI, Local Agent, and (later) cloud runners.
+ProtoVoy needs a cross-platform desktop shell, a small install footprint, and one execution kernel reused by CLI, Local Agent, and (later) cloud runners.
 
 ## Decision
 
-- Desktop shell: **Tauri 2** + system WebView → binary `apivoy`
+- Desktop shell: **Tauri 2** + system WebView → binary `protovoy`
 - Protocol runtime: **Rust + Tokio** via Driver SPI
 - Frontend: **React + TypeScript + Vite**, shared via `packages/*`
-- Local Agent: separate binary `apivoy-agent`, same crates / version / release train
+- Local Agent: separate binary `protovoy-agent`, same crates / version / release train
 - License: **Apache-2.0** for all code in this repository
 
 ## Consequences

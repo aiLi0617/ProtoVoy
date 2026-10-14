@@ -69,7 +69,7 @@
 
 触及 Local Agent、`installer-lifecycle.yml`、release/sidecar 冒烟时：
 
-- [ ] `/health` JSON 的 `service` 实际值是 **`apivoy-agent`**（crate 名是 `apivoy-local-agent`，二进制是 `apivoy-agent`——三者勿混用）
+- [ ] `/health` JSON 的 `service` 实际值是 **`protovoy-agent`**（crate 名是 `protovoy-local-agent`，二进制是 `protovoy-agent`——三者勿混用）
 - [ ] 工作流里 `grep` / PowerShell `-eq` 与产品契约一致；改 health 字段时同步改：
   - `.github/workflows/installer-lifecycle.yml`（Unix + Windows tools job）
   - [SMOKE_CHECKLIST.md](../SMOKE_CHECKLIST.md)

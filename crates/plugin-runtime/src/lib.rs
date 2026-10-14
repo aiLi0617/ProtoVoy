@@ -133,10 +133,10 @@ impl PluginManager {
         root: impl Into<PathBuf>,
         granted: impl IntoIterator<Item = PluginPermission>,
     ) -> Result<Self, PluginError> {
-        let raw = std::env::var("APIVOY_PLUGIN_TRUSTED_KEYS").unwrap_or_else(|_| "{}".into());
+        let raw = std::env::var("PROTOVOY_PLUGIN_TRUSTED_KEYS").unwrap_or_else(|_| "{}".into());
         let encoded: HashMap<String, String> = serde_json::from_str(&raw).map_err(|error| {
             PluginError::Signature(format!(
-                "APIVOY_PLUGIN_TRUSTED_KEYS must be a JSON object: {error}"
+                "PROTOVOY_PLUGIN_TRUSTED_KEYS must be a JSON object: {error}"
             ))
         })?;
         let keys = encoded
@@ -151,7 +151,7 @@ impl PluginManager {
                 Ok((id, bytes))
             })
             .collect::<Result<Vec<_>, PluginError>>()?;
-        let allow_unsigned = std::env::var("APIVOY_ALLOW_UNSIGNED_PLUGINS")
+        let allow_unsigned = std::env::var("PROTOVOY_ALLOW_UNSIGNED_PLUGINS")
             .is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"));
         Self::new_with_trust(root, granted, keys, allow_unsigned)
     }
@@ -367,7 +367,7 @@ impl PluginManager {
 
 pub fn plugin_signature_payload(manifest: &PluginManifest, plugin_bytes: &[u8]) -> Vec<u8> {
     let metadata = serde_json::json!({ "id": manifest.id, "name": manifest.name, "version": manifest.version, "kind": manifest.kind, "permissions": manifest.permissions, "description": manifest.description, "publisherKeyId": manifest.publisher_key_id });
-    let mut payload = b"ApiVoy Plugin Signature v1\0".to_vec();
+    let mut payload = b"ProtoVoy Plugin Signature v1\0".to_vec();
     payload.extend_from_slice(&Sha256::digest(plugin_bytes));
     payload.extend_from_slice(
         &serde_json::to_vec(&metadata).expect("signature metadata is serializable"),

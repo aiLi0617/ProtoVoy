@@ -43,14 +43,18 @@ export const useAppStore = create<AppStore>()(persist(
     setSplitDirection: (splitDirection) => set({ splitDirection }),
     setSplitPreference: (id, value) => set((state) => ({ splitPreferences: { ...state.splitPreferences, [id]: value } })),
   }),
-  { name: "apivoy:ui-state", version: 4, migrate: (persisted) => {
-    const state = persisted as Partial<AppStore>;
-    const legacyDirection = state.splitPreferences?.["http-workbench"]?.direction
-      ?? Object.values(state.splitPreferences ?? {}).find((preference) => preference?.direction)?.direction;
-    return {
-      ...state,
-      collapsedExplorerNodes: Array.isArray(state.collapsedExplorerNodes) ? state.collapsedExplorerNodes : [],
-      splitDirection: state.splitDirection ?? (legacyDirection === "horizontal" ? "horizontal" : "vertical"),
-    } as AppStore;
-  } },
+  {
+    name: "protovoy:ui-state",
+    version: 5,
+    migrate: (persisted) => {
+      const state = persisted as Partial<AppStore>;
+      const legacyDirection = state.splitPreferences?.["http-workbench"]?.direction
+        ?? Object.values(state.splitPreferences ?? {}).find((preference) => preference?.direction)?.direction;
+      return {
+        ...state,
+        collapsedExplorerNodes: Array.isArray(state.collapsedExplorerNodes) ? state.collapsedExplorerNodes : [],
+        splitDirection: state.splitDirection ?? (legacyDirection === "horizontal" ? "horizontal" : "vertical"),
+      } as AppStore;
+    },
+  },
 ));

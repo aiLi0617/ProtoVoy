@@ -27,11 +27,17 @@ export {
   type UserPreferencesSnapshot,
 } from "./userPreferences";
 export { WorkbenchFrame, SplitPane, type WorkbenchFrameProps, type SplitPaneProps } from "./WorkbenchFrame";
+export { ClosableTabStrip, type ClosableTabItem, type ClosableTabStripProps } from "./ClosableTabStrip";
+export { RovingTabList, moveTabFocus, type RovingTabListProps } from "./RovingTabList";
+export { ModalFrame, type ModalFrameProps } from "./ModalFrame";
+export { MessageInspector, MessageSummary, MessageToolbar, MessageDetail, MessageDetailActions, type MessageAction } from "./MessageInspector";
+export { redisRequestEnvelope, mqttRequestEnvelope, amqpRequestEnvelope, kafkaRequestEnvelope, sqlRequestEnvelope, sseRequestEnvelope, webSocketRequestEnvelope, grpcRequestEnvelope, socketRequestEnvelope } from "./requestEnvelopeAdapters";
 export { Icon, type IconName } from "./Icons";
 export { FeedbackProvider, useFeedback, EmptyState, LoadingState } from "./Feedback";
 export { useAppStore, type ThemeMode, type WorkbenchLayoutPreference, type SplitPanePreference } from "./appStore";
+export { readStorage } from "./storageMigration";
 export { VirtualList, getVirtualRange, type VirtualListProps, type VirtualRange } from "./VirtualList";
-export { ApiVoyProviders } from "./ApiVoyProviders";
+export { ProtoVoyProviders } from "./ProtoVoyProviders";
 export { WorkspaceExplorer, type WorkspaceTree, type WorkspaceExplorerProps, type WorkspaceRecord, type ProjectRecord, type ModuleRecord, type CollectionRecord, type RequestRecord } from "./WorkspaceExplorer";
 export { flattenWorkspaceTree, type FlattenWorkspaceTreeOptions, type WorkspaceTreeRow } from "./workspaceTreeRows";
 export { SseWorkbench, type SseWorkbenchProps, type SseWorkbenchRequest } from "./SseWorkbench";
@@ -40,7 +46,7 @@ export { GraphqlWorkbench, type GraphqlWorkbenchProps, type GraphqlWorkbenchRequ
 export { WebSocketWorkbench, type WebSocketWorkbenchProps, type WebSocketWorkbenchRequest } from "./WebSocketWorkbench";
 export { GrpcWorkbench, type GrpcWorkbenchProps, type GrpcWorkbenchRequest } from "./GrpcWorkbench";
 export { CodeEditor, type CodeEditorProps } from "./CodeEditor";
-export { MockWorkbench, type MockWorkbenchProps, type MockRule } from "./MockWorkbench";
+export { MockWorkbench, type MockWorkbenchProps, type MockRule, type MockRuleInput, type MockServerStatus, type InterfaceMockSeed } from "./MockWorkbench";
 export { PluginCenter, type PluginCenterProps, type PluginManifest, type InstalledPlugin } from "./PluginCenter";
 export { CodeGenerator, generateHttpCode, listHttpCodeTemplates, registerHttpCodeTemplate, type CodeLanguage, type HttpCodeTemplate } from "./CodeGenerator";
 export { ProtocolCodeGenerator, generateProtocolCode, listCodeTemplates, registerCodeTemplate, type CodeTemplate, type CodegenProtocol, type ProtocolCodegenInput } from "./ProtocolCodeGenerator";

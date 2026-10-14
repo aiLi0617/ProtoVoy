@@ -27,7 +27,7 @@ Credits will **not** be used for:
 
 - Closed-source or commercial services outside this repository
 - Other private repositories
-- Providing free AI inference to end users of ApiVoy
+- Providing free AI inference to end users of ProtoVoy
 - Unauthorized third-party code security scanning
 - Unrelated personal projects
 

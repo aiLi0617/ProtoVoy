@@ -98,18 +98,65 @@ impl RequestEnvelope {
     /// execution, but are never part of a persisted envelope.
     pub fn sanitized_for_persistence(&self) -> Self {
         let mut sanitized = self.clone();
+        let is_case = sanitized
+            .metadata
+            .get("__protovoyCaseType")
+            .and_then(Value::as_str)
+            .is_some_and(|case_type| matches!(case_type, "debug" | "test"));
         if let Some(auth) = sanitized.auth_ref.as_mut() {
             auth.token = None;
         }
         if let ProtocolPayload::Http(payload) = &mut sanitized.payload {
-            payload
+            payload.headers = payload
                 .headers
-                .retain(|(name, _)| !is_sensitive_header_name(name));
+                .drain(..)
+                .filter_map(|(name, value)| {
+                    if is_case && name.eq_ignore_ascii_case("cookie") {
+                        let value = sanitize_cookie_header(&value);
+                        return (!value.is_empty()).then_some((name, value));
+                    }
+                    (!is_sensitive_header_name(&name)).then_some((name, value))
+                })
+                .collect();
         }
         scrub_sensitive_json(&mut sanitized.metadata);
         sanitized.runtime_secrets.clear();
         sanitized
     }
+}
+
+fn is_template_reference(value: &str) -> bool {
+    let trimmed = value.trim();
+    let Some(name) = trimmed
+        .strip_prefix("{{")
+        .and_then(|value| value.strip_suffix("}}"))
+        .map(str::trim)
+    else {
+        return false;
+    };
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '_' | '.' | '-'))
+}
+
+fn sanitize_cookie_header(value: &str) -> String {
+    value
+        .split(';')
+        .filter_map(|part| {
+            let (name, value) = part.split_once('=').unwrap_or((part, ""));
+            let name = name.trim();
+            if name.is_empty() {
+                return None;
+            }
+            let value = value.trim();
+            Some(format!(
+                "{name}={}",
+                if is_template_reference(value) { value } else { "" }
+            ))
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 fn normalized_credential_name(value: &str) -> String {
@@ -492,6 +539,10 @@ mod tests {
             payload
                 .headers
                 .push(("Authorization".into(), "Bearer top-secret".into()));
+            payload.headers.push((
+                "Cookie".into(),
+                "sid=top-secret; locale={{locale}}".into(),
+            ));
             payload
                 .headers
                 .push(("X-Csrf-Token".into(), "top-secret".into()));
@@ -500,6 +551,7 @@ mod tests {
                 .push(("Accept".into(), "application/json".into()));
         }
         request.metadata = serde_json::json!({
+            "__protovoyCaseType": "debug",
             "request": { "auth": { "token": "top-secret" }, "headers": [["Cookie", "sid=top-secret"], ["Accept", "application/json"]] }
         });
 
@@ -507,6 +559,7 @@ mod tests {
         let json = serde_json::to_string(&saved).expect("serialize persistence copy");
         assert!(!json.contains("top-secret"));
         assert!(json.contains("application/json"));
+        assert!(json.contains("sid=; locale={{locale}}"));
         assert_eq!(
             request
                 .auth_ref

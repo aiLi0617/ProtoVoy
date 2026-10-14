@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { applyTheme } from "@protovoy/design-system";
 import { Icon } from "./Icons";
+import { Button, IconButton } from "./Components";
 import { useAppStore } from "./appStore";
 import { DEFAULT_WORKBENCH_GROUPS, WORKBENCH_LABELS } from "./WorkbenchDeck";
 import { useI18n } from "./i18n";
@@ -12,6 +14,7 @@ import { useDialogFocus } from "./useDialogFocus";
 import { DEFAULT_RESPONSE_VALIDATION_SETTINGS, readResponseValidationSettings, writeResponseValidationSettings, type ProjectResponseValidationSettings } from "./responseValidationSettings";
 import { RESPONSE_BODY_TYPES, createResponseComponent, readResponseComponents, writeResponseComponents, type ResponseComponent, type ResponseBodyType } from "./responseComponents";
 import { RequestHistoryPanel, type RequestHistoryPanelProps } from "./RequestHistoryPanel";
+import { ModalFrame } from "./ModalFrame";
 
 export interface AppShellProps {
   title?: string;
@@ -32,6 +35,7 @@ export interface AppShellProps {
     projects: Array<{ id: string; name: string }>;
     selectedProjectId: string;
     onSelectProject: (projectId: string) => void;
+    onCloneProject?: (projectId: string, name: string) => Promise<void>;
   };
 }
 
@@ -41,14 +45,12 @@ export function calculateExplorerWidth(clientX: number, explorerLeft: number, ma
 
 function EnvironmentVariablesDialog({ open, onClose, environment }: { open: boolean; onClose: () => void; environment?: EnvironmentEditorProps }) {
   const titleId = useId();
-  const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  useDialogFocus(open, dialogRef, onClose, closeRef);
   if (!open) return null;
-  return <div className="dialog-backdrop" role="presentation" onMouseDown={onClose}><div ref={dialogRef} className="environment-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onMouseDown={(event) => event.stopPropagation()}>
-    <header className="settings-dialog-header"><div><h2 id={titleId}>环境管理</h2></div><button ref={closeRef} type="button" className="ui-icon-button" aria-label="关闭环境管理" onClick={onClose}><Icon name="close"/></button></header>
+  return <ModalFrame open={open} onClose={onClose} className="environment-dialog" ariaLabelledBy={titleId} initialFocusRef={closeRef}>
+    <header className="settings-dialog-header"><div><h2 id={titleId}>环境管理</h2></div><IconButton ref={closeRef} label="关闭环境管理" icon="close" onClick={onClose} /></header>
     <div className="environment-dialog-body">{environment ? <EnvironmentEditor {...environment}/> : <p className="settings-hint">当前运行端未提供环境变量编辑能力。</p>}</div>
-  </div></div>;
+  </ModalFrame>;
 }
 
 type ProjectSettingsCategory = "basic" | "resources" | "responses" | "validation" | "tools";
@@ -64,7 +66,7 @@ function ResponseComponentCard({ component, index, onChange, onRemove }: { compo
     <header className="project-response-component-card-header">
       <span className="project-response-component-index" aria-hidden="true">{index + 1}</span>
       <label className="project-response-component-name"><span>组件名称</span><input aria-label="响应组件名称" value={component.name} placeholder="例如：成功响应" onChange={(event) => update({ name: event.target.value })}/></label>
-      <button type="button" className="ui-icon-button compact project-response-component-remove" aria-label={`删除 ${componentLabel}`} title={`删除 ${componentLabel}`} onClick={onRemove}><Icon name="trash"/></button>
+      <IconButton className="compact project-response-component-remove" label={`删除 ${componentLabel}`} title={`删除 ${componentLabel}`} icon="trash" tone="danger" onClick={onRemove} />
     </header>
     <div className="project-response-component-main">
       <label><span>状态码 <small>可选</small></span><input aria-label={`${componentLabel} 状态码`} inputMode="numeric" value={component.statusCode ?? ""} placeholder="例如 200" onChange={(event) => update({ statusCode: event.target.value })}/></label>
@@ -82,17 +84,26 @@ function ResponseComponentCard({ component, index, onChange, onRemove }: { compo
   </article>;
 }
 
-function ProjectSettingsPage({ projectId, projectName, initialCategory = "basic" }: { projectId?: string; projectName?: string; initialCategory?: ProjectSettingsCategory }) {
+function ProjectSettingsPage({ projectId, projectName, initialCategory = "basic", onCloneProject }: { projectId?: string; projectName?: string; initialCategory?: ProjectSettingsCategory; onCloneProject?: (projectId: string, name: string) => Promise<void> }) {
   const [validation, setValidation] = useState<ProjectResponseValidationSettings>(DEFAULT_RESPONSE_VALIDATION_SETTINGS);
   const [responseComponents, setResponseComponents] = useState<ResponseComponent[]>([]);
   const [category, setCategory] = useState<ProjectSettingsCategory>("basic");
   const [validationDirty, setValidationDirty] = useState(false);
   const [responseComponentsDirty, setResponseComponentsDirty] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [cloneBusy, setCloneBusy] = useState(false);
+  const [cloneMessage, setCloneMessage] = useState("");
   const dirtySectionCount = Number(validationDirty) + Number(responseComponentsDirty);
   useEffect(() => { setValidation(readResponseValidationSettings(projectId)); setResponseComponents(readResponseComponents(projectId)); setCategory(initialCategory); setValidationDirty(false); setResponseComponentsDirty(false); setSaved(false); }, [initialCategory, projectId]);
   const openProjectFeature = (eventName: string, detail?: string) => {
     window.dispatchEvent(new CustomEvent(eventName, { detail }));
+  };
+  const cloneProject = async () => {
+    if (!projectId || !projectName || !onCloneProject) return;
+    setCloneBusy(true); setCloneMessage("");
+    try { await onCloneProject(projectId, `${projectName} 副本`); setCloneMessage("项目副本已创建并打开。"); }
+    catch (error) { setCloneMessage(error instanceof Error ? error.message : String(error)); }
+    finally { setCloneBusy(false); }
   };
   const markValidationDirty = () => { setValidationDirty(true); setSaved(false); };
   const markResponseComponentsDirty = () => { setResponseComponentsDirty(true); setSaved(false); };
@@ -107,19 +118,19 @@ function ProjectSettingsPage({ projectId, projectName, initialCategory = "basic"
   return <section className="project-settings-view" aria-labelledby="project-settings-title"><div className="settings-dialog project-settings-dialog project-settings-embedded">
     <div className="project-settings-layout">
       <aside className="project-settings-sidebar"><header><span className="project-settings-project-icon"><Icon name="folder"/></span><div><h2 id="project-settings-title">项目设置</h2><span title={projectName ?? "当前项目"}>{projectName ?? "当前项目"}</span></div></header><nav className="project-settings-nav" aria-label="项目设置分类"><section><h3><Icon name="settings"/>通用设置</h3><button type="button" className={category === "basic" ? "is-active" : ""} aria-current={category === "basic" ? "page" : undefined} onClick={() => setCategory("basic")}>基本设置</button></section><section><h3><Icon name="bolt"/>功能设置</h3><button type="button" className={category === "tools" ? "is-active" : ""} aria-current={category === "tools" ? "page" : undefined} onClick={() => setCategory("tools")}>接口功能设置</button><button type="button" className={category === "validation" ? "is-active" : ""} aria-current={category === "validation" ? "page" : undefined} onClick={() => setCategory("validation")}>响应校验设置</button></section><section><h3><Icon name="archive"/>项目资源</h3><button type="button" className={category === "responses" ? "is-active" : ""} aria-current={category === "responses" ? "page" : undefined} onClick={() => setCategory("responses")}>响应组件</button><button type="button" className={category === "resources" ? "is-active" : ""} aria-current={category === "resources" ? "page" : undefined} onClick={() => setCategory("resources")}>项目资源</button></section></nav></aside>
-      <main className="project-settings-main">
-        {category === "basic" ? <section className="project-settings-page"><header><h3>基本设置</h3><p>查看当前项目的信息，并执行独立的项目操作。</p></header><h4>基本信息</h4><div className="project-basic-card"><div><strong>项目名称</strong><span>{projectName ?? "未命名项目"}</span></div><div><strong>项目 ID</strong><span>{projectId ?? "—"}</span></div><div><strong>项目语言</strong><span>简体中文</span></div></div><h4>项目操作</h4><div className="project-setting-links"><article><Icon name="archive"/><div><strong>克隆项目</strong><span>克隆项目到当前团队或其他团队，此操作不需要保存设置。</span></div><button type="button" className="ui-button secondary">克隆项目</button></article></div></section> : null}
-        {category === "resources" ? <section className="project-settings-page"><header><h3>项目资源</h3><p>管理仅作用于当前项目的环境和公共执行资源。</p></header><div className="project-setting-links"><article><Icon name="menu"/><div><strong>环境与变量</strong><span>项目请求共享的环境变量与 Secret 引用。</span></div><button type="button" className="ui-button secondary" onClick={() => openProjectFeature("apivoy-open-environment")}>管理</button></article><article><Icon name="code"/><div><strong>项目脚本</strong><span>维护可复用的前置与后置操作。</span></div><button type="button" className="ui-button secondary" onClick={() => openProjectFeature("apivoy-open-script-library")}>管理</button></article></div></section> : null}
-        {category === "responses" ? <section className="project-settings-page project-response-components-page"><header><div><h3>响应组件</h3><p>集中维护可复用的状态码、内容类型与 Body 结构；编辑后在底部统一保存。</p></div><button type="button" className="ui-button primary" onClick={() => { markResponseComponentsDirty(); setResponseComponents((items) => [...items, createResponseComponent(items.length)]); }}><Icon name="plus"/>新建组件</button></header><div className="project-response-component-list">{responseComponents.map((component, index) => <ResponseComponentCard key={component.id} component={component} index={index} onChange={(next) => { markResponseComponentsDirty(); setResponseComponents((items) => items.map((item) => item.id === component.id ? next : item)); }} onRemove={() => { markResponseComponentsDirty(); setResponseComponents((items) => items.filter((item) => item.id !== component.id)); }}/>)}</div>{!responseComponents.length ? <div className="interface-document-empty">暂无响应组件，创建后可在接口设计中快速引用。</div> : null}</section> : null}
+      <div className="project-settings-main" role="region" aria-label="项目设置内容">
+        {category === "basic" ? <section className="project-settings-page"><header><h3>基本设置</h3><p>查看当前项目的信息，并执行独立的项目操作。</p></header><h4>基本信息</h4><div className="project-basic-card"><div><strong>项目名称</strong><span>{projectName ?? "未命名项目"}</span></div><div><strong>项目 ID</strong><span>{projectId ?? "—"}</span></div><div><strong>项目语言</strong><span>简体中文</span></div></div><h4>项目操作</h4><div className="project-setting-links"><article><Icon name="archive"/><div><strong>克隆项目</strong><span>克隆项目到当前团队或其他团队，此操作不需要保存设置。</span></div><Button variant="secondary" loading={cloneBusy} disabled={!projectId || !onCloneProject} onClick={() => void cloneProject()}>克隆项目</Button></article></div>{cloneMessage ? <p className="settings-hint" role="status">{cloneMessage}</p> : null}</section> : null}
+        {category === "resources" ? <section className="project-settings-page"><header><h3>项目资源</h3><p>管理仅作用于当前项目的环境和公共执行资源。</p></header><div className="project-setting-links"><article><Icon name="menu"/><div><strong>环境与变量</strong><span>项目请求共享的环境变量与 Secret 引用。</span></div><Button variant="secondary" onClick={() => openProjectFeature("protovoy-open-environment")}>管理</Button></article><article><Icon name="code"/><div><strong>项目脚本</strong><span>维护可复用的前置与后置操作。</span></div><Button variant="secondary" onClick={() => openProjectFeature("protovoy-open-script-library")}>管理</Button></article></div></section> : null}
+        {category === "responses" ? <section className="project-settings-page project-response-components-page"><header><div><h3>响应组件</h3><p>集中维护可复用的状态码、内容类型与 Body 结构；编辑后在底部统一保存。</p></div><Button variant="primary" icon="plus" onClick={() => { markResponseComponentsDirty(); setResponseComponents((items) => [...items, createResponseComponent(items.length)]); }}>新建组件</Button></header><div className="project-response-component-list">{responseComponents.map((component, index) => <ResponseComponentCard key={component.id} component={component} index={index} onChange={(next) => { markResponseComponentsDirty(); setResponseComponents((items) => items.map((item) => item.id === component.id ? next : item)); }} onRemove={() => { markResponseComponentsDirty(); setResponseComponents((items) => items.filter((item) => item.id !== component.id)); }}/>)}</div>{!responseComponents.length ? <div className="interface-document-empty">暂无响应组件，创建后可在接口设计中快速引用。</div> : null}</section> : null}
         {category === "validation" ? <section className="project-settings-page project-validation-page"><header><h3>响应校验设置</h3><p>调整项目内各模块的响应校验范围；编辑后在底部统一保存。</p></header><h4>模块功能开关</h4><div className="project-validation-rows">{([['interfaceRun','“接口运行”和“调试用例”里的校验响应','开启后，“接口管理”模块的“运行”、“接口调试用例”界面会显示“校验响应”功能'],['singleCase','“单接口用例”里的校验响应','开启后，“单接口用例”界面会显示“校验响应”功能'],['testScenario','“测试场景”里的校验响应','开启后，“自动化测试”模块的“测试步骤”界面会显示“校验响应”功能']] as const).map(([key,label,description]) => <div className="project-setting-row" key={key}><div><strong>{label}</strong><span>{description}</span></div><label className="http-switch"><input type="checkbox" aria-label={label} checked={validation[key]} onChange={(event) => { markValidationDirty(); setValidation((current) => ({ ...current, [key]: event.target.checked, ...(key === "interfaceRun" ? { enabled: event.target.checked } : {}) })); }}/><span/></label></div>)}</div><h4>校验内容</h4><div className="project-validation-rows">{([['status','校验响应 HTTP 状态码','校验响应时，检查实际响应的状态码是否与接口文档里定义的状态码一致'],['headers','校验响应 Headers','校验响应时，检查接口设计中声明的必需响应头'],['bodyFormat','校验响应 Body 的数据格式','校验响应时，检查 JSON 等响应格式能否正确解析'],['bodySchema','校验响应 Body 的数据结构','校验响应时，检查实际响应的 Body 数据结构是否与接口文档中定义的数据结构一致']] as const).map(([key,label,description]) => <div className="project-setting-row" key={key}><div><strong>{label}</strong><span>{description}</span></div><label className="http-switch"><input type="checkbox" aria-label={label} checked={validation[key]} onChange={(event) => { markValidationDirty(); setValidation((current) => ({ ...current, [key]: event.target.checked })); }}/><span/></label></div>)}<div className={`project-setting-row project-setting-row-nested${validation.bodySchema ? "" : " is-disabled"}`}><div><strong>Object 对象允许额外字段</strong><span>当接口文档的返回响应里 Object 类型的字段未配置“额外字段”时，允许实际响应的数据有额外字段</span></div><label className="http-switch"><input type="checkbox" aria-label="Object 对象允许额外字段" disabled={!validation.bodySchema} checked={validation.allowAdditionalProperties} onChange={(event) => { markValidationDirty(); setValidation((current) => ({ ...current, allowAdditionalProperties: event.target.checked })); }}/><span/></label></div></div></section> : null}
-        {category === "tools" ? <section className="project-settings-page"><header><h3>接口功能设置</h3><p>进入当前项目的接口辅助能力；这些独立操作不需要保存设置。</p></header><div className="project-setting-links"><article><Icon name="archive"/><div><strong>Mock</strong><span>管理当前项目的 Mock 定义。</span></div><button type="button" className="ui-button secondary" onClick={() => openProjectFeature("apivoy-select-workbench", "mock")}>打开</button></article></div></section> : null}
-      </main>
+        {category === "tools" ? <section className="project-settings-page"><header><h3>接口功能设置</h3><p>进入当前项目的接口辅助能力；这些独立操作不需要保存设置。</p></header><div className="project-setting-links"><article><Icon name="archive"/><div><strong>Mock</strong><span>管理当前项目的 Mock 定义。</span></div><Button variant="secondary" onClick={() => openProjectFeature("protovoy-select-workbench", "mock")}>打开</Button></article></div></section> : null}
+      </div>
     </div>
-    <footer className="settings-dialog-footer project-settings-footer"><span className={`settings-scope-note${dirtySectionCount ? " is-dirty" : ""}`} role="status" aria-live="polite">{!projectId ? "请先选择项目。" : dirtySectionCount ? `${dirtySectionCount} 项设置有未保存的更改` : saved ? "所有更改已保存" : "没有待保存的更改；页内操作会单独生效。"}</span><button type="button" className="ui-button primary" disabled={!projectId || !dirtySectionCount} onClick={saveProjectSettings}>保存更改</button></footer>
+    <footer className="settings-dialog-footer project-settings-footer"><span className={`settings-scope-note${dirtySectionCount ? " is-dirty" : ""}`} role="status" aria-live="polite">{!projectId ? "请先选择项目。" : dirtySectionCount ? `${dirtySectionCount} 项设置有未保存的更改` : saved ? "所有更改已保存" : "没有待保存的更改；页内操作会单独生效。"}</span><Button variant="primary" disabled={!projectId || !dirtySectionCount} onClick={saveProjectSettings}>保存更改</Button></footer>
   </div></section>;
 }
 
-export function AppShell({ title = "ApiVoy", channelLabel, children, explorer, status, connectionStatus = null, collaboration, environment, requestHistory, projectContext }: AppShellProps) {
+export function AppShell({ title = "ProtoVoy", channelLabel, children, explorer, status, connectionStatus = null, collaboration, environment, requestHistory, projectContext }: AppShellProps) {
   const { locale, t } = useI18n();
   const applicationSettingsLabel = locale === "zh-CN" ? "软件设置" : "Application settings";
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -135,6 +146,7 @@ export function AppShell({ title = "ApiVoy", channelLabel, children, explorer, s
     if (view === "resources" || view === "automation" || view === "history" || view === "settings") return view;
     if (view === "runner" || view === "mock") return "resources";
     const workbench = params.get("workbench");
+    if (workbench === "runner") return "automation";
     return workbench ? "resources" : "home";
   });
   const [search, setSearch] = useState("");
@@ -146,7 +158,7 @@ export function AppShell({ title = "ApiVoy", channelLabel, children, explorer, s
   const resizingExplorerRef = useRef(false);
   const [explorerWidth, setExplorerWidth] = useState(() => {
     if (typeof window === "undefined") return 232;
-    const stored = Number(localStorage.getItem("apivoy-explorer-width"));
+    const stored = Number(localStorage.getItem("protovoy-explorer-width"));
     return Number.isFinite(stored) ? Math.min(window.innerWidth / 2, Math.max(190, stored)) : 232;
   });
   const explorerWidthRef = useRef(explorerWidth);
@@ -185,7 +197,7 @@ export function AppShell({ title = "ApiVoy", channelLabel, children, explorer, s
     }
   }
 
-  useEffect(() => { localStorage.setItem("apivoy-explorer-width", String(explorerWidth)); }, [explorerWidth]);
+  useEffect(() => { localStorage.setItem("protovoy-explorer-width", String(explorerWidth)); }, [explorerWidth]);
 
   useEffect(() => {
     const preventBrowserContextMenu = (event: MouseEvent) => event.preventDefault();
@@ -202,24 +214,25 @@ export function AppShell({ title = "ApiVoy", channelLabel, children, explorer, s
     const showHome = () => { setProjectModule("home"); const params = new URLSearchParams(window.location.hash.replace(/^#/, "")); params.delete("view"); history.replaceState(null, "", `#${params}`); };
     const showResources = () => showProjectView("resources");
     const showRequest = () => showProjectView("resources");
-    const showWorkbench = () => showProjectView("resources");
-    window.addEventListener("apivoy-project-home", showHome);
-    window.addEventListener("apivoy-project-resources", showResources);
-    window.addEventListener("apivoy-open-request", showRequest);
-    window.addEventListener("apivoy-select-workbench", showWorkbench);
+    const showWorkbench = (event: Event) => showProjectView((event as CustomEvent<string>).detail === "runner" ? "automation" : "resources");
+    window.addEventListener("protovoy-project-home", showHome);
+    window.addEventListener("protovoy-project-resources", showResources);
+    window.addEventListener("protovoy-open-request", showRequest);
+    window.addEventListener("protovoy-select-workbench", showWorkbench);
     return () => {
-      window.removeEventListener("apivoy-project-home", showHome);
-      window.removeEventListener("apivoy-project-resources", showResources);
-      window.removeEventListener("apivoy-open-request", showRequest);
-      window.removeEventListener("apivoy-select-workbench", showWorkbench);
+      window.removeEventListener("protovoy-project-home", showHome);
+      window.removeEventListener("protovoy-project-resources", showResources);
+      window.removeEventListener("protovoy-open-request", showRequest);
+      window.removeEventListener("protovoy-select-workbench", showWorkbench);
     };
   }, []);
 
   useEffect(() => {
-    const root = document.documentElement;
     const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
-    const apply = () => { root.dataset.theme = themeMode === "system" ? (systemDark.matches ? "dark" : "light") : themeMode; };
-    apply(); systemDark.addEventListener("change", apply); return () => systemDark.removeEventListener("change", apply);
+    const apply = () => { applyTheme(themeMode); };
+    apply();
+    systemDark.addEventListener("change", apply);
+    return () => systemDark.removeEventListener("change", apply);
   }, [themeMode]);
   useEffect(() => {
     const closeExplorerOnMobile = () => {
@@ -261,15 +274,15 @@ export function AppShell({ title = "ApiVoy", channelLabel, children, explorer, s
       params.delete("workbench");
       history.replaceState(null, "", `#${params}`);
     };
-    window.addEventListener("apivoy-open-collaboration", openCollaboration);
-    window.addEventListener("apivoy-open-settings", openSettingsEvent);
-    window.addEventListener("apivoy-open-environment", openEnvironmentEvent);
-    window.addEventListener("apivoy-open-project-settings", openProjectSettingsEvent);
+    window.addEventListener("protovoy-open-collaboration", openCollaboration);
+    window.addEventListener("protovoy-open-settings", openSettingsEvent);
+    window.addEventListener("protovoy-open-environment", openEnvironmentEvent);
+    window.addEventListener("protovoy-open-project-settings", openProjectSettingsEvent);
     return () => {
-      window.removeEventListener("apivoy-open-collaboration", openCollaboration);
-      window.removeEventListener("apivoy-open-settings", openSettingsEvent);
-      window.removeEventListener("apivoy-open-environment", openEnvironmentEvent);
-      window.removeEventListener("apivoy-open-project-settings", openProjectSettingsEvent);
+      window.removeEventListener("protovoy-open-collaboration", openCollaboration);
+      window.removeEventListener("protovoy-open-settings", openSettingsEvent);
+      window.removeEventListener("protovoy-open-environment", openEnvironmentEvent);
+      window.removeEventListener("protovoy-open-project-settings", openProjectSettingsEvent);
     };
   }, []);
   useEffect(() => {
@@ -317,13 +330,13 @@ export function AppShell({ title = "ApiVoy", channelLabel, children, explorer, s
     { id: "action-settings", label: applicationSettingsLabel, icon: "sliders" as const, run: () => openSettings() },
     ...(collaboration ? [{ id: "action-collab", label: t("collaboration.open"), icon: "users" as const, run: () => openCollaboration("team") }] : []),
     { id: "action-theme", label: t("command.theme"), icon: "sun" as const, run: () => cycleTheme() },
-    { id: "action-import", label: t("command.import"), icon: "download" as const, run: () => { setPaletteOpen(false); window.dispatchEvent(new CustomEvent("apivoy-import-requests")); } },
+    { id: "action-import", label: t("command.import"), icon: "download" as const, run: () => { setPaletteOpen(false); window.dispatchEvent(new CustomEvent("protovoy-import-requests")); } },
     { id: "action-history", label: t("command.history"), icon: "activity" as const, run: () => { setPaletteOpen(false); openProjectModule("history"); } },
-    { id: "action-ai", label: t("command.openAi"), icon: "bolt" as const, run: () => { setPaletteOpen(false); window.dispatchEvent(new CustomEvent("apivoy-select-workbench", { detail: "ai" })); } },
+    { id: "action-ai", label: t("command.openAi"), icon: "bolt" as const, run: () => { setPaletteOpen(false); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "ai" })); } },
   ].filter((item) => !search.trim() || item.label.toLowerCase().includes(search.toLowerCase()));
   const commandResults = [
     ...actions.map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run, group: "actions" as const })),
-    ...workbenchCommands.map((command) => ({ id: `workbench-${command.id}`, label: command.label, icon: "bolt" as const, run: () => window.dispatchEvent(new CustomEvent("apivoy-select-workbench", { detail: command.id })), group: "workbenches" as const })),
+    ...workbenchCommands.map((command) => ({ id: `workbench-${command.id}`, label: command.label, icon: "bolt" as const, run: () => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: command.id })), group: "workbenches" as const })),
   ];
   useEffect(() => { setActiveCommand(0); }, [search, paletteOpen]);
   useDialogFocus(paletteOpen, paletteRef, () => setPaletteOpen(false), paletteInputRef);
@@ -336,12 +349,12 @@ export function AppShell({ title = "ApiVoy", channelLabel, children, explorer, s
     if (event.key === "Enter") { event.preventDefault(); runCommand(activeCommand); }
   }
 
-  return <FeedbackProvider><div className="apivoy-shell">
-    <a className="skip-link" href="#apivoy-main">{t("shell.skip")}</a>
+  return <FeedbackProvider><div className="protovoy-shell">
+    <a className="skip-link" href="#protovoy-main">{t("shell.skip")}</a>
     <header className="app-header">
       <div className="header-leading">
         {projectModule === "home" ? <div className="header-home-brand" aria-label={title}><span className="brand-mark"><BrandMark /></span><strong>{title}</strong></div> : projectContext?.projects.length ? <div className="header-project-breadcrumb" aria-label="当前项目">
-          <button type="button" aria-label="返回主窗口" onClick={() => window.dispatchEvent(new CustomEvent("apivoy-project-home"))}><Icon name="command"/><span>主窗口</span></button>
+          <button type="button" aria-label="返回主窗口" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-project-home"))}><Icon name="command"/><span>主窗口</span></button>
           <span className="header-project-separator">/</span>
           <select aria-label="切换项目" value={projectContext.selectedProjectId} onChange={(event) => projectContext.onSelectProject(event.target.value)}>
             {projectContext.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
@@ -354,31 +367,31 @@ export function AppShell({ title = "ApiVoy", channelLabel, children, explorer, s
         {status}
       </div>
       <div className="header-actions">
-        <button className="ui-icon-button" aria-label={t("command.history")} title={t("command.history")} onClick={() => openProjectModule("history")}><Icon name="activity"/></button>
+        <IconButton label={t("command.history")} title={t("command.history")} icon="activity" onClick={() => openProjectModule("history")} />
         <button data-testid="command-trigger" className="command-trigger" aria-label={t("command.open")} onClick={() => setPaletteOpen(true)}><Icon name="search"/><span>{t("command.open")}</span><kbd>⌘ K</kbd></button>
-        <button data-testid="theme-toggle" className="ui-icon-button" aria-label={t("command.theme")} title={`${t("settings.theme")}: ${themeMode}`} onClick={cycleTheme}><Icon name={themeMode === "light" ? "sun" : "moon"}/></button>
-        {collaboration ? <button className={`ui-icon-button${collaborationOpen ? " is-active" : ""}`} aria-label={t("collaboration.open")} title={t("collaboration.open")} onClick={() => openCollaboration("team")}><Icon name="users"/></button> : null}
-        <button className="ui-icon-button" aria-label={applicationSettingsLabel} title={`${applicationSettingsLabel} Ctrl/⌘ ,`} onClick={openSettings}><Icon name="sliders"/></button>
+        <IconButton data-testid="theme-toggle" label={t("command.theme")} title={`${t("settings.theme")}: ${themeMode}`} icon={themeMode === "light" ? "sun" : "moon"} onClick={cycleTheme} />
+        {collaboration ? <IconButton label={t("collaboration.open")} title={t("collaboration.open")} icon="users" active={collaborationOpen} onClick={() => openCollaboration("team")} /> : null}
+        <IconButton label={applicationSettingsLabel} title={`${applicationSettingsLabel} Ctrl/⌘ ,`} icon="sliders" onClick={openSettings} />
       </div>
     </header>
     <div ref={workspaceRef} className={`app-workspace${showProjectRail ? " has-project-rail" : ""} ${showExplorer ? "explorer-open" : "explorer-collapsed"}`} style={{ "--explorer-width": `${explorerWidth}px` } as CSSProperties}>
       {showProjectRail ? <nav className="project-module-nav" aria-label="项目功能">
-        <button type="button" className={projectModule === "resources" ? "is-active" : undefined} onClick={() => { openProjectModule("resources"); window.dispatchEvent(new CustomEvent("apivoy-project-resources")); }}><Icon name="folder"/><span>接口管理</span></button>
-        <button type="button" className={projectModule === "automation" ? "is-active" : undefined} onClick={() => openProjectModule("automation")}><Icon name="bolt"/><span>自动化测试</span></button>
+        <button type="button" className={projectModule === "resources" ? "is-active" : undefined} onClick={() => { openProjectModule("resources"); window.dispatchEvent(new CustomEvent("protovoy-project-resources")); }}><Icon name="folder"/><span>接口管理</span></button>
+        <button type="button" className={projectModule === "automation" ? "is-active" : undefined} onClick={() => { openProjectModule("automation"); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "runner" })); }}><Icon name="bolt"/><span>自动化测试</span></button>
         <button type="button" className={projectModule === "history" ? "is-active" : undefined} onClick={() => openProjectModule("history")}><Icon name="activity"/><span>请求历史</span></button>
         <button type="button" className={`project-module-settings${projectModule === "settings" ? " is-active" : ""}`} onClick={() => { setPaletteOpen(false); setSettingsOpen(false); setProjectSettingsCategory("basic"); openProjectModule("settings"); }}><Icon name="sliders"/><span>项目设置</span></button>
         <div className="project-rail-brand" aria-label={title}><span className="brand-mark"><BrandMark /></span><strong>{title}</strong></div>
       </nav> : null}
       {explorer && showExplorer ? <button type="button" className="explorer-backdrop" aria-label={t("shell.explorer.close")} onClick={toggleExplorer} /> : null}
-      {explorer ? <aside ref={explorerRef} id="apivoy-explorer" className="resource-explorer" aria-label={t("shell.explorer")}>{explorer}</aside> : null}
+      {explorer ? <aside ref={explorerRef} id="protovoy-explorer" className="resource-explorer" aria-label={t("shell.explorer")}>{explorer}</aside> : null}
       {explorer && showExplorer ? <div className="explorer-resize-handle" role="separator" aria-label="调整资源管理器宽度" aria-orientation="vertical" aria-valuemin={0} aria-valuemax={Math.round(maxExplorerWidth())} aria-valuenow={Math.round(explorerWidth)} tabIndex={0} onPointerDown={(event) => { if (window.matchMedia("(max-width: 768px)").matches) return; explorerDragStartWidthRef.current = explorerWidthRef.current; resizingExplorerRef.current = true; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={(event) => { if (resizingExplorerRef.current) resizeExplorer(event.clientX); }} onPointerUp={(event) => { event.currentTarget.releasePointerCapture(event.pointerId); finishExplorerResize(); }} onPointerCancel={finishExplorerResize} onDoubleClick={() => { explorerWidthRef.current = 232; expandedExplorerWidthRef.current = 232; setExplorerWidth(232); }} onKeyDown={(event) => { if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return; event.preventDefault(); const next = Math.min(maxExplorerWidth(), Math.max(190, explorerWidth + (event.key === "ArrowRight" ? 10 : -10))); explorerWidthRef.current = next; expandedExplorerWidthRef.current = next; setExplorerWidth(next); }}/>: null}
-      {explorer && projectModule === "resources" && !explorerOpen ? <button type="button" className="explorer-edge-toggle" aria-label={t("shell.explorer")} aria-expanded={false} aria-controls="apivoy-explorer" title={t("shell.explorer")} onClick={toggleExplorer}><Icon name="chevron"/></button> : null}
-      <main id="apivoy-main" tabIndex={-1} className={`app-main project-module-${projectModule}`}>
-        {projectModule === "history" ? (requestHistory ? <RequestHistoryPanel {...requestHistory}/> : <section className="request-history-page"><div className="request-history-empty"><Icon name="activity"/><strong>请求历史不可用</strong><span>当前执行通道未提供历史查询能力。</span></div></section>) : projectModule === "settings" ? <ProjectSettingsPage projectId={projectContext?.selectedProjectId} projectName={projectContext?.projects.find((project) => project.id === projectContext.selectedProjectId)?.name} initialCategory={projectSettingsCategory}/> : children}
+      {explorer && projectModule === "resources" && !explorerOpen ? <button type="button" className="explorer-edge-toggle" aria-label={t("shell.explorer")} aria-expanded={false} aria-controls="protovoy-explorer" title={t("shell.explorer")} onClick={toggleExplorer}><Icon name="chevron"/></button> : null}
+      <main id="protovoy-main" tabIndex={-1} className={`app-main project-module-${projectModule}`}>
+        {projectModule === "history" ? (requestHistory ? <RequestHistoryPanel {...requestHistory}/> : <section className="request-history-page"><div className="request-history-empty"><Icon name="activity"/><strong>请求历史不可用</strong><span>当前执行通道未提供历史查询能力。</span></div></section>) : projectModule === "settings" ? <ProjectSettingsPage projectId={projectContext?.selectedProjectId} projectName={projectContext?.projects.find((project) => project.id === projectContext.selectedProjectId)?.name} initialCategory={projectSettingsCategory} onCloneProject={projectContext?.onCloneProject}/> : children}
       </main>
     </div>
-    {paletteOpen ? <div className="command-overlay" role="presentation" onMouseDown={() => setPaletteOpen(false)}><div ref={paletteRef} className="command-palette" role="dialog" aria-modal="true" aria-label={t("command.title")} onMouseDown={(event) => event.stopPropagation()}><div className="command-input-wrap"><Icon name="search"/><input ref={paletteInputRef} role="combobox" aria-expanded="true" aria-controls="apivoy-command-results" aria-activedescendant={commandResults[activeCommand] ? `command-${commandResults[activeCommand].id}` : undefined} autoComplete="off" value={search} onKeyDown={onCommandKeyDown} onChange={(event) => setSearch(event.target.value)} placeholder={t("command.placeholder")} aria-label={t("command.open")}/></div>
-      <div id="apivoy-command-results" role="listbox" aria-label={t("command.title")}>
+    {paletteOpen ? <div className="command-overlay" role="presentation" onMouseDown={() => setPaletteOpen(false)}><div ref={paletteRef} className="command-palette" role="dialog" aria-modal="true" aria-label={t("command.title")} onMouseDown={(event) => event.stopPropagation()}><div className="command-input-wrap"><Icon name="search"/><input ref={paletteInputRef} role="combobox" aria-expanded="true" aria-controls="protovoy-command-results" aria-activedescendant={commandResults[activeCommand] ? `command-${commandResults[activeCommand].id}` : undefined} autoComplete="off" value={search} onKeyDown={onCommandKeyDown} onChange={(event) => setSearch(event.target.value)} placeholder={t("command.placeholder")} aria-label={t("command.open")}/></div>
+      <div id="protovoy-command-results" role="listbox" aria-label={t("command.title")}>
       {actions.length ? <><div className="command-group-label">{t("command.actions")}</div>{actions.map((action, index) => <button id={`command-${action.id}`} role="option" aria-selected={activeCommand === index} className={activeCommand === index ? "is-active" : undefined} key={action.id} type="button" onMouseEnter={() => setActiveCommand(index)} onClick={() => runCommand(index)}><span><Icon name={action.icon}/>{action.label}</span></button>)}</> : null}
       <div className="command-group-label">{t("command.workbenches")}</div>
       {workbenchCommands.map((command, index) => { const resultIndex = actions.length + index; return <button id={`command-workbench-${command.id}`} role="option" aria-selected={activeCommand === resultIndex} className={activeCommand === resultIndex ? "is-active" : undefined} key={command.id} onMouseEnter={() => setActiveCommand(resultIndex)} onClick={() => runCommand(resultIndex)}><span><Icon name="bolt"/>{command.label}</span><kbd>Enter</kbd></button>; })}

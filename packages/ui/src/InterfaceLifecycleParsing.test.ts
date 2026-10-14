@@ -33,6 +33,6 @@ test("restores nested visual fields from a saved OpenAPI definition", () => {
     { id: "items", parentId: "tags", name: "items", type: "object", required: false, description: "", scope: "request.body" },
     { id: "label", parentId: "items", name: "label", type: "string", required: true, description: "tag label", scope: "request.body" },
   ];
-  const source = `openapi: 3.1.2\nx-apivoy-body-mode: json\nx-apivoy-visual-fields: ${JSON.stringify(visualFields)}\ninfo:\n  title: Current API\n  version: 1.0.0`;
+  const source = `openapi: 3.1.2\nx-protovoy-body-mode: json\nx-protovoy-visual-fields: ${JSON.stringify(visualFields)}\ninfo:\n  title: Current API\n  version: 1.0.0`;
   assert.deepEqual(parseDefinitionFields(source, "http"), visualFields);
 });

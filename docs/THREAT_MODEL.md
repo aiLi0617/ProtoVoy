@@ -1,4 +1,4 @@
-# ApiVoy Threat Model
+# ProtoVoy Threat Model
 
 This document outlines security-sensitive areas, existing mitigations, and planned improvements. It complements [SECURITY.md](../SECURITY.md).
 
@@ -13,7 +13,7 @@ Applies to Desktop, Web + Local Agent, CLI, WASM plugins, QuickJS scripts, impor
 | | |
 |---|---|
 | **Asset** | User workspace, secrets, execution environment |
-| **Threat** | Postman/OpenAPI/HAR/ApiVoy package triggers unexpected requests, exfiltration, or parser crashes |
+| **Threat** | Postman/OpenAPI/HAR/ProtoVoy package triggers unexpected requests, exfiltration, or parser crashes |
 | **Existing mitigation** | Structured parsers in `packages/import-export`; per-file/total-size, document-count, nesting, node, `$ref`, and request-count budgets; YAML alias cap; sensitive field scanning on export; user confirms imports |
 | **Remaining risk** | Malformed payloads may still exercise parser-specific edge cases within the enforced budgets |
 | **Planned improvement** | Fuzz tests and import sandbox previews |
@@ -50,7 +50,7 @@ Applies to Desktop, Web + Local Agent, CLI, WASM plugins, QuickJS scripts, impor
 |---|---|
 | **Asset** | Execution history, event timeline, debug output |
 | **Threat** | Authorization headers or cookies persisted in history blobs |
-| **Existing mitigation** | Masking pipeline for known sensitive header names in capture; secret refs not stored as values |
+| **Existing mitigation** | Masking pipeline for known sensitive header names in capture; secret refs not stored as values; saved cases retain Cookie field names and `{{variable}}` references while clearing literal Cookie values |
 | **Remaining risk** | Custom header names or body payloads may still contain secrets |
 | **Planned improvement** | History scrubbing option; default omit auth headers from saved history |
 
@@ -89,7 +89,7 @@ See [security/local-agent.md](./security/local-agent.md).
 | **Asset** | Request transformation, custom protocol/auth/importer hooks |
 | **Threat** | Unsigned or tampered plugin executes with excessive permissions |
 | **Existing mitigation** | Component-only Wasmtime; SHA-256 check; Ed25519 trust chain; permission declarations; fuel/memory limits |
-| **Remaining risk** | User enables `APIVOY_ALLOW_UNSIGNED_PLUGINS=1` in production |
+| **Remaining risk** | User enables `PROTOVOY_ALLOW_UNSIGNED_PLUGINS=1` in production |
 | **Planned improvement** | Example signed plugin; publisher documentation |
 
 ---
@@ -148,4 +148,4 @@ See [DEPENDENCY_SECURITY.md](./DEPENDENCY_SECURITY.md).
 
 ## Reporting
 
-Report vulnerabilities via [GitHub Private Vulnerability Reporting](https://github.com/aiLi0617/ApiVoy/security/advisories/new) once enabled in repository settings, not public issues.
+Report vulnerabilities via [GitHub Private Vulnerability Reporting](https://github.com/aiLi0617/ProtoVoy/security/advisories/new) once enabled in repository settings, not public issues.

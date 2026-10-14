@@ -1,23 +1,23 @@
-# ApiVoy
+# ProtoVoy
 
 **Explore Every Protocol.**
 
-[![CI](https://github.com/aiLi0617/ApiVoy/actions/workflows/ci.yml/badge.svg)](https://github.com/aiLi0617/ApiVoy/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/aiLi0617/ApiVoy?include_prereleases)](https://github.com/aiLi0617/ApiVoy/releases)
-[![License](https://img.shields.io/github/license/aiLi0617/ApiVoy)](LICENSE)
-[![Issues](https://img.shields.io/github/issues/aiLi0617/ApiVoy)](https://github.com/aiLi0617/ApiVoy/issues)
+[![CI](https://github.com/aiLi0617/ProtoVoy/actions/workflows/ci.yml/badge.svg)](https://github.com/aiLi0617/ProtoVoy/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/aiLi0617/ProtoVoy?include_prereleases)](https://github.com/aiLi0617/ProtoVoy/releases)
+[![License](https://img.shields.io/github/license/aiLi0617/ProtoVoy)](LICENSE)
+[![Issues](https://img.shields.io/github/issues/aiLi0617/ProtoVoy)](https://github.com/aiLi0617/ProtoVoy/issues)
 
-ApiVoy is a lightweight, local-first and extensible multi-protocol API debugging client for Windows, macOS, Linux and the Web.
+ProtoVoy is a lightweight, local-first and extensible multi-protocol API debugging client for Windows, macOS, Linux and the Web.
 
-ApiVoy provides a unified workspace for debugging HTTP, GraphQL, gRPC, WebSocket, SSE, TCP/UDP, MQTT, AMQP, Kafka, Redis and SQL protocols.
+ProtoVoy provides a unified workspace for debugging HTTP, GraphQL, gRPC, WebSocket, SSE, TCP/UDP, MQTT, AMQP, Kafka, Redis and SQL protocols.
 
-ApiVoy 是一款轻量、本地优先、可扩展的多协议接口调试工具。
+ProtoVoy 是一款轻量、本地优先、可扩展的多协议接口调试工具。
 
 ## Preview
 
-![ApiVoy overview](docs/images/overview.png)
+![ProtoVoy overview](docs/images/overview.png)
 
-## Why ApiVoy?
+## Why ProtoVoy?
 
 A local-first, extensible workbench for API and infrastructure protocols.
 
@@ -64,12 +64,12 @@ GraphQL is available via the HTTP workbench GraphQL body mode and a dedicated dr
 
 Releases are built as GitHub Drafts first, then published after maintainer verification.
 
-Current release target: [v0.2.0](https://github.com/aiLi0617/ApiVoy/releases/tag/v0.2.0). Draft assets include:
+Current release target: [v0.2.0](https://github.com/aiLi0617/ProtoVoy/releases/tag/v0.2.0). Draft assets include:
 
 - **Windows**: `.msi`
 - **macOS**: `.dmg`
 - **Linux**: `.deb`
-- **ApiVoy CLI** and **ApiVoy Local Agent** archives
+- **ProtoVoy CLI** and **ProtoVoy Local Agent** archives
 - `SHA256SUMS.txt` for checksum verification
 
 ### Send your first request
@@ -80,7 +80,7 @@ Current release target: [v0.2.0](https://github.com/aiLi0617/ApiVoy/releases/tag
 4. Click **Send**.
 5. Inspect the response, timeline, and assertions.
 
-For the Web workbench, start the Local Agent (`apivoy-agent`) and pair it from the Web UI.
+For the Web workbench, start the Local Agent (`protovoy-agent`) and pair it from the Web UI.
 
 ## Development
 
@@ -93,8 +93,8 @@ For the Web workbench, start the Local Agent (`apivoy-agent`) and pair it from t
 - Java 21 (only for `services/collaboration-server/`)
 
 ```bash
-git clone https://github.com/aiLi0617/ApiVoy.git
-cd ApiVoy
+git clone https://github.com/aiLi0617/ProtoVoy.git
+cd ProtoVoy
 pnpm install
 cargo check --workspace
 pnpm dev:desktop
@@ -106,9 +106,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for validation commands and pull request 
 
 | Artifact | Binary | Description |
 |----------|--------|-------------|
-| Desktop | `apivoy` | Tauri desktop app |
-| Local Agent | `apivoy-agent` | Headless protocol runtime for Web |
-| CLI | `apivoy-cli` | CI and terminal automation |
+| Desktop | `protovoy` | Tauri desktop app |
+| Local Agent | `protovoy-agent` | Headless protocol runtime for Web |
+| CLI | `protovoy-cli` | CI and terminal automation |
 
 Release assets include platform installers, CLI/Agent archives, and SHA-256 checksums.
 
@@ -127,11 +127,11 @@ CLI               →  ExecutionEngine (in-process)   →  Protocol drivers
 
 Data defaults to **SQLite + local blob files + OS keychain**. Optional collaboration server and protocol gateway support self-hosted deployment.
 
-Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
+Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PORTS.md](docs/PORTS.md) · [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) · [docs/ISSUES.md](docs/ISSUES.md) · [docs/UX_BACKLOG.md](docs/UX_BACKLOG.md)
 
 ## Comparison
 
-| Capability | ApiVoy |
+| Capability | ProtoVoy |
 |------------|--------|
 | Local-first | ✅ |
 | Open-source source code | ✅ |
@@ -150,22 +150,22 @@ Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/THREAT_MODEL.md](
 | **v0.3 Plugin Ecosystem** | Example WASM plugins, publisher docs |
 | **v1.0 Stable** | i18n completion, auto-update, hardened defaults |
 
-Track work on [GitHub Milestones](https://github.com/aiLi0617/ApiVoy/milestones).
+Track work on [GitHub Milestones](https://github.com/aiLi0617/ProtoVoy/milestones).
 
 ## Contributing
 
 We welcome issues and pull requests. Please read [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md), and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
-Community discussion: [GitHub Discussions](https://github.com/aiLi0617/ApiVoy/discussions).
+Community discussion: [GitHub Discussions](https://github.com/aiLi0617/ProtoVoy/discussions).
 
 ## Open-source scope
 
-All source code contained in this repository is licensed under the Apache License 2.0, except for the ApiVoy trademarks and brand assets described in [NOTICE](NOTICE).
+All source code contained in this repository is licensed under the Apache License 2.0, except for the ProtoVoy trademarks and brand assets described in [NOTICE](NOTICE).
 
-ApiVoy may offer separately developed hosted services in the future. Those services are not part of this repository.
+ProtoVoy may offer separately developed hosted services in the future. Those services are not part of this repository.
 
 Resources received through the Codex for Open Source program will be used exclusively for maintaining this public repository and its open-source workflows.
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). ApiVoy name, logo, and slogan are not licensed under Apache-2.0 — see [NOTICE](NOTICE).
+Licensed under the [Apache License 2.0](LICENSE). ProtoVoy name, logo, and slogan are not licensed under Apache-2.0 — see [NOTICE](NOTICE).

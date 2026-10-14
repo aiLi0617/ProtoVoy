@@ -1,5 +1,5 @@
 {
-  "name": "@apivoy/desktop",
+  "name": "@protovoy/desktop",
   "version": "0.2.0",
   "private": true,
   "type": "module",
@@ -15,11 +15,12 @@
     "test": "tsc -b --pretty false"
   },
   "dependencies": {
-    "@apivoy/request-model": "workspace:*",
-    "@apivoy/ui": "workspace:*",
-    "@tauri-apps/api": "^2.12.1",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "@protovoy/app-wiring": "workspace:*",
+    "@protovoy/request-model": "workspace:*",
+    "@protovoy/ui": "workspace:*",
+    "@tauri-apps/api": "^2.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.12.1",

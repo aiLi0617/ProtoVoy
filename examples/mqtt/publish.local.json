@@ -5,7 +5,7 @@
   "payload": {
     "type": "mqtt",
     "mode": "publish",
-    "topic": "apivoy/demo",
+    "topic": "protovoy/demo",
     "qos": 0,
     "payload": "hello",
     "retain": false

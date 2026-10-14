@@ -3,7 +3,7 @@ name = "local-store"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "ApiVoy local SQLite persistence (workspace / requests / execution summaries)"
+description = "ProtoVoy local SQLite persistence (workspace / requests / execution summaries)"
 
 [dependencies]
 chrono = { workspace = true }

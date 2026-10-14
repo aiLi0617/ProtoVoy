@@ -114,7 +114,7 @@ fn decode(request: &RequestEnvelope) -> Result<KafkaRequest, DriverError> {
             .get("groupId")
             .and_then(Value::as_str)
             .filter(|v| !v.is_empty())
-            .unwrap_or("apivoy-consumer")
+            .unwrap_or("protovoy-consumer")
             .into(),
         offset_reset: value
             .get("offsetReset")

@@ -1,6 +1,6 @@
 # CLI collection runs
 
-Use `apivoy-cli run` to execute collections in CI.
+Use `protovoy-cli run` to execute collections in CI.
 
 ## Minimal collection
 
@@ -9,7 +9,7 @@ See [examples/collections/httpbin-smoke.json](../../examples/collections/httpbin
 ## Run
 
 ```bash
-apivoy-cli run examples/collections/httpbin-smoke.json --report report.json
+protovoy-cli run examples/collections/httpbin-smoke.json --report report.json
 ```
 
 ## Options

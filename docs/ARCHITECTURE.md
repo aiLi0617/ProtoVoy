@@ -1,4 +1,4 @@
-# ApiVoy Architecture
+# ProtoVoy Architecture
 
 This document describes how Desktop, Web, Local Agent, CLI, and optional self-hosted services fit together.
 
@@ -6,12 +6,12 @@ This document describes how Desktop, Web, Local Agent, CLI, and optional self-ho
 
 | Component | Binary / app | Role |
 |-----------|--------------|------|
-| Desktop | `apivoy` | Tauri shell + shared React UI; may bundle Agent as sidecar |
+| Desktop | `protovoy` | Tauri shell + shared React UI; may bundle Agent as sidecar |
 | Web | browser | Shared React UI; restricted protocols via Local Agent |
-| Local Agent | `apivoy-agent` | Headless HTTP API on loopback; executes all protocol drivers |
-| CLI | `apivoy-cli` | In-process execution for automation and CI |
+| Local Agent | `protovoy-agent` | Headless HTTP API on loopback; executes all protocol drivers |
+| CLI | `protovoy-cli` | In-process execution for automation and CI |
 | Collaboration server | Java Spring Boot | Optional team sync, OIDC, comments (self-hosted) |
-| Protocol gateway | `apivoy-gateway` | Optional remote execution scheduler (self-hosted) |
+| Protocol gateway | `protovoy-gateway` | Optional remote execution scheduler (self-hosted) |
 
 All execution paths share the same Rust **protocol core**: `core-domain`, `execution-engine`, and per-protocol drivers under `crates/driver-*`.
 
@@ -28,7 +28,7 @@ User edits request in UI or CLI
 
 ### Desktop
 
-Tauri invokes Rust commands directly or spawns/bundles `apivoy-agent`. SQLite and blob storage live under the user config directory (`.apivoy`).
+Tauri invokes Rust commands directly or spawns/bundles `protovoy-agent`. SQLite and blob storage live under the user config directory (`.protovoy`).
 
 ### Web + Agent
 
@@ -36,7 +36,7 @@ The Web app talks to Agent at `127.0.0.1:39217` with Bearer token and Origin che
 
 ### CLI
 
-`apivoy-cli` registers the same drivers in-process. Collections run sequentially or concurrently with structured exit codes and optional JUnit/JSON reports.
+`protovoy-cli` registers the same drivers in-process. Collections run sequentially or concurrently with structured exit codes and optional JUnit/JSON reports.
 
 ## Data storage
 
@@ -48,7 +48,7 @@ The Web app talks to Agent at `127.0.0.1:39217` with Bearer token and Origin che
 | Drafts | Browser localStorage / Desktop local store |
 | Capture records | In-memory ring buffer (not persisted by default) |
 
-Git-friendly exports use `*.apivoy.json` project packages alongside SQLite.
+Git-friendly exports use `*.protovoy.json` project packages alongside SQLite.
 
 ## Secret flow
 
@@ -59,7 +59,7 @@ Git-friendly exports use `*.apivoy.json` project packages alongside SQLite.
 
 ## Plugin boundary
 
-Third-party extensions are **WASM Components only** (`plugins/sdk/apivoy-plugin.wit`). The host (`crates/plugin-runtime`):
+Third-party extensions are **WASM Components only** (`plugins/sdk/protovoy-plugin.wit`). The host (`crates/plugin-runtime`):
 
 - Validates SHA-256 and optional Ed25519 publisher signatures
 - Enforces memory/fuel limits and declared permissions

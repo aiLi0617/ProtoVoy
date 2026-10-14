@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible defect in ApiVoy
+description: Report a reproducible defect in ProtoVoy
 title: "[Bug] "
 labels:
   - bug
@@ -12,7 +12,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: ApiVoy version
+      label: ProtoVoy version
       placeholder: e.g. v0.1.0
     validations:
       required: true

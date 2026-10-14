@@ -6,7 +6,7 @@ const record = { id: "grpc-history", protocolId: "grpc", state: "completed", sta
 const tree = { workspaces: [{ id: "default-workspace", name: "Local" }], projects: [{ id: "default-project", name: "Personal", workspaceId: "default-workspace" }], modules: [{ id: "default-module", name: "默认模块", projectId: "default-project", isDefault: true }], collections: [{ id: "default-collection", name: "默认目录", projectId: "default-project", moduleId: "default-module", parentId: null }], requests: [] };
 
 test("replays a non-HTTP history snapshot with its original protocol envelope", async ({ page }) => {
-  await page.route("**/health", (route) => route.fulfill({ headers, json: { service: "apivoy-agent", version: "test", agentVersion: "test", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } }));
+  await page.route("**/health", (route) => route.fulfill({ headers, json: { service: "protovoy-agent", version: "test", agentVersion: "test", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } }));
   await page.route("**/v1/session", (route) => route.request().method() === "OPTIONS" ? route.fulfill({ status: 204, headers }) : route.fulfill({ headers, json: { token: "test-session" } }));
   await page.route("**/v1/workspace-tree", (route) => route.fulfill({ headers, json: tree }));
   await page.route("**/v1/environments**", (route) => route.fulfill({ headers, json: new URL(route.request().url()).pathname.endsWith("/default") ? { variables: {}, secretRefs: [] } : [] }));

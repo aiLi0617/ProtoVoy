@@ -19,13 +19,44 @@ test("starts with zero tabs and the project overview", async ({ page }) => {
   await expect(page.locator(".workbench-tabs")).toHaveCount(0);
   await expect(page.locator(".workbench-tab")).toHaveCount(0);
   await expect(page.locator(".workbench-session-stack [role=tabpanel]")).toHaveCount(1);
-  await expect(page.getByRole("main", { name: "项目" })).toBeVisible();
+  await expect(page.locator(".project-launcher")).toBeVisible();
   await expect(page.getByRole("heading", { name: "项目", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "新建项目" })).toBeVisible();
 });
 
+test("applies saved appearance before the app renders", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("protovoy:ui-state", JSON.stringify({ state: { themeMode: "light" }, version: 5 }));
+    localStorage.setItem("protovoy:locale", "en-US");
+    (window as Window & { __themeTransitions?: string[] }).__themeTransitions = [];
+    new MutationObserver(() => {
+      const theme = document.documentElement.dataset.theme;
+      if (theme) (window as Window & { __themeTransitions?: string[] }).__themeTransitions?.push(theme);
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  });
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+  expect(await page.evaluate(() => (window as Window & { __themeTransitions?: string[] }).__themeTransitions)).not.toContain("dark");
+});
+
+test("turns Agent bootstrap failures into actionable guidance", async ({ page }) => {
+  const explorerToggle = page.locator(".explorer-edge-toggle");
+  if (await explorerToggle.isVisible()) await explorerToggle.click();
+  const alert = page.getByRole("alert").filter({ hasText: "无法加载工作区" });
+  await expect(alert).toContainText("无法连接 Local Agent");
+  await expect(alert).not.toContainText("Failed to fetch");
+  await expect(alert.getByRole("button", { name: "检查 Local Agent 设置" })).toBeVisible();
+});
+
+test("opens collection automation from the project rail", async ({ page }) => {
+  await page.getByRole("button", { name: "自动化测试" }).click();
+  await expect(page.locator(".collection-runner")).toBeVisible();
+  await expect(page).toHaveURL(/view=automation/);
+  await expect(page).toHaveURL(/workbench=runner/);
+});
 test("opens the grouped protocol workspace without horizontal overflow", async ({ page }) => {
-  await expect(page).toHaveTitle("ApiVoy");
+  await expect(page).toHaveTitle("ProtoVoy");
   await expect(page.locator(".workbench-tabs")).toBeVisible();
   await expectActiveWorkbench(page, "http");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -51,7 +82,7 @@ test("tab overflow tools expose every tab and allow closing the final tab", asyn
 
   await page.setViewportSize({ width: 720, height: 760 });
   for (const id of ["grpc", "redis", "mqtt", "websocket", "sql"]) {
-    await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("apivoy-create-workbench", { detail: workbenchId })), id);
+    await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: workbenchId })), id);
   }
 
   const tabs = page.locator(".workbench-tab-scroll");
@@ -113,7 +144,7 @@ test("tab overflow tools expose every tab and allow closing the final tab", asyn
 });
 
 test("gRPC response stays bottom-aligned and uses the HTTP split drag bounds", async ({ page }, testInfo) => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("apivoy-select-workbench", { detail: "grpc" })));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "grpc" })));
   await expectActiveWorkbench(page, "grpc");
 
   const layout = page.locator(".grpc-workbench-layout");
@@ -149,7 +180,7 @@ test("gRPC response stays bottom-aligned and uses the HTTP split drag bounds", a
 test("non-HTTP protocol response workbenches fill tall lifecycle panels", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1200 });
   for (const id of ["grpc", "websocket", "sse", "tcp", "udp", "mqtt", "amqp", "kafka", "redis", "sql"]) {
-    await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("apivoy-select-workbench", { detail: workbenchId })), id);
+    await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: workbenchId })), id);
     await expectActiveWorkbench(page, id);
     const panel = page.locator(".workbench-panel:not([hidden])");
     const geometry = await panel.evaluate((element) => {
@@ -164,11 +195,11 @@ test("non-HTTP protocol response workbenches fill tall lifecycle panels", async 
 });
 
 test("switches workbenches and preserves URL and stored state", async ({ page }) => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("apivoy-select-workbench", { detail: "redis" })));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "redis" })));
   await expectActiveWorkbench(page, "redis");
   await expect(page).toHaveURL(/#workbench=redis/);
   await expect.poll(() => page.evaluate(() => {
-    const persisted = localStorage.getItem("apivoy:ui-state");
+    const persisted = localStorage.getItem("protovoy:ui-state");
     if (!persisted) return null;
     try { return (JSON.parse(persisted) as { state?: { activeWorkbench?: string } }).state?.activeWorkbench ?? null; } catch { return null; }
   })).toBe("redis");
@@ -185,7 +216,7 @@ test("switches theme and keeps visible keyboard focus", async ({ page }) => {
 });
 
 test("keeps project settings separate from application settings", async ({ page }) => {
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("apivoy-open-project-settings")));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-open-project-settings")));
   const projectSettings = page.locator(".project-settings-view");
   await expect(projectSettings).toContainText("通用设置");
   await expect(projectSettings).toContainText("项目资源");
@@ -200,7 +231,7 @@ test("keeps project settings separate from application settings", async ({ page 
   expect(footerBox.height).toBeLessThan(80);
   expect(footerBox.width).toBeGreaterThan(footerBox.height * 4);
 
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent("apivoy-open-settings")));
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-open-settings")));
   const applicationSettings = page.locator(".settings-dialog").filter({ hasText: /软件级|Application-wide/ });
   await expect(applicationSettings).toContainText(/软件级|Application-wide/);
   await expect(applicationSettings).toContainText(/不随项目切换|do not change with projects/);
@@ -269,7 +300,7 @@ test("HTTP workbench exposes busy state semantics", async ({ page }) => {
 
 test("broker and database workbenches keep save action compact and request content visible", async ({ page }) => {
   for (const id of ["mqtt", "amqp", "kafka", "redis", "sql"]) {
-    await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("apivoy-create-workbench", { detail: workbenchId })), id);
+    await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: workbenchId })), id);
     await expectActiveWorkbench(page, id);
     const frame = page.locator(".workbench-panel:not([hidden]) .workbench-frame");
     const save = frame.getByRole("button", { name: "保存", exact: true });

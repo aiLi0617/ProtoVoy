@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { RequestEnvelope } from "@apivoy/request-model";
+import type { RequestEnvelope } from "@protovoy/request-model";
 import { Icon } from "./Icons";
 import type { HttpRunResult, HttpSendHooks } from "./HttpWorkbench";
 

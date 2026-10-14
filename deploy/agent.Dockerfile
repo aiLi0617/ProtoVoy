@@ -1,4 +1,4 @@
-FROM rust:1.88-bookworm AS build
+﻿FROM rust:1.88-bookworm AS build
 WORKDIR /workspace
 RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake g++ make pkg-config clang libclang-dev perl nasm \
@@ -9,13 +9,13 @@ COPY apps/local-agent ./apps/local-agent
 COPY apps/desktop/src-tauri ./apps/desktop/src-tauri
 COPY apps/cli ./apps/cli
 COPY apps/protocol-gateway ./apps/protocol-gateway
-RUN cargo build --locked --release -p apivoy-local-agent
+RUN cargo build --locked --release -p protovoy-local-agent
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --create-home apivoy
-COPY --from=build /workspace/target/release/apivoy-agent /usr/local/bin/apivoy-agent
-USER apivoy
-VOLUME ["/var/lib/apivoy"]
+    && useradd --system --uid 10001 --create-home protovoy
+COPY --from=build /workspace/target/release/protovoy-agent /usr/local/bin/protovoy-agent
+USER protovoy
+VOLUME ["/var/lib/protovoy"]
 EXPOSE 39217
-ENTRYPOINT ["/usr/local/bin/apivoy-agent"]
+ENTRYPOINT ["/usr/local/bin/protovoy-agent"]

@@ -1,6 +1,6 @@
 # gRPC example
 
-ApiVoy gRPC support is **Experimental**. Use a local test server for development.
+ProtoVoy gRPC support is **Experimental**. Use a local test server for development.
 
 ## Minimal proto (`echo.proto`)
 
@@ -25,19 +25,19 @@ message HelloReply {
 
 Run any gRPC echo server that implements the service above, for example with [grpcurl](https://github.com/fullstorydev/grpcurl) and your preferred language toolchain.
 
-In ApiVoy gRPC workbench:
+In ProtoVoy gRPC workbench:
 
 - Target: `localhost:50051` (adjust to your server)
 - Service: `echo.Echo`
 - Method: `SayHello`
-- Message JSON: `{ "name": "ApiVoy" }`
+- Message JSON: `{ "name": "ProtoVoy" }`
 
 Import a FileDescriptorSet generated from `echo.proto` or enable server reflection if your server supports it.
 
 ## grpcurl equivalent
 
 ```bash
-grpcurl -plaintext -d '{"name":"ApiVoy"}' localhost:50051 echo.Echo/SayHello
+grpcurl -plaintext -d '{"name":"ProtoVoy"}' localhost:50051 echo.Echo/SayHello
 ```
 
 No credentials or production endpoints are included in this example.

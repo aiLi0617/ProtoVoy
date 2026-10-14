@@ -10,13 +10,13 @@ export interface ProjectResponseValidationSettings {
   allowAdditionalProperties: boolean;
 }
 
-export const RESPONSE_VALIDATION_SETTINGS_EVENT = "apivoy-response-validation-settings";
+export const RESPONSE_VALIDATION_SETTINGS_EVENT = "protovoy-response-validation-settings";
 export const DEFAULT_RESPONSE_VALIDATION_SETTINGS: ProjectResponseValidationSettings = {
   enabled: true, interfaceRun: true, singleCase: true, testScenario: true,
   status: true, headers: true, bodyFormat: true, bodySchema: true, allowAdditionalProperties: true,
 };
 
-const key = (projectId: string) => `apivoy.project.${projectId}.response-validation`;
+const key = (projectId: string) => `protovoy.project.${projectId}.response-validation`;
 export function readResponseValidationSettings(projectId?: string): ProjectResponseValidationSettings {
   if (!projectId || typeof localStorage === "undefined") return DEFAULT_RESPONSE_VALIDATION_SETTINGS;
   try {

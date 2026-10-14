@@ -1,6 +1,6 @@
 # Secret management
 
-ApiVoy uses the OS keychain or Agent secret store by default. HTTP Bearer auth also offers an explicit direct-token mode; tokens entered there are stored with the local request.
+ProtoVoy uses the OS keychain or Agent secret store by default. HTTP Bearer auth also offers an explicit direct-token mode; tokens entered there are stored with the local request.
 
 ## How it works
 

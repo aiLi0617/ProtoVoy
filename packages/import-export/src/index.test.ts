@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { IMPORT_MAX_DEPTH, IMPORT_MAX_DOCUMENTS, IMPORT_MAX_FILE_BYTES, IMPORT_MAX_REQUESTS, exportApiVoyProject, importDocument, importJson, scanSensitiveData } from "./index.js";
+import { IMPORT_MAX_DEPTH, IMPORT_MAX_DOCUMENTS, IMPORT_MAX_FILE_BYTES, IMPORT_MAX_REQUESTS, exportProtoVoyProject, importDocument, importJson, scanSensitiveData } from "./index.js";
 
 test("imports OpenAPI operations", () => {
   const result = importJson(JSON.stringify({ openapi: "3.0.0", info: { title: "Pets" }, servers: [{ url: "https://api.example.com" }], paths: { "/pets": { get: { summary: "List pets" } } } }));
@@ -17,7 +17,7 @@ test("imports nested Postman items and HAR", () => {
 test("blocks sensitive exports by default", () => {
   const requests = [{ name: "Secret", method: "GET", url: "https://example.com?api_key=x", headers: { Authorization: "Bearer x" } }];
   assert.equal(scanSensitiveData(requests).length, 2);
-  assert.throws(() => exportApiVoyProject("Demo", requests));
+  assert.throws(() => exportProtoVoyProject("Demo", requests));
 });
 
 test("imports OpenAPI YAML", async () => {
@@ -31,7 +31,7 @@ test("resolves OpenAPI component refs into sendable request examples", () => {
   assert.deepEqual(JSON.parse(result.requests[0]?.body ?? "{}"), { name: "Milo", age: 0, active: false });
 });
 
-test("maps OpenAPI server variables to ApiVoy request variables", () => {
+test("maps OpenAPI server variables to ProtoVoy request variables", () => {
   const result = importJson(JSON.stringify({ openapi: "3.0.0", info: { title: "Variables" }, servers: [{ url: "https://{region}.example.com/{version}", variables: { region: { default: "cn" }, version: { default: "v1" } } }], paths: { "/health": { get: {} } } }));
   assert.equal(result.requests[0]?.url, "https://{{region}}.example.com/{{version}}/health");
   assert.deepEqual(result.requests[0]?.variables, { region: "cn", version: "v1" });
@@ -65,5 +65,5 @@ test("rejects excessive document and request counts", async () => {
   const documents = Object.fromEntries(Array.from({ length: IMPORT_MAX_DOCUMENTS }, (_, index) => [`part-${index}.yaml`, "value: true"]));
   await assert.rejects(() => importDocument("openapi: 3.0.0\ninfo: { title: Many }\npaths: {}\n", { documents }), /文档数量/);
   const requests = Array.from({ length: IMPORT_MAX_REQUESTS + 1 }, (_, index) => ({ name: String(index), method: "GET", url: "https://example.com", headers: {} }));
-  assert.throws(() => importJson(JSON.stringify({ format: "apivoy-project", name: "Many", requests })), /请求数量/);
+  assert.throws(() => importJson(JSON.stringify({ format: "protovoy-project", name: "Many", requests })), /请求数量/);
 });

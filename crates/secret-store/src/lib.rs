@@ -10,7 +10,7 @@ use keyring::Entry;
 use thiserror::Error;
 use tracing::warn;
 
-const SERVICE: &str = "apivoy.secrets";
+const SERVICE: &str = "protovoy.secrets";
 
 #[derive(Debug, Error)]
 pub enum SecretError {
@@ -51,7 +51,7 @@ impl SecretStore {
     /// Prefer OS keychain; fall back to memory if unavailable.
     pub fn with_keychain() -> Self {
         // Probe keyring with a throwaway lookup; some CI images lack a session bus.
-        match Entry::new(SERVICE, "__apivoy_probe__") {
+        match Entry::new(SERVICE, "__protovoy_probe__") {
             Ok(entry) => match entry.get_password() {
                 Ok(_) | Err(keyring::Error::NoEntry) => Self {
                     kind: SecretBackendKind::Keychain,

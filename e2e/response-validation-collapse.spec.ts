@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 test("collapsed response validation shows its expand control, label, and failure state", async ({ page }) => {
-  await page.addInitScript(() => { localStorage.setItem("apivoy:agent-url", location.origin); localStorage.removeItem("apivoy-agent-token"); });
+  await page.addInitScript(() => { localStorage.setItem("protovoy:agent-url", location.origin); localStorage.removeItem("protovoy:agent-token"); });
   const json = { "content-type": "application/json" };
   await page.route("http://127.0.0.1:5180/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path === "/health") return route.fulfill({ headers: json, body: JSON.stringify({ service: "apivoy-agent", version: "test", agentVersion: "test", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false }) });
+    if (path === "/health") return route.fulfill({ headers: json, body: JSON.stringify({ service: "protovoy-agent", version: "test", agentVersion: "test", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false }) });
     if (path === "/v1/session") return route.fulfill({ headers: json, body: JSON.stringify({ token: "test" }) });
     if (path === "/v1/executions") return route.fulfill({ headers: json, body: JSON.stringify({ executionId: "collapse-e2e", state: "running" }) });
     if (path === "/v1/executions/collapse-e2e/events") {
