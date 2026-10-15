@@ -36,7 +36,9 @@ test("edits only the case name and selects the parent interface after navigation
   });
   await page.goto("/#workbench=http");
 
-  await page.locator('[data-request-id="quote-case"] .tree-request-main').click();
+  const debugCaseTreeItem = page.locator('[data-request-id="quote-case"] .tree-request-main');
+  if (!await debugCaseTreeItem.isVisible()) await page.getByRole("button", { name: "资源管理器" }).click();
+  await debugCaseTreeItem.click();
   const header = page.locator(".interface-case-header");
   const interfaceLink = header.getByRole("button", { name: "提交报价" });
   const caseName = header.getByRole("textbox", { name: "用例名称" });

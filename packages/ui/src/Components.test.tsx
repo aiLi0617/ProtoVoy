@@ -14,6 +14,9 @@ assert.match(button, /class="ui-button primary"/);
 assert.match(button, /disabled=""/);
 assert.match(button, /aria-busy="true"/);
 
+const externallyBusyButton = renderToStaticMarkup(<Button aria-busy="true">Cancel</Button>);
+assert.match(externallyBusyButton, /aria-busy="true"/);
+
 const iconButton = renderToStaticMarkup(<IconButton label="Close" icon="close" active />);
 assert.match(iconButton, /aria-label="Close"/);
 assert.match(iconButton, /aria-pressed="true"/);

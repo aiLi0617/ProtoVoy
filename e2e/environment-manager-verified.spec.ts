@@ -21,9 +21,9 @@ test("creates an environment without leaking its draft into the next one", async
   const dialog = page.locator(".environment-dialog");
   await dialog.getByRole("button", { name: "新建环境" }).click();
   await dialog.getByLabel("环境名称").fill("Development");
-  await dialog.getByLabel("新变量名称").fill("base_url");
-  await dialog.getByLabel("新变量值").fill("https://dev.example.com");
-  await dialog.getByRole("button", { name: "添加变量" }).click();
+  const variableRow = dialog.locator(".environment-kv-row").first();
+  await variableRow.locator("input").nth(0).fill("base_url");
+  await variableRow.locator("input").nth(1).fill("https://dev.example.com");
   await dialog.getByRole("button", { name: "保存", exact: true }).click();
   await expect.poll(() => createdPayload).toMatchObject({ name: "Development", variables: { base_url: "https://dev.example.com" } });
 

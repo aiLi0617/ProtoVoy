@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+test.skip(({ isMobile }) => !isMobile, "mobile header behavior");
 test("hides desktop shortcut hints in the mobile header", async ({ page }) => {
   await page.route("http://127.0.0.1:39217/**", async (route) => {
     const pathname = new URL(route.request().url()).pathname;

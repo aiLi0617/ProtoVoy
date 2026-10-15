@@ -30,5 +30,5 @@ test("runs a collection through the Agent collection endpoint", async ({ page })
   await page.getByRole("button", { name: "\u8fd0\u884c\u5f53\u524d\u96c6\u5408" }).click();
 
   await expect(page.locator(".collection-runner-summary")).toContainText("1/1");
-  expect(runBody).toEqual({ failFast: false });
+  expect(runBody).toEqual({ failFast: false, runId: expect.any(String) });
 });

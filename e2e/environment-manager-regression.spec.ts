@@ -33,12 +33,12 @@ test("saves typed global parameters and creates isolated environment drafts", as
   await expect(dialog.getByLabel("新Query全局参数名称")).toHaveValue("");
   await dialog.getByRole("tab", { name: /Header/ }).click();
   await expect(dialog.getByLabel("全局参数名称 1")).toHaveValue("X-Client-ID");
-
+  await dialog.getByRole("button", { name: "保存", exact: true }).click();
   await dialog.getByRole("button", { name: "新建环境" }).click();
   await dialog.getByLabel("环境名称").fill("Development");
-  await dialog.getByLabel("新变量名称").fill("base_url");
-  await dialog.getByLabel("新变量值").fill("https://dev.example.com");
-  await dialog.getByRole("button", { name: "添加变量" }).click();
+  const variableRow = dialog.locator(".environment-kv-row").first();
+  await variableRow.locator("input").nth(0).fill("base_url");
+  await variableRow.locator("input").nth(1).fill("https://dev.example.com");
   await dialog.getByRole("button", { name: "保存", exact: true }).click();
   await expect.poll(() => createdPayload).toMatchObject({ name: "Development", variables: { base_url: "https://dev.example.com" } });
 

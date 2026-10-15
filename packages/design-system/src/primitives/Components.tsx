@@ -40,6 +40,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     iconPosition = "start",
     loading = false,
     disabled,
+    "aria-busy": ariaBusy,
     className,
     children,
     type = "button",
@@ -59,7 +60,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       type={type}
       disabled={disabled || loading}
-      aria-busy={loading || undefined}
+      aria-busy={ariaBusy ?? (loading || undefined)}
       className={cx("ui-button", variant, size === "compact" && "compact", className)}
     >
       {iconPosition === "start" && iconNode}
