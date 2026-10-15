@@ -5,6 +5,8 @@ import { Button } from "./Components";
 import { useFeedback } from "./Feedback";
 import { RovingTabList } from "./RovingTabList";
 
+export type { EnvironmentResource } from "./agentResources";
+
 export interface EnvironmentEditorProps {
   onLoad: () => Promise<{ variables: Record<string, string>; globalParameters?: GlobalParameter[]; secretRefs?: string[] }>;
   onSave: (variables: Record<string, string>, secretRefs: string[], globalParameters: GlobalParameter[]) => Promise<void>;
@@ -65,9 +67,16 @@ function KeyValueEditor({ value, onChange, disabled, kind }: { value: string; on
 const locationLabels: Record<GlobalParameterLocation, string> = { header: "Header", cookie: "Cookie", query: "Query", body: "Body" };
 function GlobalParameterEditor({ value, onChange, disabled }: { value: GlobalParameter[]; onChange: (value: GlobalParameter[]) => void; disabled: boolean }) {
   const [activeLocation, setActiveLocation] = useState<GlobalParameterLocation>("header");
+  const [draftIndexes, setDraftIndexes] = useState<Partial<Record<GlobalParameterLocation, number>>>({});
   const update = (index: number, patch: Partial<GlobalParameter>) => onChange(value.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   const visible = value.map((item, index) => ({ item, index })).filter(({ item }) => item.location === activeLocation);
-  const addFromPlaceholder = (patch: Partial<GlobalParameter>) => onChange([...value, { location: activeLocation, name: "", value: "", enabled: true, description: "", ...patch }]);
+  const draftIndex = draftIndexes[activeLocation];
+  const startDraft = (patch: Partial<GlobalParameter>) => {
+    const index = value.length;
+    onChange([...value, { location: activeLocation, name: "", value: "", enabled: true, description: "", ...patch }]);
+    setDraftIndexes((current) => ({ ...current, [activeLocation]: index }));
+  };
+  const finishDraft = () => setDraftIndexes((current) => ({ ...current, [activeLocation]: undefined }));
   return <div className="environment-parameter-editor">
     <div className="environment-parameter-callout"><Icon name="info"/><span>只注入 HTTP 请求；请求自身已存在同名 Header、Cookie、Query 或 Body 字段时，以请求值为准。值支持 <code>{"{{variable}}"}</code>。</span></div>
     <RovingTabList className="environment-parameter-tabs" ariaLabel="全局参数位置">
@@ -75,18 +84,18 @@ function GlobalParameterEditor({ value, onChange, disabled }: { value: GlobalPar
     </RovingTabList>
     <div className="environment-parameter-table">
     <div className="environment-parameter-header"><span/><span>名称</span><span>值</span><span>说明</span><span/></div>
-    {visible.map(({ item, index }) => <div className="environment-parameter-row has-content" key={`${item.location}-${index}`}>
+    {visible.map(({ item, index }) => <div className="environment-parameter-row has-content" key={index === draftIndex ? `draft-${item.location}` : `${item.location}-${index}`} onBlurCapture={(event) => { if (index === draftIndex && !event.currentTarget.contains(event.relatedTarget as Node | null)) finishDraft(); }}>
       <input type="checkbox" aria-label={`启用全局参数 ${item.name || index + 1}`} checked={item.enabled} onChange={(event) => update(index, { enabled: event.target.checked })} disabled={disabled}/>
       <input aria-label={`全局参数名称 ${index + 1}`} value={item.name} onChange={(event) => update(index, { name: event.target.value })} placeholder={item.location === "header" ? "X-Client-ID" : "参数名"} disabled={disabled}/>
       <input aria-label={`全局参数值 ${index + 1}`} value={item.value} onChange={(event) => update(index, { value: event.target.value })} placeholder="值或 {{变量}}" disabled={disabled}/>
       <input aria-label={`全局参数说明 ${index + 1}`} value={item.description} onChange={(event) => update(index, { description: event.target.value })} placeholder="可选说明" disabled={disabled}/>
       <button type="button" aria-label={`删除全局参数 ${item.name}`} title="删除" onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))} disabled={disabled}><Icon name="trash"/></button>
     </div>)}
-    <div className="environment-parameter-row is-new">
-      <input type="checkbox" aria-label={`启用新${locationLabels[activeLocation]}全局参数`} checked disabled={disabled} onChange={() => undefined}/>
-      <input aria-label={`新${locationLabels[activeLocation]}全局参数名称`} placeholder={activeLocation === "header" ? "添加 Header" : `添加 ${locationLabels[activeLocation]} 参数`} disabled={disabled} onChange={(event) => { if (event.target.value) addFromPlaceholder({ name: event.target.value }); }}/>
-      <input aria-label={`新${locationLabels[activeLocation]}全局参数值`} placeholder="值或 {{变量}}" disabled={disabled} onChange={(event) => { if (event.target.value) addFromPlaceholder({ value: event.target.value }); }}/>
-      <input aria-label={`新${locationLabels[activeLocation]}全局参数说明`} placeholder="可选说明" disabled={disabled} onChange={(event) => { if (event.target.value) addFromPlaceholder({ description: event.target.value }); }}/>
+    <div className="environment-parameter-row is-new" key={draftIndex === undefined ? `draft-${activeLocation}` : `new-${activeLocation}`}>
+      <input type="checkbox" aria-label={`启用新${locationLabels[activeLocation]}全局参数`} checked disabled={disabled} readOnly/>
+      <input aria-label={`新${locationLabels[activeLocation]}全局参数名称`} value="" placeholder={activeLocation === "header" ? "添加 Header" : `添加 ${locationLabels[activeLocation]} 参数`} disabled={disabled} onChange={(event) => startDraft({ name: event.target.value })}/>
+      <input aria-label={`新${locationLabels[activeLocation]}全局参数值`} value="" placeholder="值或 {{变量}}" disabled={disabled} onChange={(event) => startDraft({ value: event.target.value })}/>
+      <input aria-label={`新${locationLabels[activeLocation]}全局参数说明`} value="" placeholder="可选说明" disabled={disabled} onChange={(event) => startDraft({ description: event.target.value })}/>
       <span aria-hidden="true"/>
     </div>
     </div>
@@ -264,7 +273,7 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret, onSecretExists,
           <label className="settings-field"><span>已关联的密钥引用</span><input value={secretRefs} onChange={(event) => setSecretRefs(event.target.value)} placeholder="例如：api_token, client_secret" disabled={busy}/><small>引用名会保存到工作区；密钥值不会写入数据库、导出文件或团队快照。</small></label>
           {defaultSecretRefs.length ? <div className="environment-secret-list" aria-label="密钥状态">{defaultSecretRefs.map((name) => <div key={name}><code>{name}</code><span className={secretAvailability[name] === false ? "is-missing" : "is-available"}>{secretAvailability[name] === false ? "安全存储中缺失" : "已安全存储"}</span>{onDeleteSecret ? <button type="button" aria-label={`删除密钥 ${name}`} onClick={() => void deleteSecret(name)} disabled={busy}><Icon name="trash"/></button> : null}</div>)}</div> : null}
           {onPutSecret ? <div className="environment-vault-card"><div><strong>添加或更新密钥</strong><small>保存后无法读取明文，只能通过引用名称使用。</small></div><div className="environment-secret-row"><input aria-label="密钥名称" value={secretName} onChange={(event) => setSecretName(event.target.value)} placeholder="密钥名称" disabled={busy}/><input aria-label="密钥值" type="password" value={secretValue} onChange={(event) => setSecretValue(event.target.value)} placeholder="密钥值" disabled={busy}/><Button variant="secondary" disabled={busy || !secretName.trim() || !secretValue} onClick={() => void putSecret()}>保存密钥</Button></div></div> : null}
-        </> : active === "global-parameters" ? <GlobalParameterEditor value={globalParameters} onChange={setGlobalParameters} disabled={busy}/> : <KeyValueEditor kind="变量" value={text} onChange={setText} disabled={busy}/>}
+        </> : active === "global-parameters" ? <GlobalParameterEditor value={globalParameters} onChange={setGlobalParameters} disabled={busy}/> : <KeyValueEditor key={active} kind="变量" value={text} onChange={setText} disabled={busy}/>}
       </div>
       <footer><div className="environment-footer-leading">{selectedEnvironment ? <Button variant="danger" icon="trash" disabled={busy} onClick={() => void removeEnvironment()}>删除环境</Button> : null}<span role="status">{message}</span></div><div>{selectedEnvironment ? <Button variant="secondary" icon="copy" disabled={busy || selectedEnvironment.id.startsWith("draft-")} onClick={() => void copyEnvironment()}>复制</Button> : null}<Button variant="secondary" disabled={busy} onClick={() => void reload()}>重新加载</Button><Button variant="primary" disabled={busy} onClick={() => void saveCurrent()}>保存</Button></div></footer>
     </main>
