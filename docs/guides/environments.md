@@ -6,7 +6,7 @@ ProtoVoy supports scoped variables resolved at execution time with `{{name}}` sy
 
 | Scope | Typical use |
 |-------|-------------|
-| Global | Defaults across projects |
+| Local environment | Base variables available to every request; selected environments override matching names |
 | Environment | `dev`, `staging`, `prod` base URLs |
 | Collection | Shared variables for a folder |
 | Request | Overrides for a single request |
@@ -31,7 +31,7 @@ Built-in helpers include `$uuid`, `$timestamp`, and `$isoTimestamp` (see executi
 
 ## Global request parameters
 
-Global parameters are persisted with the default environment and can inject defaults into HTTP requests in four locations:
+Global parameters are persisted with the local environment (`default-env`) and can inject defaults into HTTP requests in four locations:
 
 | Location | Behavior |
 |----------|----------|
@@ -40,7 +40,9 @@ Global parameters are persisted with the default environment and can inject defa
 | Query | Adds a URL query pair when the request does not already contain that key. |
 | Body | Adds a JSON property, form-urlencoded field, or multipart text field when that field is absent. |
 
-Names and values support `{{name}}` resolution. Disabled rows are retained but not injected. Request-local values always take precedence, and global request parameters apply only to HTTP requests.
+Names and values support `{{name}}` resolution. Disabled rows are retained but not injected by default. Request-local values always take precedence, and global request parameters apply only to HTTP requests.
+
+The HTTP request editor lists inherited global Header parameters separately from request-owned Headers. Its switch creates an override for that request only; **Restore default** removes the override and follows the environment's global enabled state again. Changing the switch in the environment editor changes the default for every request that has no request-level override.
 
 ## Git-friendly exports
 

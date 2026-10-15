@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import type {
   Assertion,
@@ -18,6 +18,7 @@ import { HttpLiveRequestView } from "./HttpLiveRequestView";
 import { SplitPane, WorkbenchFrame } from "./WorkbenchFrame";
 import { VirtualList } from "./VirtualList";
 import { RovingTabList } from "./RovingTabList";
+import { RequestLoadingOverlay } from "./RequestLoadingOverlay";
 import { ModalFrame } from "./ModalFrame";
 import { readWorkbenchDraft, useAutosaveDraft } from "./draftRecovery";
 import { useWorkbenchHydration } from "./useWorkbenchHydration";
@@ -29,8 +30,9 @@ import { useI18n } from "./i18n";
 import { alignRequestToInterface, captureHttpInterfaceStructure, diffHttpInterfaceStructure, INTERFACE_STRUCTURE_METADATA_KEY, readInterfaceStructureMetadata } from "./interfaceStructureV2";
 import { DEFAULT_RESPONSE_VALIDATION_SETTINGS, readResponseValidationSettings, RESPONSE_VALIDATION_SETTINGS_EVENT, type ProjectResponseValidationSettings } from "./responseValidationSettings";
 import { validateDesignedResponse, type DesignedResponse } from "./designedResponseValidator";
-import { KeyValueRows, cookieRowsFromHeaders, createHeaderRow, createQueryRow, headerRowsFromPairs, keyValueRowHasContent, queryRowsFromUrl, urlWithQueryRows, type HeaderRow, type RowValueType } from "./KeyValueEditor";
+import { KeyValueRows, cookieRowsFromHeaders, createHeaderRow, createQueryRow, headerRowsFromPairs, keyValueRowHasContent, queryRowsFromUrl, urlEncodedRows, urlWithQueryRows, type HeaderRow, type RowValueType } from "./KeyValueEditor";
 import { useInterfaceNameTarget } from "./InterfaceNameTarget";
+import { Button, IconButton } from "./Components";
 
 export { KeyValueRows, createQueryRow, queryRowsFromUrl, urlWithQueryRows } from "./KeyValueEditor";
 export type { HeaderRow, RowValueType } from "./KeyValueEditor";
@@ -63,6 +65,47 @@ export interface HttpWorkbenchRequest {
   preScripts?: string[];
   postScripts?: string[];
   metadata?: Record<string, unknown>;
+}
+
+export interface HttpGlobalParameter {
+  location: "header" | "cookie" | "query" | "body";
+  name: string;
+  parameterType?: "string" | "number" | "integer" | "boolean" | "array" | "object";
+  value: string;
+  enabled: boolean;
+  required?: boolean;
+  description: string;
+}
+
+export const GLOBAL_PARAMETER_OVERRIDES_METADATA_KEY = "__protovoyGlobalParameterOverrides";
+
+export function globalParameterOverrideKey(parameter: Pick<HttpGlobalParameter, "location" | "name">): string {
+  return `${parameter.location}:${parameter.name.trim().toLocaleLowerCase()}`;
+}
+
+export function readGlobalParameterOverrides(metadata: Record<string, unknown>): Record<string, boolean> {
+  const value = metadata[GLOBAL_PARAMETER_OVERRIDES_METADATA_KEY];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"));
+}
+
+export function globalParameterEnabled(parameter: HttpGlobalParameter, metadata: Record<string, unknown>): boolean {
+  return readGlobalParameterOverrides(metadata)[globalParameterOverrideKey(parameter)] ?? parameter.enabled;
+}
+
+export function withGlobalParameterOverride(
+  metadata: Record<string, unknown>,
+  parameter: HttpGlobalParameter,
+  enabled: boolean | undefined,
+): Record<string, unknown> {
+  const overrides = readGlobalParameterOverrides(metadata);
+  const key = globalParameterOverrideKey(parameter);
+  if (enabled === undefined || enabled === parameter.enabled) delete overrides[key];
+  else overrides[key] = enabled;
+  const next = { ...metadata };
+  if (Object.keys(overrides).length) next[GLOBAL_PARAMETER_OVERRIDES_METADATA_KEY] = overrides;
+  else delete next[GLOBAL_PARAMETER_OVERRIDES_METADATA_KEY];
+  return next;
 }
 
 const SENSITIVE_HEADER_NAMES = new Set([
@@ -312,6 +355,7 @@ interface MultipartEditorPart extends MultipartPart {
 }
 
 type BodyMode = "none" | "multipart" | "urlencoded" | "json" | "xml" | "text" | "graphql" | "jsonrpc" | "soap" | "binary" | "msgpack";
+type RequestTab = "params" | "headers" | "body" | "auth" | "cookies" | "pre" | "post" | "proxy";
 
 const BODY_MODES: Array<{ id: BodyMode; label: string; contentType?: string }> = [
   { id: "none", label: "none" },
@@ -354,6 +398,44 @@ export function replaceContentTypeHeader(rows: HeaderRow[], contentType: string)
 export function formatJsonBody(value: string): string {
   if (!value.trim()) return value;
   return JSON.stringify(JSON.parse(value), null, 2);
+}
+
+export function bodyPayloadCount(value: string): number {
+  return Number(Boolean(value.trim()));
+}
+
+export interface GeneratedRequestHeader {
+  name: string;
+  value: string;
+  description: string;
+}
+
+export function generatedRequestHeaders(url: string, headers: Array<[string, string]>, cookieValue = ""): GeneratedRequestHeader[] {
+  const customNames = new Set(headers.map(([name]) => name.trim().toLowerCase()).filter(Boolean));
+  let host = "<发送请求时计算>";
+  try {
+    const target = new URL(url);
+    host = target.host || host;
+  } catch {
+    // Keep the computed-value hint while the URL is incomplete.
+  }
+  return [
+    { name: "Cache-Control", value: "no-cache", description: "避免调试请求命中中间缓存" },
+    { name: "Content-Length", value: "<发送请求时计算>", description: "根据最终请求体自动计算" },
+    { name: "Cookie", value: cookieValue || "<发送请求时计算>", description: "合并 Cookie 管理器和当前请求中的 Cookie" },
+    { name: "Host", value: host, description: "根据目标 URL 自动生成" },
+    { name: "User-Agent", value: "ProtoVoy/<当前版本>", description: "发送时替换为当前 ProtoVoy 版本" },
+    { name: "Accept", value: "*/*", description: "默认接受任意响应媒体类型" },
+    { name: "Accept-Encoding", value: "identity", description: "调试模式默认保留未压缩的响应内容" },
+    { name: "Connection", value: "keep-alive", description: "由 HTTP 传输层复用连接" },
+  ].filter((header) => !customNames.has(header.name.toLowerCase()));
+}
+
+export function defaultRequestTab(request: Pick<HttpWorkbenchRequest, "url" | "body" | "bodySource" | "multipart">): "params" | "body" {
+  if (queryRowsFromUrl(request.url).some(keyValueRowHasContent)) return "params";
+  const hasMultipartContent = request.multipart?.some((part) => Boolean(part.name.trim() || part.value || part.fileName));
+  if (request.body?.trim() || request.bodySource?.trim() || hasMultipartContent) return "body";
+  return "params";
 }
 
 function snapshotActualRequest(request: HttpWorkbenchRequest): HttpWorkbenchRequest {
@@ -429,6 +511,7 @@ export interface HttpWorkbenchProps {
   saveActionLabel?: string;
   environments?: Array<{ id: string; name: string }>;
   defaultEnvironmentId?: string;
+  onLoadGlobalParameters?: () => Promise<HttpGlobalParameter[]>;
   toolbarTargetId?: string;
   commandbarTargetId?: string;
   workbenchSessionId?: string;
@@ -625,6 +708,7 @@ export function HttpWorkbench({
   saveActionLabel,
   environments = DEFAULT_ENVIRONMENTS,
   defaultEnvironmentId = "default-env",
+  onLoadGlobalParameters,
   toolbarTargetId,
   commandbarTargetId,
   workbenchSessionId,
@@ -680,6 +764,18 @@ export function HttpWorkbench({
   }, [commandbarTarget]);
   const [environmentOptions,setEnvironmentOptions]=useState(environments);
   useEffect(()=>{listEnvironmentResources().then((items)=>setEnvironmentOptions(items.map(({id,name})=>({id,name})))).catch(()=>setEnvironmentOptions(environments))},[environments]);
+  const [globalParameters, setGlobalParameters] = useState<HttpGlobalParameter[]>([]);
+  useEffect(() => {
+    if (!onLoadGlobalParameters) {
+      setGlobalParameters([]);
+      return;
+    }
+    let active = true;
+    const load = () => { void onLoadGlobalParameters().then((parameters) => { if (active) setGlobalParameters(parameters); }).catch(() => { if (active) setGlobalParameters([]); }); };
+    load();
+    window.addEventListener("protovoy-environment-updated", load);
+    return () => { active = false; window.removeEventListener("protovoy-environment-updated", load); };
+  }, [onLoadGlobalParameters]);
   const [preScriptAssetIds,setPreScriptAssetIds]=useState<string[]>([]);
   const [postScriptAssetIds,setPostScriptAssetIds]=useState<string[]>([]);
   const [variablesText, setVariablesText] = useState("");
@@ -752,7 +848,8 @@ export function HttpWorkbench({
   const [responseTab, setResponseTab] = useState<"body" | "cookies" | "headers" | "console" | "request">("body");
   const [lastRequest, setLastRequest] = useState<HttpWorkbenchRequest | null>(null);
   const [requestWallMs, setRequestWallMs] = useState(0);
-  const [requestTab, setRequestTab] = useState<"params" | "headers" | "body" | "auth" | "cookies" | "pre" | "post" | "proxy">("params");
+  const [requestTab, setRequestTab] = useState<RequestTab>("params");
+  const [generatedHeadersVisible, setGeneratedHeadersVisible] = useState(false);
   const [timeline, setTimeline] = useState<Array<{ at: number; event: ExecutionEvent }>>([]);
   const [graphqlQuery, setGraphqlQuery] = useState("query Example {\n  __typename\n}");
   const [graphqlVariables, setGraphqlVariables] = useState("{}");
@@ -771,6 +868,11 @@ export function HttpWorkbench({
   const [binarySize, setBinarySize] = useState(0);
   const [messagePackJson, setMessagePackJson] = useState("{}" );
   const requestContentType = headerRows.find((row) => row.key.trim().toLowerCase() === "content-type")?.value.trim() ?? "";
+  const generatedHeaders = useMemo(() => generatedRequestHeaders(
+    url,
+    headerRows.filter((row) => row.enabled && row.key.trim()).map((row): [string, string] => [row.key, row.value]),
+    cookieRows.filter((row) => row.enabled && row.key.trim()).map((row) => `${row.key.trim()}=${row.value}`).join("; "),
+  ), [url, headerRows, cookieRows]);
 
   function formatBodyJson() {
     try {
@@ -924,7 +1026,7 @@ export function HttpWorkbench({
       body: method === "GET" || method === "HEAD" || bodyMode === "none" || bodyMode === "multipart"
         ? undefined
         : bodyMode === "urlencoded"
-          ? new URLSearchParams(formRows.filter((row) => row.enabled && row.key.trim()).map((row) => [row.key, row.value])).toString()
+          ? urlEncodedRows(formRows)
           : bodyMode === "graphql"
             ? JSON.stringify({ query: graphqlQuery, variables: JSON.parse(graphqlVariables || "{}"), ...(graphqlOperationName.trim() ? { operationName: graphqlOperationName.trim() } : {}) })
             : bodyMode === "jsonrpc"
@@ -989,6 +1091,7 @@ export function HttpWorkbench({
 
   function applyRequest(loaded: HttpWorkbenchRequest) {
     setRequestId(loaded.id);
+    setRequestTab(defaultRequestTab(loaded));
     setRequestMetadata(loaded.metadata ?? {});
     const projectId = typeof loaded.metadata?.__protovoyProjectId === "string" ? loaded.metadata.__protovoyProjectId : undefined;
     setResponseValidationSettings(readResponseValidationSettings(projectId));
@@ -1086,7 +1189,7 @@ export function HttpWorkbench({
     setHeaderRows((rows) => replaceContentTypeHeader(rows, contentType ?? ""));
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (externalRequest) {
       applyRequest(externalRequest);
       setResult(initialResult ?? null);
@@ -1551,6 +1654,7 @@ export function HttpWorkbench({
   const validationFeatureEnabled = responseValidationSettings[validationContext];
   const responseValidationActive = validationFeatureEnabled && assertionsEnabled;
   const designedResponses = Array.isArray(requestMetadata.__protovoyResponseDefinitions) ? requestMetadata.__protovoyResponseDefinitions as DesignedResponse[] : [];
+  const globalHeaderParameters = globalParameters.filter((parameter) => parameter.location === "header" && parameter.name.trim());
   const displayedResponses = designedResponses.length ? designedResponses : [{ status: selectedDesignedResponse || "200", fields: [] }];
   const responseMetrics = result && !result.error ? <>
     <strong className={`http-status-code${responseStatusTone}`}>{result.summary.status ?? "—"}</strong>
@@ -1584,7 +1688,7 @@ export function HttpWorkbench({
           <div className="http-assertion-rule-actions"><button type="button" aria-label="上移" title="上移" disabled={!index} onClick={() => setAssertionsDraft((list) => { const next = [...list]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })}><Icon name="arrow-up"/></button><button type="button" aria-label="下移" title="下移" disabled={index === assertionsDraft.length - 1} onClick={() => setAssertionsDraft((list) => { const next = [...list]; [next[index + 1], next[index]] = [next[index], next[index + 1]]; return next; })}><Icon name="arrow-down"/></button><button type="button" aria-label="复制" title="复制" onClick={() => setAssertionsDraft((list) => [...list.slice(0, index + 1), { ...rule, id: crypto.randomUUID() }, ...list.slice(index + 1)])}><Icon name="copy"/></button><button type="button" aria-label="删除" title="删除" onClick={() => setAssertionsDraft((list) => list.filter((item) => item.id !== rule.id))}><Icon name="trash"/></button></div>
         </div>)}</div>
         <button type="button" className="http-assertion-add" onClick={() => setAssertionsDraft((list) => [...list, createAssertion()])}><Icon name="plus"/>新增规则</button>
-        <div className="http-assertion-editor-actions"><button type="button" style={styles.secondaryButton} onClick={() => setAssertionConfigOpen(false)}>取消</button><button type="button" className="ui-button primary" disabled={assertionsDraft.some((rule) => !assertionValid(rule))} onClick={() => { setAssertionRules(assertionsDraft); setAssertionConfigOpen(false); setStatusMsg("响应校验配置已保存"); }}>保存</button></div>
+        <div className="http-assertion-editor-actions"><Button onClick={() => setAssertionConfigOpen(false)}>取消</Button><Button type="button" variant="primary" disabled={assertionsDraft.some((rule) => !assertionValid(rule))} onClick={() => { setAssertionRules(assertionsDraft); setAssertionConfigOpen(false); setStatusMsg("响应校验配置已保存"); }}>保存</Button></div>
       </div> : null}
     </div> : null}
     {result && !result.error ? <div className="http-response-metrics">{responseMetrics}</div> : loading ? <span className="http-response-pending">请求中…</span> : null}
@@ -1611,14 +1715,14 @@ export function HttpWorkbench({
       </select>
       <label className="http-target-field"><input id="http-target-url" aria-label="目标 URL" style={styles.input} value={url} onChange={(e) => setUrl(e.target.value)} onBlur={(e) => setQueryRows(queryRowsFromUrl(e.target.value))} placeholder="接口路径" spellCheck={false} disabled={loading} /></label>
       {lifecycleTab === "definition" ? <>
-        <button type="button" className="http-send-button" style={styles.button} disabled={loading} onClick={() => void handleSave(true)}><Icon name="archive"/>保存</button>
-        <button type="button" className="http-save-button" style={styles.secondaryButton} onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-lifecycle-tab", { detail: { sessionId: workbenchSessionId, tab: "debug" } }))}><Icon name="send"/>调试</button>
+        <Button variant="primary" className="http-send-button" disabled={loading} onClick={() => void handleSave(true)}><Icon name="archive"/>保存</Button>
+        <Button className="http-save-button" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-lifecycle-tab", { detail: { sessionId: workbenchSessionId, tab: "debug" } }))}><Icon name="send"/>调试</Button>
       </> : <>
-        <button type="button" className={`http-send-button${loading ? " is-cancel" : ""}`} style={styles.button} disabled={loading && (!onCancel || !executionId)} aria-label={loading ? t("action.cancel") : t("action.send")} onClick={() => loading ? void handleCancel() : void handleSend()}>
-          <Icon name={loading ? "close" : "send"}/>{loading ? t("action.cancel") : t("action.send")}
-        </button>
+        <Button variant={loading ? "danger" : "primary"} className={`http-send-button${loading ? " is-cancel" : ""}`} disabled={loading && (!onCancel || !executionId)} aria-label={loading ? t("action.cancel") : t("action.send")} aria-busy={loading || undefined} onClick={() => loading ? void handleCancel() : void handleSend()}>
+          {loading ? <span className="request-loading-spinner" aria-hidden="true"/> : <Icon name="send"/>}{loading ? t("action.cancel") : t("action.send")}
+        </Button>
       {onSave && <div className="http-save-split" ref={saveMenuRef}>
-        <button type="button" className="http-save-button" style={styles.secondaryButton} disabled={loading} onClick={() => void handleSave()}><Icon name="archive"/>{saveActionLabel ?? t("action.save")}</button>
+        <Button className="http-save-button" disabled={loading} onClick={() => void handleSave()}><Icon name="archive"/>{saveActionLabel ?? t("action.save")}</Button>
         {openedCaseParentId ? <label className="http-save-response-sync" title="勾选后，点击保存时同步当前响应">
           <input type="checkbox" aria-label="同步保存响应" checked={syncCaseResponse} disabled={loading} onChange={(event) => setSyncCaseResponse(event.target.checked)}/>
         </label> : onSaveAsCase ? <>
@@ -1633,10 +1737,10 @@ export function HttpWorkbench({
   </div>;
 
   return (
-    <>{saveInterfaceDraft ? createPortal(<><ModalFrame open onClose={() => !saveInterfaceBusy && setSaveInterfaceDraft(null)} closeOnBackdrop={!saveInterfaceBusy} closeOnEscape={!saveInterfaceBusy} className="save-interface-dialog" ariaLabelledBy="save-interface-title" as="form" onSubmit={async (event) => { event.preventDefault(); if (!saveInterfaceName.trim() || !saveCollectionId || !onSaveToCollection) return; setSaveInterfaceBusy(true); try { const request = { ...saveInterfaceDraft.request, name: saveInterfaceName.trim() }; const savedId = await onSaveToCollection(sanitizeHttpRequestForPersistence(request), saveCollectionId); const persistedId = savedId || request.id; setName(request.name); setRequestId(persistedId); onTitleChange?.(request.name); setStatusMsg("请求已保存到本地库"); const shouldSaveDefinition = saveInterfaceDraft.saveDefinition; setSaveInterfaceDraft(null); if (shouldSaveDefinition) window.dispatchEvent(new CustomEvent("protovoy-save-interface-definition", { detail: { requestId: persistedId } })); } catch (error) { setStatusMsg(error instanceof Error ? error.message : String(error)); } finally { setSaveInterfaceBusy(false); } }}><header><h2 id="save-interface-title">保存接口</h2><button type="button" className="ui-icon-button" aria-label="关闭" disabled={saveInterfaceBusy} onClick={() => setSaveInterfaceDraft(null)}><Icon name="close"/></button></header><div className="save-interface-fields"><label><span>名称 <i>*</i></span><input className="save-interface-name-input" autoFocus required value={saveInterfaceName} onChange={(event) => setSaveInterfaceName(event.target.value)} /></label><fieldset><legend>目录 <i>*</i></legend><div className={`save-interface-directory-picker${saveDirectoryOpen ? " is-open" : ""}`}><button type="button" className="save-interface-directory-trigger" role="combobox" aria-label="目录" aria-haspopup="tree" aria-expanded={saveDirectoryOpen} onClick={() => setSaveDirectoryOpen((open) => !open)}><Icon name="folder"/><span>{selectedSaveCollection?.name ?? "请选择目录"}</span><Icon name="chevron"/></button>{saveDirectoryOpen ? <div className="save-interface-directory-tree" role="tree" aria-label="选择保存目录">{displayedSaveModules.map((module) => { const moduleCollections = saveCollections.filter((collection) => collection.moduleId ? collection.moduleId === module.id : module.isDefault); const moduleExpanded = expandedSaveModules.has(module.id); const rootCollection = moduleCollections.find((collection) => !collection.parentId) ?? moduleCollections[0]; return <div className="save-interface-module-group" role="group" key={module.id}><div className="save-interface-module-row" role="treeitem" aria-expanded={moduleExpanded}><button type="button" className="save-interface-tree-toggle" aria-label={moduleExpanded ? `收起${module.name}` : `展开${module.name}`} onClick={() => setExpandedSaveModules((current) => { const next = new Set(current); next.has(module.id) ? next.delete(module.id) : next.add(module.id); return next; })}><Icon name="chevron"/></button><button type="button" className="save-interface-tree-select" onClick={() => { setSaveModuleId(module.id); if (rootCollection) { setSaveCollectionId(rootCollection.id); setSaveDirectoryOpen(false); } }}><Icon name="folder"/><span>{module.name}</span></button></div>{moduleExpanded ? <SaveDirectoryBranch collections={moduleCollections} parentId={null} depth={0} selectedId={saveCollectionId} expandedIds={expandedSaveCollections} onSelect={(collectionId) => { setSaveModuleId(module.id); setSaveCollectionId(collectionId); setSaveDirectoryOpen(false); }} onToggle={(collectionId, expanded) => setExpandedSaveCollections((current) => { const next = new Set(current); expanded ? next.add(collectionId) : next.delete(collectionId); return next; })}/> : null}</div>; })}{!saveCollections.length ? <p>当前模块暂无目录，请先新建目录。</p> : null}<button type="button" className="save-interface-new-directory" onClick={() => { setNewCollectionName(""); setNewCollectionParentId(""); setNewCollectionOpen(true); }}><Icon name="plus"/>新建目录</button></div> : null}</div></fieldset></div><footer><button type="button" className="ui-button secondary" disabled={saveInterfaceBusy} onClick={() => setSaveInterfaceDraft(null)}>取消</button><button type="submit" className="ui-button primary" disabled={saveInterfaceBusy || !saveInterfaceName.trim() || !saveCollectionId}>{saveInterfaceBusy ? "保存中…" : "保存"}</button></footer></ModalFrame>
-{newCollectionOpen ? <ModalFrame open onClose={() => setNewCollectionOpen(false)} overlayClassName="save-interface-nested-backdrop" className="save-interface-new-dialog" ariaLabelledBy="new-save-directory-title" as="form" onSubmit={async (event) => { event.preventDefault(); if (!newCollectionName.trim() || !onCreateCollection) return; setSaveInterfaceBusy(true); try { const created = await onCreateCollection(newCollectionParentId || null, newCollectionName.trim(), saveModuleId || selectedSaveModule?.id); setSaveCollectionId(created.id); setNewCollectionOpen(false); setSaveDirectoryOpen(false); } finally { setSaveInterfaceBusy(false); } }}><header><h2 id="new-save-directory-title">新建目录</h2><button type="button" className="ui-icon-button" aria-label="关闭" onClick={() => setNewCollectionOpen(false)}><Icon name="close"/></button></header><label><span>名称 <i>*</i></span><input autoFocus value={newCollectionName} onChange={(event) => setNewCollectionName(event.target.value)}/></label><label><span>父级目录 <i>*</i></span><select value={newCollectionParentId} onChange={(event) => setNewCollectionParentId(event.target.value)}><option value="">{selectedSaveModule?.name ?? "模块根目录"}</option>{saveCollections.filter((collection) => collection.moduleId ? collection.moduleId === selectedSaveModule?.id : selectedSaveModule?.isDefault).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label><footer><button type="button" className="ui-button secondary" onClick={() => setNewCollectionOpen(false)}>取消</button><button type="submit" className="ui-button primary" disabled={saveInterfaceBusy || !newCollectionName.trim()}>{saveInterfaceBusy ? "创建中…" : "创建"}</button></footer></ModalFrame> : null}
+    <>{saveInterfaceDraft ? createPortal(<><ModalFrame open onClose={() => !saveInterfaceBusy && setSaveInterfaceDraft(null)} closeOnBackdrop={!saveInterfaceBusy} closeOnEscape={!saveInterfaceBusy} className="save-interface-dialog" ariaLabelledBy="save-interface-title" as="form" onSubmit={async (event) => { event.preventDefault(); if (!saveInterfaceName.trim() || !saveCollectionId || !onSaveToCollection) return; setSaveInterfaceBusy(true); try { const request = { ...saveInterfaceDraft.request, name: saveInterfaceName.trim() }; const savedId = await onSaveToCollection(sanitizeHttpRequestForPersistence(request), saveCollectionId); const persistedId = savedId || request.id; setName(request.name); setRequestId(persistedId); onTitleChange?.(request.name); setStatusMsg("请求已保存到本地库"); const shouldSaveDefinition = saveInterfaceDraft.saveDefinition; setSaveInterfaceDraft(null); if (shouldSaveDefinition) window.dispatchEvent(new CustomEvent("protovoy-save-interface-definition", { detail: { requestId: persistedId } })); } catch (error) { setStatusMsg(error instanceof Error ? error.message : String(error)); } finally { setSaveInterfaceBusy(false); } }}><header><h2 id="save-interface-title">保存接口</h2><IconButton icon="close" label="关闭" disabled={saveInterfaceBusy} onClick={() => setSaveInterfaceDraft(null)}/></header><div className="save-interface-fields"><label><span>名称 <i>*</i></span><input className="save-interface-name-input" autoFocus required value={saveInterfaceName} onChange={(event) => setSaveInterfaceName(event.target.value)} /></label><fieldset><legend>目录 <i>*</i></legend><div className={`save-interface-directory-picker${saveDirectoryOpen ? " is-open" : ""}`}><button type="button" className="save-interface-directory-trigger" role="combobox" aria-label="目录" aria-haspopup="tree" aria-expanded={saveDirectoryOpen} onClick={() => setSaveDirectoryOpen((open) => !open)}><Icon name="folder"/><span>{selectedSaveCollection?.name ?? "请选择目录"}</span><Icon name="chevron"/></button>{saveDirectoryOpen ? <div className="save-interface-directory-tree" role="tree" aria-label="选择保存目录">{displayedSaveModules.map((module) => { const moduleCollections = saveCollections.filter((collection) => collection.moduleId ? collection.moduleId === module.id : module.isDefault); const moduleExpanded = expandedSaveModules.has(module.id); const rootCollection = moduleCollections.find((collection) => !collection.parentId) ?? moduleCollections[0]; return <div className="save-interface-module-group" role="group" key={module.id}><div className="save-interface-module-row" role="treeitem" aria-expanded={moduleExpanded}><button type="button" className="save-interface-tree-toggle" aria-label={moduleExpanded ? `收起${module.name}` : `展开${module.name}`} onClick={() => setExpandedSaveModules((current) => { const next = new Set(current); next.has(module.id) ? next.delete(module.id) : next.add(module.id); return next; })}><Icon name="chevron"/></button><button type="button" className="save-interface-tree-select" onClick={() => { setSaveModuleId(module.id); if (rootCollection) { setSaveCollectionId(rootCollection.id); setSaveDirectoryOpen(false); } }}><Icon name="folder"/><span>{module.name}</span></button></div>{moduleExpanded ? <SaveDirectoryBranch collections={moduleCollections} parentId={null} depth={0} selectedId={saveCollectionId} expandedIds={expandedSaveCollections} onSelect={(collectionId) => { setSaveModuleId(module.id); setSaveCollectionId(collectionId); setSaveDirectoryOpen(false); }} onToggle={(collectionId, expanded) => setExpandedSaveCollections((current) => { const next = new Set(current); expanded ? next.add(collectionId) : next.delete(collectionId); return next; })}/> : null}</div>; })}{!saveCollections.length ? <p>当前模块暂无目录，请先新建目录。</p> : null}<button type="button" className="save-interface-new-directory" onClick={() => { setNewCollectionName(""); setNewCollectionParentId(""); setNewCollectionOpen(true); }}><Icon name="plus"/>新建目录</button></div> : null}</div></fieldset></div><footer><Button type="button" variant="secondary" disabled={saveInterfaceBusy} onClick={() => setSaveInterfaceDraft(null)}>取消</Button><Button type="submit" variant="primary" disabled={saveInterfaceBusy || !saveInterfaceName.trim() || !saveCollectionId}>{saveInterfaceBusy ? "保存中…" : "保存"}</Button></footer></ModalFrame>
+{newCollectionOpen ? <ModalFrame open onClose={() => setNewCollectionOpen(false)} overlayClassName="save-interface-nested-backdrop" className="save-interface-new-dialog" ariaLabelledBy="new-save-directory-title" as="form" onSubmit={async (event) => { event.preventDefault(); if (!newCollectionName.trim() || !onCreateCollection) return; setSaveInterfaceBusy(true); try { const created = await onCreateCollection(newCollectionParentId || null, newCollectionName.trim(), saveModuleId || selectedSaveModule?.id); setSaveCollectionId(created.id); setNewCollectionOpen(false); setSaveDirectoryOpen(false); } finally { setSaveInterfaceBusy(false); } }}><header><h2 id="new-save-directory-title">新建目录</h2><IconButton icon="close" label="关闭" onClick={() => setNewCollectionOpen(false)}/></header><label><span>名称 <i>*</i></span><input autoFocus value={newCollectionName} onChange={(event) => setNewCollectionName(event.target.value)}/></label><label><span>父级目录 <i>*</i></span><select value={newCollectionParentId} onChange={(event) => setNewCollectionParentId(event.target.value)}><option value="">{selectedSaveModule?.name ?? "模块根目录"}</option>{saveCollections.filter((collection) => collection.moduleId ? collection.moduleId === selectedSaveModule?.id : selectedSaveModule?.isDefault).map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label><footer><Button type="button" variant="secondary" onClick={() => setNewCollectionOpen(false)}>取消</Button><Button type="submit" variant="primary" disabled={saveInterfaceBusy || !newCollectionName.trim()}>{saveInterfaceBusy ? "创建中…" : "创建"}</Button></footer></ModalFrame> : null}
 </>, document.body) : null}{caseDialogOpen ? createPortal(<ModalFrame open onClose={() => !caseSaving && setCaseDialogOpen(false)} closeOnBackdrop={!caseSaving} className="case-save-dialog" ariaLabelledBy="case-save-title" as="form" onSubmit={(event) => { event.preventDefault(); void saveAsCase(); }}>
-        <header><div><h2 id="case-save-title">保存为用例</h2></div><button type="button" className="ui-icon-button" aria-label="关闭" disabled={caseSaving} onClick={() => setCaseDialogOpen(false)}><Icon name="close"/></button></header>
+        <header><div><h2 id="case-save-title">保存为用例</h2></div><IconButton icon="close" label="关闭" disabled={caseSaving} onClick={() => setCaseDialogOpen(false)}/></header>
         <div className="case-save-fields">
           <label><span>用例名称 <i>*</i></span><div className="case-name-composer"><input autoFocus list="case-name-presets" aria-label="用例场景名称" value={caseName} onChange={(event) => setCaseName(event.target.value)} placeholder="选择预设或输入自定义名称" /><datalist id="case-name-presets">{CASE_NAME_PRESETS.map((preset) => <option key={preset} value={preset}/>)}</datalist></div></label>
           <fieldset className="case-type-options"><legend>用例类型</legend>
@@ -1652,18 +1756,34 @@ export function HttpWorkbench({
           <input type="checkbox" checked={caseSaveResponse} disabled={!hasResponseResult || caseSaving} onChange={(event) => setCaseSaveResponse(event.target.checked)}/>
           <span><strong>同时保存响应</strong><small>{hasResponseResult ? "包含状态码、Headers、Content-Type、耗时和响应正文" : "当前没有响应，仅保存请求配置"}</small></span>
         </label> : null}
-        <footer><button type="button" className="ui-button secondary" disabled={caseSaving} onClick={() => setCaseDialogOpen(false)}>取消</button><button type="submit" className="ui-button primary" disabled={caseSaving || !caseName.trim()}>{caseSaving ? "保存中…" : "保存"}</button></footer>
+        <footer><Button type="button" variant="secondary" disabled={caseSaving} onClick={() => setCaseDialogOpen(false)}>取消</Button><Button type="submit" variant="primary" disabled={caseSaving || !caseName.trim()}>{caseSaving ? "保存中…" : "保存"}</Button></footer>
       </ModalFrame>, document.body) : null}{toolbarTarget ? createPortal(environmentControl, toolbarTarget) : null}{nameTarget ? createPortal(requestNameField, nameTarget) : null}{commandbarTarget ? createPortal(requestCommandbar, commandbarTarget) : null}<WorkbenchFrame title="HTTP" hideHeader busy={loading} status={embeddedPreview ? undefined : statusMsg ? <span role="status">{statusMsg}</span> : <span>{t("status.ready")}</span>}>
       <div className={`http-workbench-layout${commandbarTarget || embeddedPreview ? " has-external-commandbar" : ""}${embeddedPreview ? " is-embedded-preview" : ""}`}>
       {commandbarTarget || embeddedPreview ? null : requestCommandbar}
       {historyStartedAt ? <div className="http-history-sent-at">{historyInterfaceName && onOpenHistoryInterface ? <button type="button" className="http-history-interface-link" aria-label={"\u6253\u5f00\u63a5\u53e3 " + historyInterfaceName} onClick={onOpenHistoryInterface}><Icon name="folder"/><span>{historyInterfaceName}</span></button> : null}<span className="http-history-time"><Icon name="activity"/><span>{"\u5386\u53f2\u53d1\u9001\u65f6\u95f4"}</span><time dateTime={historyStartedAt}>{new Date(historyStartedAt).toLocaleString("zh-CN", { hour12: false })}</time></span></div> : null}
       <div className={`http-workbench-split${responseValidationActive && result ? " has-response-validation" : ""}`}>
       <SplitPane id={embeddedPreview ? "http-test-case-preview" : "http-workbench"} direction="vertical" fixedDirection={fixedSplitDirection ?? (embeddedPreview ? "horizontal" : undefined)} minPrimary={160} minSecondary={160} primaryLabel="请求配置" secondaryLabel="响应检查器" secondaryActions={responseHeaderActions} primary={<div className="protovoy-workbench http-request-pane" style={styles.section}>
+      <div className="request-interaction-content http-request-interaction-content" inert={loading ? true : undefined}>
       {(() => {
         const paramDifferenceCount = caseStructureState?.differences.filter((item) => item.field.location === "query").length ?? 0;
+        const bodyFieldCount = bodyMode === "none"
+          ? 0
+          : bodyMode === "multipart"
+            ? multipart.filter((part) => part.enabled && part.name.trim()).length
+            : bodyMode === "urlencoded"
+              ? formRows.filter((row) => row.enabled && row.key.trim()).length
+              : bodyMode === "binary"
+                ? Number(Boolean(binaryFileName))
+                : bodyMode === "graphql"
+                  ? Number(Boolean(graphqlQuery.trim()))
+                  : bodyMode === "jsonrpc"
+                    ? Number(Boolean(rpcMethod.trim()))
+                    : bodyMode === "soap"
+                      ? Number(Boolean(soapEnvelope.trim()))
+                      : bodyPayloadCount(bodyMode === "msgpack" ? messagePackJson : body);
         const requestTabs = [
           { id: "params" as const, label: "Params", hint: queryRows.filter((row) => row.key.trim()).length || undefined },
-          { id: "body" as const, label: "Body" },
+          { id: "body" as const, label: "Body", hint: bodyFieldCount || undefined },
           { id: "headers" as const, label: "Headers", hint: headerRows.filter((row) => row.key.trim()).length || undefined },
           { id: "cookies" as const, label: "Cookies", hint: cookieRows.filter((row) => row.key.trim()).length || undefined },
           { id: "auth" as const, label: "Auth", hint: authKind !== "none" ? "·" : undefined },
@@ -1689,8 +1809,22 @@ export function HttpWorkbench({
               <KeyValueRows rows={queryRows} setRows={setQueryRows} kind="Param" nameLabel="参数名" valueLabel="参数值" addPlaceholder="添加参数" loading={loading} inconsistentNames={caseStructureState?.differences.filter((item) => item.field.location === "query").map((item) => item.field.name)} onRowsChange={(rows) => setUrl((current) => urlWithQueryRows(current, rows))}/>
             </div>}
             {activeTab === "headers" && <div className="http-kv-editor" aria-label="请求 Headers">
-              <div className="http-section-heading">请求 Headers</div>
-              <KeyValueRows rows={headerRows} setRows={setHeaderRows} kind="Header" nameLabel="Header 名称" valueLabel="Header 值" addPlaceholder="例如 Content-Type" loading={loading} inconsistentNames={caseStructureState?.differences.filter((item) => item.field.location === "header").map((item) => item.field.name)}/>
+              <div className="http-section-heading http-headers-heading"><span>请求 Headers</span>{generatedHeaders.length ? <button type="button" className={`http-generated-headers-toggle${generatedHeadersVisible ? " is-expanded" : ""}`} aria-controls="http-generated-headers" aria-expanded={generatedHeadersVisible} onClick={() => setGeneratedHeadersVisible((visible) => !visible)}><Icon name="chevron"/>{generatedHeadersVisible ? `隐藏自动生成的 ${generatedHeaders.length} 个` : `已隐藏 ${generatedHeaders.length} 个`}</button> : null}</div>
+              {globalHeaderParameters.length ? <section className="http-global-parameters" aria-label="全局 Header 参数">
+                <div className="http-global-parameter-title"><strong>全局 Header 参数</strong><span>继承环境配置；此处开关仅影响当前请求</span></div>
+                <div className="http-global-parameter-header" aria-hidden="true"><span>参数名</span><span/><span>类型</span><span>参数值</span><span>说明</span><span>启用</span></div>
+                {globalHeaderParameters.map((parameter) => {
+                  const key = globalParameterOverrideKey(parameter);
+                  const overrides = readGlobalParameterOverrides(requestMetadata);
+                  const overridden = Object.hasOwn(overrides, key);
+                  const enabled = overrides[key] ?? parameter.enabled;
+                  return <div className={`http-global-parameter-row${enabled ? " is-enabled" : ""}`} key={key}>
+                    <code title={parameter.name}>{parameter.name}</code><span aria-hidden="true">=</span><span className="http-global-parameter-type">{parameter.parameterType ?? "string"}</span><code title={parameter.value}>{parameter.value}</code><span title={parameter.description}>{parameter.description || "—"}</span>
+                    <div className="http-global-parameter-actions"><button type="button" role="switch" className="http-global-parameter-switch" aria-checked={enabled} aria-label={`${enabled ? "停用" : "启用"}当前请求的全局 Header ${parameter.name}`} onClick={() => setRequestMetadata((current) => withGlobalParameterOverride(current, parameter, !globalParameterEnabled(parameter, current)))} disabled={loading}><span/></button>{overridden ? <button type="button" className="http-global-parameter-reset" onClick={() => setRequestMetadata((current) => withGlobalParameterOverride(current, parameter, undefined))} disabled={loading}>恢复默认</button> : <span className="http-global-parameter-default">全局默认</span>}</div>
+                  </div>;
+                })}
+              </section> : null}
+              <KeyValueRows rows={headerRows} setRows={setHeaderRows} kind="Header" nameLabel="Header 名称" valueLabel="Header 值" addPlaceholder="例如 Content-Type" loading={loading} inconsistentNames={caseStructureState?.differences.filter((item) => item.field.location === "header").map((item) => item.field.name)} beforeRows={<div id="http-generated-headers" className={`http-generated-headers${generatedHeadersVisible ? " is-visible" : ""}`} aria-hidden={!generatedHeadersVisible}>{generatedHeaders.map((header) => <div className="http-generated-header-row" key={header.name}><input className="http-row-enabled" type="checkbox" checked readOnly tabIndex={-1} aria-label={`${header.name} 自动生成且已启用`}/><code>{header.name}</code><span>{header.value}</span><span aria-hidden="true"/><span aria-hidden="true"/><span className="http-generated-header-description"><Icon name="info"/><span>{header.description}</span></span><span aria-hidden="true"/></div>)}</div>}/>
             </div>}
             {activeTab === "body" && <div style={styles.label}>
               <div className="http-body-toolbar" style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid var(--protovoy-border)" }}>
@@ -1724,7 +1858,7 @@ export function HttpWorkbench({
               </div>}
               {bodyMode === "jsonrpc" && <div className="http-specialized-editor"><div className="http-specialized-row"><label>Method<input style={styles.input} value={rpcMethod} onChange={(event) => setRpcMethod(event.target.value)} disabled={loading}/></label><label>Request ID<input style={styles.input} value={rpcId} onChange={(event) => setRpcId(event.target.value)} disabled={loading}/></label></div><div className="http-body-editor-label">Params (JSON)</div><CodeEditor value={rpcParams} onChange={setRpcParams} language="json" height={220} readOnly={loading}/></div>}
               {bodyMode === "soap" && <div className="http-specialized-editor"><div className="http-specialized-row"><label>SOAP Version<select style={styles.input} value={soapVersion} onChange={(event) => { const version = event.target.value as "1.1" | "1.2"; setSoapVersion(version); setHeaderRows((rows) => headerRowsFromPairs([["Content-Type", version === "1.1" ? "text/xml" : "application/soap+xml"], ...rows.filter((row) => row.key && row.key.toLowerCase() !== "content-type").map((row) => [row.key, row.value] as [string, string])])); }} disabled={loading}><option>1.1</option><option>1.2</option></select></label><label>SOAP Action<input style={styles.input} value={soapAction} onChange={(event) => setSoapAction(event.target.value)} disabled={loading}/></label></div><div className="http-body-editor-label">XML Envelope</div><CodeEditor value={soapEnvelope} onChange={setSoapEnvelope} language="xml" height={260} readOnly={loading}/></div>}
-              {bodyMode === "binary" && <div className="http-binary-editor"><label className="http-binary-picker"><Icon name="archive"/><strong>{binaryFileName || "选择二进制文件"}</strong><span>{binaryFileName ? `${binarySize.toLocaleString()} bytes` : "文件将以 Base64 保存，发送时还原为原始字节"}</span><input type="file" disabled={loading} onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { const value = String(reader.result ?? ""); setBinaryBase64(value.slice(value.indexOf(",") + 1)); setBinaryFileName(file.name); setBinarySize(file.size); setHeaderRows((rows) => headerRowsFromPairs([["Content-Type", file.type || "application/octet-stream"], ...rows.filter((row) => row.key && row.key.toLowerCase() !== "content-type").map((row) => [row.key, row.value] as [string, string])])); }; reader.readAsDataURL(file); }}/></label>{binaryFileName ? <button type="button" style={styles.secondaryButton} disabled={loading} onClick={() => { setBinaryBase64(""); setBinaryFileName(""); setBinarySize(0); }}>移除文件</button> : null}</div>}
+              {bodyMode === "binary" && <div className="http-binary-editor"><label className="http-binary-picker"><Icon name="archive"/><strong>{binaryFileName || "选择二进制文件"}</strong><span>{binaryFileName ? `${binarySize.toLocaleString()} bytes` : "文件将以 Base64 保存，发送时还原为原始字节"}</span><input type="file" disabled={loading} onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => { const value = String(reader.result ?? ""); setBinaryBase64(value.slice(value.indexOf(",") + 1)); setBinaryFileName(file.name); setBinarySize(file.size); setHeaderRows((rows) => headerRowsFromPairs([["Content-Type", file.type || "application/octet-stream"], ...rows.filter((row) => row.key && row.key.toLowerCase() !== "content-type").map((row) => [row.key, row.value] as [string, string])])); }; reader.readAsDataURL(file); }}/></label>{binaryFileName ? <Button disabled={loading} onClick={() => { setBinaryBase64(""); setBinaryFileName(""); setBinarySize(0); }}>移除文件</Button> : null}</div>}
               {bodyMode === "msgpack" && <div className="http-specialized-editor"><div className="http-body-editor-label">JSON 数据（发送时编码为 MessagePack）</div><CodeEditor value={messagePackJson} onChange={setMessagePackJson} language="json" height={280} readOnly={loading}/></div>}
               {bodyMode === "urlencoded" && <div className="http-kv-editor http-form-editor" aria-label="URL 编码表单">
                 <KeyValueRows rows={formRows} setRows={setFormRows} kind="表单字段" nameLabel="字段名" valueLabel="字段值" addPlaceholder="添加字段" loading={loading}/>
@@ -1774,7 +1908,7 @@ export function HttpWorkbench({
                   {authKind === "oauth2_authorization_code" && <>
                     <input style={styles.input} value={oauthAuthorizationUrl} onChange={(event) => setOauthAuthorizationUrl(event.target.value)} placeholder="Authorization Endpoint URL" spellCheck={false} disabled={loading} />
                     <input style={styles.input} value={oauthRedirectUri} onChange={(event) => setOauthRedirectUri(event.target.value)} placeholder="Redirect URI" spellCheck={false} disabled={loading} />
-                    <button type="button" style={styles.secondaryButton} disabled={loading} onClick={() => void startPkceAuthorization()}>打开浏览器授权（PKCE S256）</button>
+                    <Button disabled={loading} onClick={() => void startPkceAuthorization()}>打开浏览器授权（PKCE S256）</Button>
                     <input style={styles.input} value={oauthAuthorizationCode} onChange={(event) => setOauthAuthorizationCode(event.target.value)} placeholder="粘贴回调参数 code（仅写入安全存储）" spellCheck={false} disabled={loading} />
                   </>}
                 </div>
@@ -1804,10 +1938,10 @@ export function HttpWorkbench({
         <ModalFrame id="http-execution-history" open onClose={() => setHistoryOpen(false)} overlayClassName="execution-history-layer" className="execution-history-drawer" ariaLabel="执行历史">
           <div style={styles.row}>
             <strong style={{ color: "var(--protovoy-text)" }}>执行历史</strong>
-            <button type="button" className="ui-icon-button" aria-label="关闭执行历史" onClick={() => setHistoryOpen(false)}><Icon name="close"/></button>
-            <button type="button" style={styles.secondaryButton} disabled={loading} onClick={handleRefreshHistory}>
+            <IconButton icon="close" label="关闭执行历史" onClick={() => setHistoryOpen(false)}/>
+            <Button disabled={loading} onClick={handleRefreshHistory}>
               刷新
-            </button>
+            </Button>
           </div>
           <div style={styles.row}>
             <label style={styles.label}>
@@ -1832,9 +1966,9 @@ export function HttpWorkbench({
                 placeholder="如 200"
               />
             </label>
-            <button type="button" style={styles.secondaryButton} disabled={loading} onClick={handleRefreshHistory}>
+            <Button disabled={loading} onClick={handleRefreshHistory}>
               筛选
-            </button>
+            </Button>
           </div>
           {history.length === 0 ? (
             <div style={styles.muted}>暂无历史；发送请求后会出现在这里。</div>
@@ -1892,6 +2026,8 @@ export function HttpWorkbench({
           )}
         </ModalFrame>
       )}
+      </div>
+      <RequestLoadingOverlay active={loading}/>
 
       </div>} secondary={<div className={`http-response-validation-layout${responseValidationActive && result ? "" : " is-disabled"}`}><SplitPane id="http-response-validation" fixedDirection="horizontal" showCollapseControl={false} secondaryCollapsedMeta={assertionFailed ? <span className="is-fail">× 失败</span> : result?.assertions?.length ? <span className="is-pass">✓ 通过</span> : null} minPrimary={280} minSecondary={220} primaryLabel="返回响应" secondaryLabel="校验响应" primaryActions={responseValidationActive && result ? responseMetricsActions : undefined} secondaryActions={responseValidationActive && result ? responseValidationActions : undefined} primary={<div className="http-response-pane">
       {!result && !loading ? <div className="response-empty"><span className="response-empty-icon">↗</span><strong>{t("response.waitingTitle")}</strong><p>{t("response.waitingBody")}</p></div> : null}
@@ -2098,29 +2234,6 @@ const styles: Record<string, CSSProperties> = {
     padding: "12px 14px",
     outline: "none",
     resize: "vertical",
-  },
-  button: {
-    fontSize: 14,
-    fontWeight: 600,
-    color: "#041018",
-    background: "var(--protovoy-accent)",
-    border: "none",
-    borderRadius: "var(--protovoy-button-radius)",
-    minHeight: "var(--protovoy-control-height)",
-    padding: "0 var(--protovoy-button-padding-x)",
-    cursor: "pointer",
-    boxShadow: "0 8px 22px rgba(31,111,184,.22)",
-  },
-  secondaryButton: {
-    fontSize: 14,
-    fontWeight: 600,
-    color: "var(--protovoy-text)",
-    background: "var(--protovoy-control-bg)",
-    border: "1px solid var(--protovoy-control-border)",
-    borderRadius: "var(--protovoy-button-radius)",
-    minHeight: "var(--protovoy-control-height)",
-    padding: "0 var(--protovoy-button-padding-x)",
-    cursor: "pointer",
   },
   linkButton: {
     fontSize: 12,

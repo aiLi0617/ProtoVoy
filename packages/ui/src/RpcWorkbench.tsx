@@ -4,6 +4,7 @@ import { useWorkbenchHydration } from "./useWorkbenchHydration";
 import type { HttpRunResult, HttpSendHooks } from "./HttpWorkbench";
 import { Button, SegmentedControl, Select, Textarea, TextInput } from "./Components";
 import { useInterfaceNameTarget } from "./InterfaceNameTarget";
+import { useI18n } from "./i18n";
 
 export type RpcProtocol = "soap" | "jsonrpc";
 
@@ -28,6 +29,7 @@ export interface RpcWorkbenchProps {
 }
 
 export function RpcWorkbench({ onSend, onSave, onCancel }: RpcWorkbenchProps) {
+  const { t } = useI18n();
   const nameTarget = useInterfaceNameTarget();
   const [protocol, setProtocol] = useState<RpcProtocol>("jsonrpc");
   const [name, setName] = useState("RPC request");
@@ -99,7 +101,7 @@ export function RpcWorkbench({ onSend, onSave, onCancel }: RpcWorkbenchProps) {
     if (!onSave) return;
     try {
       await onSave(buildRequest());
-      setMessage("已保存到集合");
+      setMessage(t("status.savedToCollection"));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }

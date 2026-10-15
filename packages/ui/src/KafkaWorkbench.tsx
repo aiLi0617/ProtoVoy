@@ -4,6 +4,7 @@ import { Checkbox, Select, Textarea, TextInput } from "./Components";
 import { ProtocolField, ProtocolFormCard, ProtocolFormGrid, ProtocolFormOptions } from "./ProtocolForm";
 import { ProtocolWorkbenchLayout } from "./ProtocolWorkbenchLayout";
 import { useWorkbenchHydration } from "./useWorkbenchHydration";
+import { useI18n } from "./i18n";
 
 export interface KafkaWorkbenchRequest {
   name: string; target: string; mode: "produce" | "consume"; topic: string; key: string; payload: string;
@@ -15,6 +16,7 @@ export interface KafkaWorkbenchRequest {
 export interface KafkaWorkbenchProps { onSend: (request: KafkaWorkbenchRequest, hooks?: HttpSendHooks) => Promise<HttpRunResult>; onSave?: (request: KafkaWorkbenchRequest) => Promise<void>; onCancel?: (executionId: string) => Promise<void> }
 
 export function KafkaWorkbench({ onSend, onSave, onCancel }: KafkaWorkbenchProps) {
+  const { t } = useI18n();
   const [name, setName] = useState("Kafka request"); const [target, setTarget] = useState("kafka://127.0.0.1:9092");
   const [mode, setMode] = useState<"produce" | "consume">("produce"); const [topic, setTopic] = useState("protovoy-events");
   const [key, setKey] = useState(""); const [payload, setPayload] = useState('{"hello":"kafka"}');
@@ -41,7 +43,7 @@ export function KafkaWorkbench({ onSend, onSave, onCancel }: KafkaWorkbenchProps
 
   const build = (): KafkaWorkbenchRequest => ({ name, target, mode, topic, key, payload, encoding, partition, groupId, offsetReset, autoCommit, receiveLimit, securityProtocol, saslMechanism, username, passwordRef, caPemRef, certificatePemRef, keyPemRef, keyPasswordRef, timeoutMs: 30_000 });
   async function run() { setLoading(true); setMessage(""); setResult(null); try { setResult(await onSend(build(), { onStarted: setExecutionId, onChunk: () => {} })); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setLoading(false); setExecutionId(null); } }
-  async function save() { if (!onSave) return; try { await onSave(build()); setMessage("已保存到集合"); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } }
+  async function save() { if (!onSave) return; try { await onSave(build()); setMessage(t("status.savedToCollection")); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } }
   const sasl = securityProtocol.includes("SASL"); const tls = securityProtocol.includes("SSL");
 
   return <ProtocolWorkbenchLayout id="kafka" protocol="KAFKA" name={name} target={target} targetLabel="Kafka Broker 地址" actionLabel={mode === "produce" ? "Produce" : "Consume"} loading={loading} result={result} responseTitle={mode === "produce" ? "Delivery report" : "Consumed records"} emptyResponse="Partition、Offset 与消息内容会显示在这里" message={message} onNameChange={setName} onTargetChange={setTarget} onRun={() => void run()} onSave={onSave ? () => void save() : undefined} onCancel={onCancel && executionId ? () => void onCancel(executionId) : undefined} controls={<><button type="button" role="tab" tabIndex={mode === "produce" ? 0 : -1} aria-selected={mode === "produce"} onClick={() => setMode("produce")}>Produce</button><button type="button" role="tab" tabIndex={mode === "consume" ? 0 : -1} aria-selected={mode === "consume"} onClick={() => setMode("consume")}>Consume</button></>}>

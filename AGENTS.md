@@ -19,18 +19,32 @@ During implementation:
   validates dirty files whose contents changed since the last successful matching run.
 - `pnpm test:e2e:changed` runs browser specs mapped to changed UI features. It
   falls back to the browser smoke suite for shared or unmapped UI source files.
-  The selector uses `playwright.runtime.config.ts`, whose web server starts the
-  installed Vite CLI directly so browser tests remain runnable without Corepack.
+  The selector uses `playwright.managed.config.ts`; `scripts/run-e2e.mjs` hosts
+  Vite in-process so browser tests remain runnable without Corepack and do not
+  leave shell-launched services behind on Windows.
   Use `pnpm test:e2e:staged` for staged paths or `pnpm test:e2e:since` to rerun
   only dirty contents changed since the last successful matching browser run.
+  Successful matching browser runs are content-cached locally; pass `--no-cache`
+  when an intentional rerun is required. An unchanged failed selection retries
+  only Playwright's recorded failed tests; setup failures without failed test IDs
+  rerun the full selection. For repeated uncached browser runs, keep
+  `pnpm test:e2e:server` running in another terminal; the runner reuses it only
+  when its repository/configuration fingerprint matches.
+  Browser cache keys include only the selected feature's source/import closure,
+  changed inputs, and selected specs; unrelated UI edits do not invalidate them.
 - UI unit tests selected by `pnpm validate:changed` follow relative imports and
   run in up to four balanced isolated shard processes. Full `pnpm test` uses the same concurrency.
+  Test files are discovered from `packages/ui/src/**/*.test.ts(x)` rather than a
+  manually maintained package script list.
+  Selected UI tests are cached independently by their runtime import closure.
   Local UI runs stop scheduling new tests after the first failure; CI keeps
   collecting failures. Pass `--no-fail-fast` to the TSX runner when needed. The
   runner records local durations and balances historically slow tests across shards.
 - Routine Rust source changes test and Clippy the directly changed crates, then
   `cargo check` their in-repository dependents. Cargo manifests, lockfiles, and
   toolchain configuration retain full-workspace test and Clippy validation.
+  Successful Rust validation commands are content-cached locally; use
+  `pnpm validate:changed --no-cache` to force execution.
 
 Before completing a routine task, run `pnpm validate:changed`. Run the applicable
 full validation once before merging to `main`, cutting a release, or after changing

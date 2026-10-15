@@ -1,13 +1,28 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { delimiter, dirname, join, relative, resolve, sep } from "node:path";
+import { homedir } from "node:os";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { pruneValidationCache, readValidationCache, updateValidationCache, writeValidationCache } from "./validation-cache.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const cargoCommand = process.platform === "win32" ? "cargo.exe" : "cargo";
-const snapshotPath = join(repoRoot, "node_modules", ".cache", "protovoy", "validate-changed.json");
-const failurePath = join(repoRoot, "node_modules", ".cache", "protovoy", "validate-failures.json");
+const cargoCommand = process.platform === "win32" && existsSync(join(homedir(), ".cargo", "bin", "cargo.exe"))
+  ? join(homedir(), ".cargo", "bin", "cargo.exe")
+  : process.platform === "win32" ? "cargo.exe" : "cargo";
+const rustcCommand = process.platform === "win32" && existsSync(join(homedir(), ".cargo", "bin", "rustc.exe"))
+  ? join(homedir(), ".cargo", "bin", "rustc.exe")
+  : process.platform === "win32" ? "rustc.exe" : "rustc";
+
+function clippyCommand() {
+  if (process.platform !== "win32") return { argsPrefix: ["clippy"], command: cargoCommand };
+  const sysroot = spawnSync(rustcCommand, ["--print", "sysroot"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).stdout?.trim();
+  const direct = sysroot ? join(sysroot, "bin", "cargo-clippy.exe") : undefined;
+  return direct && existsSync(direct)
+    ? { argsPrefix: ["clippy"], command: direct }
+    : { argsPrefix: ["clippy"], command: cargoCommand };
+}
+pruneValidationCache();
 
 function run(command, args, { capture = false, dryRun = false, cwd = repoRoot, env = process.env, shell } = {}) {
   const display = [command, ...args].join(" ");
@@ -36,10 +51,15 @@ function gitLines(args) {
 }
 
 function parseArguments(argv) {
-  const options = { base: undefined, dryRun: false, files: [], scopes: new Set(), sinceLastRun: false, staged: false };
+  const options = { base: undefined, cache: true, dryRun: false, files: [], plan: false, scopes: new Set(), sinceLastRun: false, staged: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "--dry-run") options.dryRun = true;
+    else if (argument === "--plan") {
+      options.dryRun = true;
+      options.plan = true;
+    }
+    else if (argument === "--no-cache") options.cache = false;
     else if (argument === "--base") options.base = argv[++index];
     else if (argument === "--file") options.files.push(argv[++index]);
     else if (argument === "--staged") options.staged = true;
@@ -58,13 +78,23 @@ function parseArguments(argv) {
 }
 
 function changedFiles(base, staged = false) {
-  const tracked = base
-    ? gitLines(["diff", "--name-only", "--diff-filter=ACDMRT", `${base}...HEAD`])
-    : staged
-      ? gitLines(["diff", "--cached", "--name-only", "--diff-filter=ACDMRT"])
-      : gitLines(["diff", "--name-only", "--diff-filter=ACDMRT", "HEAD"]);
-  const untracked = base || staged ? [] : gitLines(["ls-files", "--others", "--exclude-standard"]);
-  return [...new Set([...tracked, ...untracked].map((file) => file.replaceAll("\\", "/")))];
+  if (base) return gitLines(["diff", "--name-only", "--diff-filter=ACDMRT", `${base}...HEAD`]);
+  if (staged) return gitLines(["diff", "--cached", "--name-only", "--diff-filter=ACDMRT"]);
+  const result = spawnSync("git", ["status", "--porcelain=v1", "-z", "--untracked-files=all"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error("Unable to inspect the Git working tree.");
+  const records = result.stdout.split("\0").filter(Boolean);
+  const files = [];
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    files.push(record.slice(3).replaceAll("\\", "/"));
+    if (/[RC]/.test(record.slice(0, 2))) index += 1;
+  }
+  return [...new Set(files)];
 }
 
 function fingerprint(file) {
@@ -74,12 +104,7 @@ function fingerprint(file) {
 }
 
 function readSnapshots() {
-  if (!existsSync(snapshotPath)) return {};
-  try {
-    return JSON.parse(readFileSync(snapshotPath, "utf8"));
-  } catch {
-    return {};
-  }
+  return readValidationCache("validate-changed");
 }
 
 function snapshotKey(scopes) {
@@ -87,19 +112,14 @@ function snapshotKey(scopes) {
 }
 
 function saveSnapshot(scopes, files) {
-  const snapshots = readSnapshots();
-  snapshots[snapshotKey(scopes)] = Object.fromEntries(files.map((file) => [file, fingerprint(file)]));
-  mkdirSync(dirname(snapshotPath), { recursive: true });
-  writeFileSync(snapshotPath, `${JSON.stringify(snapshots, null, 2)}\n`);
+  updateValidationCache("validate-changed", (snapshots) => ({
+    ...snapshots,
+    [snapshotKey(scopes)]: Object.fromEntries(files.map((file) => [file, fingerprint(file)])),
+  }));
 }
 
 function readFailureStates() {
-  if (!existsSync(failurePath)) return {};
-  try {
-    return JSON.parse(readFileSync(failurePath, "utf8"));
-  } catch {
-    return {};
-  }
+  return readValidationCache("validation-failures");
 }
 
 function validationKey(options) {
@@ -116,17 +136,68 @@ function validationKey(options) {
 }
 
 function writeFailureState(key, files, pendingLabels) {
-  const states = readFailureStates();
-  states[key] = { pendingLabels: [...pendingLabels], files: Object.fromEntries(files.map((file) => [file, fingerprint(file)])) };
-  mkdirSync(dirname(failurePath), { recursive: true });
-  writeFileSync(failurePath, `${JSON.stringify(states, null, 2)}\n`);
+  updateValidationCache("validation-failures", (states) => ({
+    ...states,
+    [key]: { pendingLabels: [...pendingLabels], files: Object.fromEntries(files.map((file) => [file, fingerprint(file)])) },
+  }));
 }
 
 function clearFailureState(key) {
-  if (!existsSync(failurePath)) return;
-  const states = readFailureStates();
-  delete states[key];
-  writeFileSync(failurePath, `${JSON.stringify(states, null, 2)}\n`);
+  updateValidationCache("validation-failures", (states) => {
+    const updated = { ...states };
+    delete updated[key];
+    return updated;
+  });
+}
+
+function runCommandStatus(command, args, { cwd = repoRoot, env = process.env, shell } = {}) {
+  console.log(`\n[validate:changed] ${[command, ...args].join(" ")}`);
+  const result = spawnSync(command, args, {
+    cwd,
+    env,
+    shell: shell ?? (process.platform === "win32" && /\.(?:cmd|bat)$/i.test(command)),
+    stdio: "inherit",
+  });
+  if (result.error) throw result.error;
+  return result.status ?? 1;
+}
+
+function runRecoverableTasks(tasks, options, stateKey, files) {
+  const plannedLabels = new Set(tasks.map((task) => task.label));
+  const taskCache = readValidationCache("validate-task-cache");
+  const failureState = readFailureStates()[stateKey];
+  let pendingLabels = plannedLabels;
+  if (failureState?.files && Array.isArray(failureState.pendingLabels)) {
+    const filesUnchanged = files.every((file) => failureState.files[file] === fingerprint(file));
+    if (filesUnchanged) {
+      pendingLabels = new Set(failureState.pendingLabels.filter((label) => plannedLabels.has(label)));
+      console.log(`[validate:changed] Retrying ${pendingLabels.size}/${plannedLabels.size} failed or not-yet-run task(s).`);
+    }
+  }
+  for (const task of tasks) {
+    if (!pendingLabels.has(task.label)) continue;
+    if (task.inputHash && options.cache && taskCache[task.label] === task.inputHash) {
+      console.log(`[validate:changed] CACHED ${task.label}`);
+      pendingLabels.delete(task.label);
+      continue;
+    }
+    if (options.dryRun) {
+      console.log(`[validate:changed] RUN ${task.label}`);
+      console.log(`[validate:changed] ${[task.command, ...task.args].join(" ")}`);
+      continue;
+    }
+    if (runCommandStatus(task.command, task.args, task) !== 0) {
+      writeFailureState(stateKey, files, pendingLabels);
+      return false;
+    }
+    pendingLabels.delete(task.label);
+    if (task.inputHash) {
+      updateValidationCache("validate-task-cache", (current) => ({ ...current, [task.label]: task.inputHash }));
+    }
+    writeFailureState(stateKey, files, pendingLabels);
+  }
+  if (!options.dryRun) clearFailureState(stateKey);
+  return true;
 }
 
 function loadJsWorkspaces() {
@@ -142,6 +213,73 @@ function loadJsWorkspaces() {
     }
   }
   return workspaces;
+}
+
+const directoryFiles = new Map();
+const fileDigests = new Map();
+
+function walkFiles(directory) {
+  if (directoryFiles.has(directory)) return directoryFiles.get(directory);
+  const result = [];
+  if (!existsSync(directory)) {
+    directoryFiles.set(directory, result);
+    return result;
+  }
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (["node_modules", "dist", "target", "coverage", ".turbo"].includes(entry.name)) continue;
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) result.push(...walkFiles(path));
+    else if (entry.isFile() && !/\.(?:tsbuildinfo|log)$/.test(entry.name)) result.push(path);
+  }
+  directoryFiles.set(directory, result);
+  return result;
+}
+
+function fileDigest(file) {
+  if (fileDigests.has(file)) return fileDigests.get(file);
+  const digest = existsSync(file) && statSync(file).isFile()
+    ? createHash("sha256").update(readFileSync(file)).digest("hex")
+    : "<missing>";
+  fileDigests.set(file, digest);
+  return digest;
+}
+
+function hashFiles(files, seed = "") {
+  const hash = createHash("sha256").update(seed);
+  for (const file of [...new Set(files)].sort()) {
+    hash.update(relative(repoRoot, file).split(sep).join("/"));
+    hash.update(fileDigest(file));
+  }
+  return hash.digest("hex");
+}
+
+function workspaceDependencies(workspace, workspaces) {
+  const names = new Set(workspaces.map((candidate) => candidate.name));
+  const dependencies = {
+    ...workspace.packageJson.dependencies,
+    ...workspace.packageJson.devDependencies,
+    ...workspace.packageJson.peerDependencies,
+    ...workspace.packageJson.optionalDependencies,
+  };
+  return Object.keys(dependencies).filter((name) => names.has(name));
+}
+
+function workspaceTaskHash(task, workspaces) {
+  const byName = new Map(workspaces.map((workspace) => [workspace.name, workspace]));
+  const included = new Set();
+  function include(name) {
+    if (included.has(name)) return;
+    included.add(name);
+    const workspace = byName.get(name);
+    if (!workspace) return;
+    workspaceDependencies(workspace, workspaces).forEach(include);
+  }
+  include(task.workspace.name);
+  const files = [...included].flatMap((name) => walkFiles(join(repoRoot, byName.get(name).directory)));
+  for (const rootInput of ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", "scripts/run-tsx-tests.mjs", "scripts/register-test-css.mjs", "scripts/test-changed-ui.mjs", "scripts/validate-changed.mjs", "scripts/validation-cache.mjs"]) {
+    files.push(join(repoRoot, rootInput));
+  }
+  return hashFiles(files, `${process.version}\0${process.platform}\0${process.arch}\0${process.env.NODE_ENV ?? ""}\0${process.env.CI ?? ""}\0${process.env.NODE_OPTIONS ?? ""}\0${task.script}\0`);
 }
 
 function gitFile(ref, file) {
@@ -234,9 +372,10 @@ function jsPlan(files, options) {
     "pnpm-workspace.yaml",
     ".npmrc",
     "scripts/run-tsx-tests.mjs",
-    "scripts/run-tsx-test-shard.mjs",
+    "scripts/register-test-css.mjs",
     "scripts/test-changed-ui.mjs",
     "scripts/validate-changed.mjs",
+    "scripts/validation-cache.mjs",
   ]);
   if (files.some((file) => globalInputs.has(file)) || (files.includes("package.json") && rootManifestAffectsWorkspaces(options))) {
     return { direct: allNames, affected: allNames };
@@ -265,43 +404,39 @@ function jsPlan(files, options) {
 }
 
 function loadRustWorkspaces() {
-  const manifests = [];
-  for (const entry of readdirSync(join(repoRoot, "crates"), { withFileTypes: true })) {
-    if (entry.isDirectory()) manifests.push(join(repoRoot, "crates", entry.name, "Cargo.toml"));
-  }
-  for (const entry of readdirSync(join(repoRoot, "apps"), { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    for (const suffix of ["Cargo.toml", "src-tauri/Cargo.toml"]) {
-      const manifest = join(repoRoot, "apps", entry.name, suffix);
-      if (existsSync(manifest)) manifests.push(manifest);
-    }
-  }
+  const metadataInputs = [
+    join(repoRoot, "Cargo.toml"),
+    join(repoRoot, "Cargo.lock"),
+    join(repoRoot, "rust-toolchain.toml"),
+    ...walkFiles(join(repoRoot, ".cargo")),
+    ...walkFiles(join(repoRoot, "crates")).filter((file) => file.endsWith("Cargo.toml")),
+    ...walkFiles(join(repoRoot, "apps")).filter((file) => file.endsWith("Cargo.toml")),
+  ];
+  const inputHash = hashFiles(metadataInputs, `${process.version}\0cargo-metadata-v2\0`);
+  const cached = readValidationCache("cargo-workspace-metadata");
+  if (cached.inputHash === inputHash && Array.isArray(cached.workspaces)) return cached.workspaces;
 
-  const packages = manifests.map((manifest) => {
-    const content = readFileSync(manifest, "utf8");
-    const packageStart = content.indexOf("[package]");
-    const afterPackage = content.slice(packageStart + "[package]".length);
-    const nextSection = afterPackage.search(/\n\[/);
-    const packageSection = nextSection === -1 ? afterPackage : afterPackage.slice(0, nextSection);
-    const name = packageSection.match(/^name\s*=\s*"([^"]+)"/m)?.[1];
-    if (!name) throw new Error(`Unable to read package name from ${manifest}`);
-    return {
-      content,
-      directory: relative(repoRoot, dirname(manifest)).split(sep).join("/"),
-      name,
-      dependencies: [],
-    };
+  const result = spawnSync(cargoCommand, ["metadata", "--format-version", "1", "--no-deps", "--offline"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "inherit"],
   });
-  const names = new Set(packages.map((pkg) => pkg.name));
-  for (const pkg of packages) {
-    pkg.dependencies = [...names].filter(
-      (name) =>
-        name !== pkg.name &&
-        new RegExp(`(^|\\n)${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=`, "m").test(pkg.content),
-    );
-    delete pkg.content;
-  }
-  return packages;
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error("cargo metadata failed; dependency-aware Rust validation could not be planned.");
+  const metadata = JSON.parse(result.stdout);
+  const workspaceIds = new Set(metadata.workspace_members);
+  const workspacePackages = metadata.packages.filter((pkg) => workspaceIds.has(pkg.id));
+  const workspaceNames = new Set(workspacePackages.map((pkg) => pkg.name));
+  const workspaces = workspacePackages.map((pkg) => ({
+    dependencies: (pkg.dependencies ?? [])
+      .map((dependency) => dependency.name)
+      .filter((name) => workspaceNames.has(name)),
+    directory: relative(repoRoot, dirname(pkg.manifest_path)).split(sep).join("/"),
+    name: pkg.name,
+  }));
+  writeValidationCache("cargo-workspace-metadata", { inputHash, workspaces });
+  return workspaces;
 }
 
 function rustPlan(files) {
@@ -345,6 +480,30 @@ function rustPlan(files) {
   return { full: false, direct, affected };
 }
 
+let cargoVersion;
+function rustTaskHash(names, args) {
+  const workspaces = loadRustWorkspaces();
+  const byName = new Map(workspaces.map((workspace) => [workspace.name, workspace]));
+  const included = new Set();
+  function include(name) {
+    if (included.has(name)) return;
+    included.add(name);
+    byName.get(name)?.dependencies.forEach(include);
+  }
+  names.forEach(include);
+  const inputs = [
+    join(repoRoot, "Cargo.toml"),
+    join(repoRoot, "Cargo.lock"),
+    join(repoRoot, "rust-toolchain.toml"),
+    ...walkFiles(join(repoRoot, ".cargo")),
+    join(repoRoot, "scripts", "validate-changed.mjs"),
+    join(repoRoot, "scripts", "validation-cache.mjs"),
+    ...[...included].flatMap((name) => walkFiles(join(repoRoot, byName.get(name).directory))),
+  ];
+  cargoVersion ??= spawnSync(cargoCommand, ["--version"], { cwd: repoRoot, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).stdout?.trim() ?? "cargo";
+  return hashFiles(inputs, `${process.platform}\0${process.arch}\0${cargoVersion}\0${process.env.RUSTFLAGS ?? ""}\0${process.env.RUSTDOCFLAGS ?? ""}\0${process.env.CARGO_BUILD_TARGET ?? ""}\0${args.join("\0")}\0`);
+}
+
 function packages(names) {
   return [...names].sort().flatMap((name) => ["--package", name]);
 }
@@ -361,26 +520,37 @@ function workspaceScriptTask(workspace, scriptName) {
     env: { ...process.env, PATH: `${binPaths.join(delimiter)}${delimiter}${process.env.PATH ?? ""}` },
     label: `${workspace.name} -> ${scriptName}`,
     script,
+    workspace,
   };
 }
 
 async function runWorkspaceScripts(workspaces, scriptName, options, allowedLabels) {
+  const taskCache = readValidationCache("validate-task-cache");
   const tasks = workspaces
     .map((workspace) => workspaceScriptTask(workspace, scriptName))
     .filter((task) => task && (!allowedLabels || allowedLabels.has(task.label)));
+  for (const task of tasks) {
+    task.inputHash = workspaceTaskHash(task, loadJsWorkspaces());
+    task.cached = options.cache && taskCache[task.label] === task.inputHash;
+  }
   if (options.dryRun) {
     for (const task of tasks) {
-      console.log(`[validate:changed] ${task.label}`);
-      console.log(`[validate:changed] ${task.script}`);
+      console.log(`[validate:changed] ${task.cached ? "CACHED" : "RUN"} ${task.label}`);
+      if (!task.cached) console.log(`[validate:changed] ${task.script}`);
     }
     return { completedLabels: [], failedLabels: [] };
   }
+  for (const task of tasks.filter((candidate) => candidate.cached)) {
+    task.resultStatus = 0;
+    console.log(`[validate:changed] CACHED ${task.label}`);
+  }
+  const runnableTasks = tasks.filter((task) => !task.cached);
   let nextIndex = 0;
   let failed = false;
   const failFast = !process.env.CI;
   async function worker() {
-    while (nextIndex < tasks.length && !(failFast && failed)) {
-      const task = tasks[nextIndex++];
+    while (nextIndex < runnableTasks.length && !(failFast && failed)) {
+      const task = runnableTasks[nextIndex++];
       const result = await new Promise((resolveTask) => {
         const child = spawn(task.script, [], { cwd: task.cwd, env: task.env, shell: true });
         let stdout = "";
@@ -396,9 +566,13 @@ async function runWorkspaceScripts(workspaces, scriptName, options, allowedLabel
       if (result.stderr) process.stderr.write(result.stderr);
       if (result.error) console.error(result.error);
       if (result.status !== 0) failed = true;
+      else taskCache[task.label] = task.inputHash;
     }
   }
-  await Promise.all(Array.from({ length: Math.min(4, tasks.length) }, () => worker()));
+  await Promise.all(Array.from({ length: Math.min(4, runnableTasks.length) }, () => worker()));
+  if (runnableTasks.some((task) => task.resultStatus === 0)) {
+    updateValidationCache("validate-task-cache", (current) => ({ ...current, ...taskCache }));
+  }
   return {
     completedLabels: tasks.filter((task) => task.resultStatus === 0).map((task) => task.label),
     failedLabels: tasks.filter((task) => task.resultStatus !== undefined && task.resultStatus !== 0).map((task) => task.label),
@@ -409,20 +583,35 @@ function workspaceScriptLabels(workspaces, scriptName) {
   return workspaces.map((workspace) => workspaceScriptTask(workspace, scriptName)?.label).filter(Boolean);
 }
 
-function runSelectedUiTests(files, options) {
-  const args = ["scripts/test-changed-ui.mjs", ...files.flatMap((file) => ["--file", file])];
+async function runSelectedUiTests(files, options) {
+  const args = ["scripts/test-changed-ui.mjs", ...(!options.cache ? ["--no-cache"] : []), ...files.flatMap((file) => ["--file", file])];
+  const uiWorkspace = loadJsWorkspaces().find((workspace) => workspace.name === "@protovoy/ui");
+  const task = { label: "@protovoy/ui -> selected-tests", script: args.join(" "), workspace: uiWorkspace };
+  const cacheKey = `${task.label}|${createHash("sha256").update(task.script).digest("hex")}`;
+  const inputHash = workspaceTaskHash(task, loadJsWorkspaces());
+  const taskCache = readValidationCache("validate-task-cache");
+  if (options.cache && taskCache[cacheKey] === inputHash) {
+    console.log(`[validate:changed] CACHED ${task.label}`);
+    return true;
+  }
   if (options.dryRun) {
+    console.log(`[validate:changed] RUN ${task.label}`);
     run(process.execPath, args, options);
     return true;
   }
-  const result = spawnSync(process.execPath, args, { cwd: repoRoot, stdio: "inherit" });
-  if (result.error) throw result.error;
-  return result.status === 0;
+  process.argv = [process.execPath, join(repoRoot, args[0]), ...args.slice(1)];
+  await import(`./test-changed-ui.mjs?validation=${Date.now()}`);
+  taskCache[task.label] = inputHash;
+  updateValidationCache("validate-task-cache", (current) => ({ ...current, [cacheKey]: inputHash }));
+  return true;
 }
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
   const currentValidationKey = validationKey(options);
+  const jsFailureKey = `validate:${currentValidationKey}:js`;
+  const rustFailureKey = `validate:${currentValidationKey}:rust`;
+  const javaFailureKey = `validate:${currentValidationKey}:java`;
   const tracksSnapshot = !options.base && options.files.length === 0 && !options.staged;
   const dirtyFiles = tracksSnapshot ? changedFiles(undefined) : [];
   let files = options.files.length > 0
@@ -442,6 +631,7 @@ async function main() {
   }
 
   console.log(`[validate:changed] Inspecting ${files.length} changed file(s).`);
+  if (options.plan) files.forEach((file) => console.log(`[validate:plan] changed: ${file}`));
   const js = options.scopes.has("js") ? jsPlan(files, options) : { direct: new Set(), affected: new Set() };
   if (js.affected.size > 0) {
     const workspaces = loadJsWorkspaces();
@@ -454,7 +644,7 @@ async function main() {
       ...workspaceScriptLabels(testedWorkspaces, "test"),
       ...(js.direct.has("@protovoy/ui") ? [uiLabel] : []),
     ]);
-    const failureState = readFailureStates()[currentValidationKey];
+    const failureState = readFailureStates()[jsFailureKey];
     let pendingLabels = new Set(plannedLabels);
     if (options.scopes.has("js") && failureState?.files && Array.isArray(failureState.pendingLabels)) {
       pendingLabels = new Set(failureState.pendingLabels.filter((label) => plannedLabels.has(label)));
@@ -467,45 +657,57 @@ async function main() {
     const typechecks = await runWorkspaceScripts(affectedWorkspaces, "typecheck", options, pendingLabels);
     typechecks.completedLabels.forEach((label) => pendingLabels.delete(label));
     if (typechecks.failedLabels.length > 0) {
-      if (!options.dryRun) writeFailureState(currentValidationKey, files, pendingLabels);
+      if (!options.dryRun) writeFailureState(jsFailureKey, files, pendingLabels);
       process.exit(1);
     }
     const tests = await runWorkspaceScripts(testedWorkspaces, "test", options, pendingLabels);
     tests.completedLabels.forEach((label) => pendingLabels.delete(label));
     if (tests.failedLabels.length > 0) {
-      if (!options.dryRun) writeFailureState(currentValidationKey, files, pendingLabels);
+      if (!options.dryRun) writeFailureState(jsFailureKey, files, pendingLabels);
       process.exit(1);
     }
     if (pendingLabels.has(uiLabel)) {
-      if (!runSelectedUiTests(files, options)) {
-        if (!options.dryRun) writeFailureState(currentValidationKey, files, pendingLabels);
+      if (!await runSelectedUiTests(files, options)) {
+        if (!options.dryRun) writeFailureState(jsFailureKey, files, pendingLabels);
         process.exit(1);
       }
       pendingLabels.delete(uiLabel);
     }
+    if (!options.dryRun) clearFailureState(jsFailureKey);
   }
 
   const rust = options.scopes.has("rust") ? rustPlan(files) : { full: false, direct: new Set(), affected: new Set() };
   if (rust.affected.size > 0) {
+    const rustTasks = [];
+    const addRustTask = (label, args, names, command = cargoCommand) => rustTasks.push({
+      label,
+      command,
+      args,
+      inputHash: rustTaskHash(names, [command, ...args]),
+    });
+    const clippy = clippyCommand();
     if (rust.full) {
-      run(cargoCommand, ["test", "--workspace", "--locked"], options);
-      run(cargoCommand, ["clippy", "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"], options);
+      addRustTask("rust -> workspace test", ["test", "--workspace", "--locked"], rust.affected);
+      addRustTask("rust -> workspace clippy", [...clippy.argsPrefix, "--workspace", "--all-targets", "--locked", "--", "-D", "warnings"], rust.affected, clippy.command);
     } else {
       const dependents = new Set([...rust.affected].filter((name) => !rust.direct.has(name)));
-      run(cargoCommand, ["test", ...packages(rust.direct), "--locked"], options);
-      if (dependents.size > 0) run(cargoCommand, ["check", ...packages(dependents), "--locked"], options);
-      run(cargoCommand, ["clippy", ...packages(rust.direct), "--all-targets", "--locked", "--", "-D", "warnings"], options);
+      addRustTask(`rust -> test ${[...rust.direct].sort().join(",")}`, ["test", ...packages(rust.direct), "--locked"], rust.direct);
+      if (dependents.size > 0) addRustTask(`rust -> check dependents of ${[...rust.direct].sort().join(",")}`, ["check", ...packages(dependents), "--locked"], rust.affected);
+      addRustTask(`rust -> clippy ${[...rust.direct].sort().join(",")}`, [...clippy.argsPrefix, ...packages(rust.direct), "--all-targets", "--locked", "--", "-D", "warnings"], rust.direct, clippy.command);
     }
+    if (!runRecoverableTasks(rustTasks, options, rustFailureKey, files)) process.exit(1);
   }
 
   const javaChanged = options.scopes.has("java") && files.some((file) => file.startsWith("services/collaboration-server/"));
   if (javaChanged) {
     const gradle = process.platform === "win32" ? "gradlew.bat" : "./gradlew";
-    run(gradle, ["test", "--no-daemon"], {
-      ...options,
-      // The wrapper lives in the service directory.
+    const javaTask = {
+      label: "collaboration-server -> test",
+      command: gradle,
+      args: ["test", "--no-daemon"],
       cwd: join(repoRoot, "services/collaboration-server"),
-    });
+    };
+    if (!runRecoverableTasks([javaTask], options, javaFailureKey, files)) process.exit(1);
   }
 
   if (js.affected.size === 0 && rust.affected.size === 0 && !javaChanged) {
@@ -514,7 +716,6 @@ async function main() {
   if (!options.dryRun && tracksSnapshot) {
     saveSnapshot(options.scopes, dirtyFiles);
   }
-  if (!options.dryRun) clearFailureState(currentValidationKey);
 }
 
 await main();

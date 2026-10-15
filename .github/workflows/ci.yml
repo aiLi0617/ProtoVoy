@@ -13,10 +13,15 @@ on:
       - "services/collaboration-server/**"
       - "e2e/**"
       - "scripts/prepare-sidecar.mjs"
+      - "scripts/e2e-server.mjs"
+      - "scripts/e2e-smoke-tags.mjs"
+      - "scripts/run-e2e.mjs"
       - "scripts/run-tsx-tests.mjs"
+      - "scripts/register-test-css.mjs"
       - "scripts/test-changed-e2e.mjs"
       - "scripts/test-changed-ui.mjs"
       - "scripts/validate-changed.mjs"
+      - "scripts/validation-cache.mjs"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
@@ -25,6 +30,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "playwright.config.ts"
+      - "playwright.managed.config.ts"
       - "playwright.runtime.config.ts"
       - ".npmrc"
       - ".github/workflows/ci.yml"
@@ -36,10 +42,15 @@ on:
       - "services/collaboration-server/**"
       - "e2e/**"
       - "scripts/prepare-sidecar.mjs"
+      - "scripts/e2e-server.mjs"
+      - "scripts/e2e-smoke-tags.mjs"
+      - "scripts/run-e2e.mjs"
       - "scripts/run-tsx-tests.mjs"
+      - "scripts/register-test-css.mjs"
       - "scripts/test-changed-e2e.mjs"
       - "scripts/test-changed-ui.mjs"
       - "scripts/validate-changed.mjs"
+      - "scripts/validation-cache.mjs"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
@@ -48,6 +59,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "playwright.config.ts"
+      - "playwright.managed.config.ts"
       - "playwright.runtime.config.ts"
       - ".npmrc"
       - ".github/workflows/ci.yml"
@@ -90,7 +102,9 @@ jobs:
               - 'apps/desktop/**'
               - '!apps/desktop/src-tauri/**'
               - 'scripts/validate-changed.mjs'
+              - 'scripts/validation-cache.mjs'
               - 'scripts/run-tsx-tests.mjs'
+              - 'scripts/register-test-css.mjs'
               - 'scripts/test-changed-ui.mjs'
             rust:
               - 'Cargo.toml'
@@ -103,6 +117,8 @@ jobs:
               - 'apps/protocol-gateway/**'
               - 'apps/desktop/src-tauri/**'
             e2e:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
               - 'e2e/**'
               - 'playwright.config.ts'
               - 'playwright.runtime.config.ts'
@@ -110,6 +126,11 @@ jobs:
               - 'packages/ui/**'
               - 'packages/request-model/**'
               - 'scripts/test-changed-e2e.mjs'
+              - 'scripts/validation-cache.mjs'
+              - 'scripts/e2e-server.mjs'
+              - 'scripts/e2e-smoke-tags.mjs'
+              - 'scripts/run-e2e.mjs'
+              - 'playwright.managed.config.ts'
             desktop:
               - 'apps/desktop/**'
               - 'apps/local-agent/**'
@@ -152,6 +173,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Restore content validation cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/protovoy
+          key: ${{ runner.os }}-node22-js-validation-v3-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'apps/web/**', 'apps/desktop/**', 'packages/**', 'scripts/validate-changed.mjs', 'scripts/test-changed-ui.mjs', 'scripts/run-tsx-tests.mjs', 'scripts/register-test-css.mjs', 'scripts/validation-cache.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-js-validation-v3-
       - name: Validate affected workspaces
         if: github.event_name == 'pull_request' && needs.changes.outputs.workflow != 'true'
         run: pnpm validate:changed --js --base "${{ github.event.pull_request.base.sha }}"
@@ -175,6 +203,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Restore browser validation cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/protovoy
+          key: ${{ runner.os }}-node22-e2e-validation-v3-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'apps/web/**', 'packages/ui/**', 'packages/request-model/**', 'e2e/**', 'playwright*.ts', 'scripts/e2e-server.mjs', 'scripts/e2e-smoke-tags.mjs', 'scripts/run-e2e.mjs', 'scripts/test-changed-e2e.mjs', 'scripts/validation-cache.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-e2e-validation-v3-
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -217,6 +252,11 @@ jobs:
         run: mkdir -p apps/desktop/dist && test -f apps/desktop/dist/index.html || printf '%s\n' '<!doctype html><title>ProtoVoy</title>' > apps/desktop/dist/index.html
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Restore Rust validation result cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/protovoy
+          key: ${{ runner.os }}-rust-validation-v3-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/**', 'crates/**', 'apps/*/Cargo.toml', 'apps/*/src-tauri/**', 'scripts/validate-changed.mjs', 'scripts/validation-cache.mjs') }}
       - name: Validate affected Rust workspaces
         if: github.event_name == 'pull_request' && needs.changes.outputs.workflow != 'true'
         run: node scripts/validate-changed.mjs --rust --base "${{ github.event.pull_request.base.sha }}"

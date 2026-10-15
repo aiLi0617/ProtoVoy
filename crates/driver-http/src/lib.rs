@@ -14,6 +14,7 @@ use execution_engine::{DriverDescriptor, DriverError, ProtocolDriver, Validation
 use futures::StreamExt;
 use reqwest::{
     cookie::{CookieStore, Jar},
+    header::{HeaderMap, HeaderValue, ACCEPT, ACCEPT_ENCODING, CACHE_CONTROL},
     multipart,
     redirect::Policy,
     Client, Identity, Method, Proxy, RequestBuilder, Url,
@@ -23,6 +24,14 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 const RESPONSE_PREVIEW_BYTES: usize = 10_000;
+
+fn default_request_headers() -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+    headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
+    headers
+}
 
 #[derive(Debug, Default)]
 pub struct HttpDriver {
@@ -35,6 +44,7 @@ impl HttpDriver {
         let cookie_jar = Arc::new(Jar::default());
         let client = Client::builder()
             .user_agent(concat!("ProtoVoy/", env!("CARGO_PKG_VERSION")))
+            .default_headers(default_request_headers())
             .cookie_provider(Arc::clone(&cookie_jar))
             .no_proxy()
             .build()
@@ -119,6 +129,7 @@ impl HttpDriver {
 
         let mut builder = Client::builder()
             .user_agent(concat!("ProtoVoy/", env!("CARGO_PKG_VERSION")))
+            .default_headers(default_request_headers())
             .cookie_provider(Arc::clone(&self.cookie_jar))
             .no_proxy()
             .danger_accept_invalid_certs(!request.tls.verify)
@@ -580,6 +591,14 @@ mod tests {
         req.target = "".into();
         let report = driver.validate(&req);
         assert!(!report.is_valid());
+    }
+
+    #[test]
+    fn configures_visible_automatic_request_headers() {
+        let headers = default_request_headers();
+        assert_eq!(headers.get(CACHE_CONTROL).unwrap(), "no-cache");
+        assert_eq!(headers.get(ACCEPT).unwrap(), "*/*");
+        assert_eq!(headers.get(ACCEPT_ENCODING).unwrap(), "identity");
     }
 
     #[tokio::test]

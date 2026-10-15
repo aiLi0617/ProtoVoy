@@ -4,11 +4,13 @@ import { Checkbox, Textarea, TextInput } from "./Components";
 import { ProtocolField, ProtocolFormCard, ProtocolFormGrid, ProtocolFormOptions } from "./ProtocolForm";
 import { ProtocolWorkbenchLayout } from "./ProtocolWorkbenchLayout";
 import { useWorkbenchHydration } from "./useWorkbenchHydration";
+import { useI18n } from "./i18n";
 
 export interface SqlWorkbenchRequest { name: string; target: string; username: string; passwordRef: string; sql: string; parameters: unknown[]; transactional: boolean; rowLimit: number; timeoutMs: number }
 export interface SqlWorkbenchProps { onSend: (request: SqlWorkbenchRequest, hooks?: HttpSendHooks) => Promise<HttpRunResult>; onSave?: (request: SqlWorkbenchRequest) => Promise<void>; onCancel?: (executionId: string) => Promise<void> }
 
 export function SqlWorkbench({ onSend, onSave, onCancel }: SqlWorkbenchProps) {
+  const { t } = useI18n();
   const [name, setName] = useState("SQL query"); const [target, setTarget] = useState("sqlite::memory:");
   const [username, setUsername] = useState(""); const [passwordRef, setPasswordRef] = useState("");
   const [sql, setSql] = useState("SELECT 42 AS answer"); const [parameters, setParameters] = useState("[]");
@@ -27,7 +29,7 @@ export function SqlWorkbench({ onSend, onSave, onCancel }: SqlWorkbenchProps) {
 
   const build = (): SqlWorkbenchRequest => { const parsed = JSON.parse(parameters || "[]"); if (!Array.isArray(parsed)) throw new Error("参数必须是 JSON 数组"); return { name, target, username, passwordRef, sql, parameters: parsed, transactional, rowLimit, timeoutMs: 30_000 }; };
   async function run() { setLoading(true); setResult(null); setMessage(""); try { setResult(await onSend(build(), { onStarted: setExecutionId, onChunk: () => {} })); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } finally { setLoading(false); setExecutionId(null); } }
-  async function save() { if (!onSave) return; try { await onSave(build()); setMessage("已保存到集合"); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } }
+  async function save() { if (!onSave) return; try { await onSave(build()); setMessage(t("status.savedToCollection")); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } }
   const engine = target.startsWith("postgres") ? "PostgreSQL" : target.startsWith("mysql") ? "MySQL" : "SQLite";
 
   return <ProtocolWorkbenchLayout id="sql" protocol={engine.toUpperCase()} name={name} target={target} targetLabel="数据库连接地址" actionLabel="Run query" loadingLabel="执行中…" loading={loading} result={result} responseTitle="Result set" emptyResponse="列、结果行、影响行数与插入 ID 会显示在这里" message={message} onNameChange={setName} onTargetChange={setTarget} onRun={() => void run()} onSave={onSave ? () => void save() : undefined} onCancel={onCancel && executionId ? () => void onCancel(executionId) : undefined}>

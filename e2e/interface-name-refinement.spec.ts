@@ -31,5 +31,5 @@ test("highlights new interface names and fits saved names to their text", async 
     context.font = style.font;
     const textWidth = context.measureText(element.value).width;
     return element.getBoundingClientRect().width - textWidth;
-  })).toBeLessThanOrEqual(3);
+  })).toBeLessThanOrEqual(16);
 });

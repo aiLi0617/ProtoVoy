@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createNewPageSession, createProjectOverviewSession, resolveHashWorkbenchId, resolveInitialWorkbenchId, resolveWorkbenchId, type WorkbenchTab } from "./WorkbenchDeck";
+import { createNewPageSession, createProjectOverviewSession, resolveHashWorkbenchId, resolveInitialWorkbenchId, resolveWorkbenchId, WORKBENCH_ICONS, WORKBENCH_LABELS, type WorkbenchTab } from "./WorkbenchDeck";
 
 const tabs: WorkbenchTab[] = [
   { id: "http", label: "HTTP", protocol: "http" },
@@ -20,5 +20,13 @@ assert.equal(resolveInitialWorkbenchId(tabs, "#workbench=mqtt"), "mqtt", "preser
 assert.equal(resolveInitialWorkbenchId(tabs, "#project=p1&view=resources"), "__project", "restores the project page when no workbench is active");
 assert.deepEqual(createNewPageSession("new-page"), { id: "new-page", workbenchId: "__project", title: "新建" }, "keeps new and replacement tabs on the project new page");
 assert.deepEqual(createProjectOverviewSession("overview"), { id: "overview", workbenchId: "__new", title: "项目概览" }, "returns the main-window action to the project overview instead of a new workbench page");
+
+for (const id of Object.keys(WORKBENCH_LABELS)) {
+  assert.ok(WORKBENCH_ICONS[id], `provides a shared icon for ${id}`);
+}
+assert.equal(Object.values(WORKBENCH_ICONS).filter((icon) => icon === "bolt").length, 0, "does not collapse protocol and workbench identity into a generic bolt icon");
+assert.notEqual(WORKBENCH_ICONS.http, WORKBENCH_ICONS.graphql, "distinguishes adjacent API workbenches");
+assert.notEqual(WORKBENCH_ICONS.redis, WORKBENCH_ICONS.sql, "distinguishes adjacent data workbenches");
+assert.notEqual(WORKBENCH_ICONS.plugins, WORKBENCH_ICONS.ai, "distinguishes tool workbenches");
 
 console.log("WorkbenchDeck tests passed");

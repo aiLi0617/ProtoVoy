@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import "./controlIconGlyphs.test";
 import "./disabledContrast.test";
 import "./tabKeyboardModel.test";
+import "./workbenchSharedPrimitives.test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MessageDetailActions, MessageInspector, MessageSummary, MessageToolbar } from "./MessageInspector";
 import { ModalFrame } from "./ModalFrame";

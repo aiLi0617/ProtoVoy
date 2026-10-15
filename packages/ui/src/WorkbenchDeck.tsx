@@ -1,5 +1,5 @@
 import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { Icon, type IconName } from "./Icons";
+import { Icon, workbenchIconName, type IconName } from "./Icons";
 import { ModalFrame } from "./ModalFrame";
 import { useAppStore } from "./appStore";
 import { translateWorkbench, useI18n } from "./i18n";
@@ -65,11 +65,7 @@ export interface WorkbenchDeckProps {
   onDeleteHttpInterface?: (requestId: string) => Promise<void>;
 }
 export const WORKBENCH_LABELS: Record<string, string> = { http:"HTTP", graphql:"GraphQL", grpc:"gRPC", rpc:"SOAP / RPC", websocket:"WebSocket", sse:"SSE", tcp:"TCP", udp:"UDP", mqtt:"MQTT", amqp:"AMQP", kafka:"Kafka", redis:"Redis", sql:"SQL", mock:"Mock", runner:"Runner", gateway:"Gateway", capture:"Capture", plugins:"Plugins", ai:"AI" };
-export const WORKBENCH_ICONS: Record<string, IconName> = {
-  http: "globe", graphql: "code", grpc: "network", rpc: "code", websocket: "activity", sse: "activity", tcp: "network", udp: "network",
-  mqtt: "network", amqp: "network", kafka: "network", redis: "database", sql: "database",
-  mock: "archive", runner: "send", gateway: "globe", capture: "search", plugins: "command", ai: "bolt", __scripts: "code",
-};
+export const WORKBENCH_ICONS: Record<string, IconName> = workbenchIconName;
 export const DEFAULT_WORKBENCH_GROUPS: WorkbenchGroup[] = [
   { id:"api", label:"API", icon:"globe", workbenchIds:["http","grpc"] },
   { id:"realtime", label:"实时通信", icon:"activity", workbenchIds:["websocket","sse","tcp","udp"] },
@@ -434,13 +430,13 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
 
   const renderShortcut = (tab: WorkbenchTab) => (
     <button className="protocol-shortcut" key={tab.id} type="button" aria-label={translateWorkbench(tab.id, tab.label)} onClick={() => activate(tab.id)}>
-      <Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "bolt"}/><span>{translateWorkbench(tab.id, tab.label)}</span>
+      <Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "command"}/><span>{translateWorkbench(tab.id, tab.label)}</span>
     </button>
   );
   const renderTab = (tab: WorkbenchTab) => (
     <div className="protocol-item-wrap" key={tab.id}>
       <button type="button" className="protocol-item" data-testid={`workbench-${tab.id}`} aria-current={tab.id === selected ? "page" : undefined} aria-label={translateWorkbench(tab.id, tab.label)} title={collapsed ? translateWorkbench(tab.id, tab.label) : undefined} onClick={() => activate(tab.id)}>
-        <span className="protocol-glyph" aria-hidden="true"><Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "bolt"} /></span>
+        <span className="protocol-glyph" aria-hidden="true"><Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "command"} /></span>
         <span className="protocol-label">{translateWorkbench(tab.id, tab.label)}</span>
       </button>
       <button type="button" className={`favorite-button ${favorites.includes(tab.id) ? "is-favorite" : ""}`} aria-label={favorites.includes(tab.id) ? t("workbench.unfavorite", { name: tab.label }) : t("workbench.favorite", { name: tab.label })} onClick={() => toggleFavorite(tab.id)}><Icon name="star"/></button>
@@ -619,7 +615,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
         <div className="workbench-create" ref={pickerRef}>
           <button type="button" className="workbench-create-button" aria-haspopup="menu" aria-expanded={pickerOpen} onClick={() => setPickerOpen((value) => !value)} title="新建工作台"><Icon name="plus"/><span>新建</span></button>
           {pickerOpen ? <div className="workbench-type-picker" role="menu" aria-label="选择工作台类型">
-            {DEFAULT_WORKBENCH_GROUPS.map((group) => { const groupTabs = group.workbenchIds.map((id) => tabMap.get(id)).filter(Boolean) as WorkbenchTab[]; return groupTabs.length ? <section key={group.id}><div className="workbench-picker-group"><Icon name={group.icon}/><span>{group.label}</span></div>{groupTabs.map((tab) => <button key={tab.id} type="button" role="menuitem" onClick={() => createWorkbench(tab.id)}><Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "bolt"}/><span>{translateWorkbench(tab.id, tab.label)}</span></button>)}</section> : null; })}
+            {DEFAULT_WORKBENCH_GROUPS.map((group) => { const groupTabs = group.workbenchIds.map((id) => tabMap.get(id)).filter(Boolean) as WorkbenchTab[]; return groupTabs.length ? <section key={group.id}><div className="workbench-picker-group"><Icon name={group.icon}/><span>{group.label}</span></div>{groupTabs.map((tab) => <button key={tab.id} type="button" role="menuitem" onClick={() => createWorkbench(tab.id)}><Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "command"}/><span>{translateWorkbench(tab.id, tab.label)}</span></button>)}</section> : null; })}
           </div> : null}
         </div>
         {selectedTab ? <div className="protocol-list protocol-current"><div className="protocol-group-title"><span>当前工作台</span></div>{renderTab(selectedTab)}</div> : selected === "__scripts" ? <div className="protocol-list protocol-current"><div className="protocol-group-title"><span>当前工作台</span></div><div className="protocol-item-wrap"><button type="button" className="protocol-item" aria-current="page" aria-label="脚本库" onClick={openScriptLibrary}><span className="protocol-glyph" aria-hidden="true"><Icon name="code" /></span><span className="protocol-label">脚本库</span></button></div></div> : null}

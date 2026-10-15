@@ -30,11 +30,26 @@ import 关系选择，并以最多 4 个隔离进程执行；本地首次失败�
 Linux，Cargo 安全审计只在依赖与工具链配置变化时运行。
 本地短循环可用 `pnpm validate:staged` 或 `pnpm validate:since`，但 PR 门禁仍以
 `pnpm validate:changed --base <git-ref>` 为准。
+提交前可先运行 `pnpm validate:plan` 查看受影响文件、将执行的任务及本地内容缓存命中；
+必要时用 `--no-cache` 强制重跑。JS 任务缓存同时包含该 workspace 的仓库内依赖，Rust
+依赖图由缓存的 `cargo metadata --no-deps` 结果生成，避免用清单文本正则推断。
 变更 E2E 映射时需确认选择器启动即通过映射完整性检查，不得引用已删除的 spec；排查 UI
 单测误选可使用 `test-changed-ui.mjs --dry-run --explain` 查看运行时依赖链。
 重复修复循环会优先重跑上次失败及本次修复新影响的 workspace 任务；公共导出图之外的
 内部 TypeScript 实现不会扩散下游 typecheck。E2E selector 对 `web-smoke.spec.ts` 按功能
-标题分组过滤，未映射 UI 仍保留完整 smoke 兜底。
+标签分组过滤，未映射 UI 仍保留完整 smoke 兜底；普通 CSS 只有改到媒体查询、容器查询或
+已知响应式选择器时才扩展到移动项目。E2E runner 在自身进程内托管 Vite 并在结束时关闭服务，
+默认端口被无响应进程占用时自动切到可用端口；已有健康服务则复用。JS、Rust、Java 与 E2E 的
+失败恢复状态统一保存在本地缓存中。成功的 E2E 与 Rust 命令也按输入内容缓存，UI 单测按各自
+runtime import 闭包缓存；需要确认环境问题时使用 `--no-cache`。缓存采用带 schema 的原子写入、
+短期写锁和过期清理，避免并发验证互相覆盖。
+`--last-failed` 只能在 Playwright 状态中存在失败测试 ID 时启用；启动期/worker 崩溃必须回退到完整选择，
+`--no-cache` 也必须执行完整选择。
+UI 单测必须从 `src/**/*.test.ts(x)` 自动发现，不能再增加手工测试清单；持续运行
+`pnpm test:e2e:server` 可缩短多轮未缓存 E2E 的启动时间，runner 只会复用仓库与配置指纹匹配的服务。
+Vite 配置、根依赖清单或锁文件变化必须让持久服务指纹失效，并触发完整浏览器选择，避免沿用旧插件或依赖图。
+E2E 功能缓存按选中功能的源码/import 闭包隔离，CSS 增量判断应使用一次批量 diff；CI 只在 PR
+增量门禁中复用内容校验缓存，main、手动全量及发布门禁仍直接执行完整测试命令。
 完整的跨平台安装、升级和卸载验证由 `Installer lifecycle` 每晚运行，也可通过
 `workflow_dispatch` 随时手动触发。发布标签仍执行完整的跨平台发布验证。
 

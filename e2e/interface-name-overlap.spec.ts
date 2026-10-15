@@ -5,6 +5,7 @@ test("keeps a focused saved interface name from overlapping its caret or neighbo
   await page.route("http://127.0.0.1:39217/**", (route) => route.abort());
   await page.goto("/#workbench=http");
   const slot = page.locator(".interface-lifecycle-name-slot");
+  const control = slot.locator(".interface-lifecycle-name-control");
   const input = slot.locator("input");
 
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: {
@@ -29,5 +30,10 @@ test("keeps a focused saved interface name from overlapping its caret or neighbo
     scrollWidth: element.scrollWidth,
   }));
   expect(inputMetrics.clientWidth).toBeGreaterThanOrEqual(inputMetrics.scrollWidth);
+  const boxes = await Promise.all([control.boundingBox(), input.boundingBox()]);
+  expect(boxes[0]).not.toBeNull();
+  expect(boxes[1]).not.toBeNull();
+  expect(boxes[1]!.x).toBeGreaterThanOrEqual(boxes[0]!.x);
+  expect(boxes[1]!.x + boxes[1]!.width).toBeLessThanOrEqual(boxes[0]!.x + boxes[0]!.width);
   await expect(slot).toHaveCSS("padding-right", "6px");
 });

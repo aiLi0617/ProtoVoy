@@ -15,6 +15,8 @@ use regex::Regex;
 use thiserror::Error;
 use uuid::Uuid;
 
+const GLOBAL_PARAMETER_OVERRIDES_METADATA_KEY: &str = "__protovoyGlobalParameterOverrides";
+
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ResolveError {
     #[error("unresolved variable `{{{{{0}}}}}`")]
@@ -89,6 +91,31 @@ fn resolve_dynamic(key: &str) -> Option<String> {
         "$isoTimestamp" => Some(Utc::now().to_rfc3339()),
         _ => None,
     }
+}
+
+fn resolve_json_templates(
+    value: &mut serde_json::Value,
+    vars: &HashMap<String, String>,
+) -> Result<(), ResolveError> {
+    match value {
+        serde_json::Value::String(text) => *text = resolve_template(text, vars)?,
+        serde_json::Value::Array(items) => {
+            for item in items {
+                resolve_json_templates(item, vars)?;
+            }
+        }
+        serde_json::Value::Object(object) => {
+            let mut resolved = serde_json::Map::new();
+            for (key, mut nested) in std::mem::take(object) {
+                let key = resolve_template(&key, vars)?;
+                resolve_json_templates(&mut nested, vars)?;
+                resolved.insert(key, nested);
+            }
+            *object = resolved;
+        }
+        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
+    }
+    Ok(())
 }
 
 /// Apply variable resolution to target / headers / body.
@@ -167,6 +194,10 @@ pub fn resolve_request(
         }
         ProtocolPayload::Graphql(payload) => {
             payload.query = resolve_template(&payload.query, &vars)?;
+            resolve_json_templates(&mut payload.variables, &vars)?;
+            if let Some(value) = &mut payload.operation_name {
+                *value = resolve_template(value, &vars)?;
+            }
             for (name, value) in &mut payload.headers {
                 *name = resolve_template(name, &vars)?;
                 *value = resolve_template(value, &vars)?;
@@ -177,11 +208,16 @@ pub fn resolve_request(
                 *name = resolve_template(name, &vars)?;
                 *value = resolve_template(value, &vars)?;
             }
+            for subprotocol in &mut payload.subprotocols {
+                *subprotocol = resolve_template(subprotocol, &vars)?;
+            }
             for message in &mut payload.messages {
                 message.data = resolve_template(&message.data, &vars)?;
             }
         }
         ProtocolPayload::Grpc(payload) => {
+            payload.service = resolve_template(&payload.service, &vars)?;
+            payload.method = resolve_template(&payload.method, &vars)?;
             for (name, value) in &mut payload.metadata {
                 *name = resolve_template(name, &vars)?;
                 *value = resolve_template(value, &vars)?;
@@ -190,7 +226,7 @@ pub fn resolve_request(
                 *value = resolve_template(value, &vars)?;
             }
         }
-        ProtocolPayload::Raw(_) => {}
+        ProtocolPayload::Raw(payload) => resolve_json_templates(payload, &vars)?,
     }
 
     Ok(request)
@@ -201,10 +237,30 @@ fn apply_global_parameters(
     parameters: &[GlobalParameter],
     vars: &HashMap<String, String>,
 ) -> Result<(), ResolveError> {
+    let overrides = request
+        .metadata
+        .get(GLOBAL_PARAMETER_OVERRIDES_METADATA_KEY)
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .unwrap_or_default();
     let ProtocolPayload::Http(payload) = &mut request.payload else {
         return Ok(());
     };
-    for parameter in parameters.iter().filter(|parameter| parameter.enabled) {
+    for parameter in parameters {
+        let location = match parameter.location {
+            GlobalParameterLocation::Header => "header",
+            GlobalParameterLocation::Cookie => "cookie",
+            GlobalParameterLocation::Query => "query",
+            GlobalParameterLocation::Body => "body",
+        };
+        let override_key = format!("{location}:{}", parameter.name.trim().to_lowercase());
+        let enabled = overrides
+            .get(&override_key)
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(parameter.enabled);
+        if !enabled {
+            continue;
+        }
         let name = resolve_template(parameter.name.trim(), vars)?;
         if name.is_empty() {
             continue;
@@ -377,13 +433,20 @@ mod tests {
 
     #[test]
     fn resolves_http_envelope() {
-        let mut req = RequestEnvelope::http_get("t", "https://{{host}}/{{id}}");
+        let mut req = RequestEnvelope::http_get(
+            "t",
+            "https://{{host}}/{{id}}?{{query_name}}={{query_value}}",
+        );
         req.variables.insert("host".into(), "api.test".into());
         req.variables.insert("id".into(), "42".into());
+        req.variables.insert("query_name".into(), "region".into());
+        req.variables.insert("query_value".into(), "cn".into());
+        req.variables.insert("header_name".into(), "X-Token".into());
+        req.variables.insert("body_value".into(), "request-body".into());
         req.payload = ProtocolPayload::Http(HttpPayload {
-            method: "GET".into(),
-            headers: vec![("X-Token".into(), "{{token}}".into())],
-            body: None,
+            method: "POST".into(),
+            headers: vec![("{{header_name}}".into(), "{{token}}".into())],
+            body: Some("{\"value\":\"{{body_value}}\"}".into()),
             body_encoding: "text".into(),
             body_source: None,
             multipart: vec![],
@@ -392,11 +455,110 @@ mod tests {
         let mut scope = VariableScope::default();
         scope.environment.insert("token".into(), "abc".into());
         let resolved = resolve_request(req, &scope).expect("ok");
-        assert_eq!(resolved.target, "https://api.test/42");
+        assert_eq!(resolved.target, "https://api.test/42?region=cn");
         match resolved.payload {
-            ProtocolPayload::Http(p) => assert_eq!(p.headers[0].1, "abc"),
+            ProtocolPayload::Http(p) => {
+                assert_eq!(p.headers[0], ("X-Token".into(), "abc".into()));
+                assert_eq!(p.body.as_deref(), Some("{\"value\":\"request-body\"}"));
+            }
             _ => panic!("expected http"),
         }
+    }
+
+    #[test]
+    fn resolves_graphql_variables_and_operation_name() {
+        let mut request = RequestEnvelope::http_get("graphql", "https://{{host}}/graphql");
+        request.payload = ProtocolPayload::Graphql(core_domain::GraphqlPayload {
+            query: "query {{operation}}($id: ID!) { user(id: $id) { id } }".into(),
+            variables: serde_json::json!({"{{variable_name}}": "{{user_id}}", "nested": ["{{region}}"]}),
+            operation_name: Some("{{operation}}".into()),
+            headers: vec![("X-Region".into(), "{{region}}".into())],
+        });
+        request.variables = HashMap::from([
+            ("host".into(), "api.test".into()),
+            ("operation".into(), "GetUser".into()),
+            ("variable_name".into(), "id".into()),
+            ("user_id".into(), "42".into()),
+            ("region".into(), "cn".into()),
+        ]);
+
+        let resolved = resolve_request(request, &VariableScope::default()).expect("resolve");
+        let ProtocolPayload::Graphql(payload) = resolved.payload else {
+            panic!("graphql")
+        };
+        assert_eq!(payload.operation_name.as_deref(), Some("GetUser"));
+        assert_eq!(payload.variables, serde_json::json!({"id": "42", "nested": ["cn"]}));
+        assert!(payload.query.starts_with("query GetUser"));
+    }
+
+    #[test]
+    fn resolves_websocket_and_grpc_protocol_fields() {
+        let scope = VariableScope {
+            environment: HashMap::from([
+                ("subprotocol".into(), "graphql-transport-ws".into()),
+                ("service".into(), "users.UserService".into()),
+                ("method".into(), "GetUser".into()),
+            ]),
+            ..VariableScope::default()
+        };
+        let mut websocket = RequestEnvelope::http_get("websocket", "wss://example.test/socket");
+        websocket.payload = ProtocolPayload::Websocket(core_domain::WebSocketPayload {
+            headers: vec![],
+            subprotocols: vec!["{{subprotocol}}".into()],
+            messages: vec![],
+            receive_limit: Some(1),
+            reconnect_max: 0,
+            reconnect_delay_ms: 1_000,
+        });
+        let ProtocolPayload::Websocket(payload) = resolve_request(websocket, &scope).unwrap().payload else {
+            panic!("websocket")
+        };
+        assert_eq!(payload.subprotocols, vec!["graphql-transport-ws"]);
+
+        let mut grpc = RequestEnvelope::http_get("grpc", "https://example.test");
+        grpc.payload = ProtocolPayload::Grpc(core_domain::GrpcPayload {
+            service: "{{service}}".into(),
+            method: "{{method}}".into(),
+            message_base64: String::new(),
+            mode: "unary".into(),
+            metadata: vec![],
+            descriptor_set_base64: None,
+            message_json: Some("{\"id\":\"{{method}}\"}".into()),
+        });
+        let ProtocolPayload::Grpc(payload) = resolve_request(grpc, &scope).unwrap().payload else {
+            panic!("grpc")
+        };
+        assert_eq!(payload.service, "users.UserService");
+        assert_eq!(payload.method, "GetUser");
+        assert_eq!(payload.message_json.as_deref(), Some("{\"id\":\"GetUser\"}"));
+    }
+
+    #[test]
+    fn resolves_all_strings_in_raw_protocol_payloads() {
+        let mut request = RequestEnvelope::http_get("raw", "redis://{{host}}:6379");
+        request.payload = ProtocolPayload::Raw(serde_json::json!({
+            "{{field_name}}": "{{username}}",
+            "commands": [["SET", "{{key}}", "{{value}}"]],
+            "database": 2,
+            "transactional": true
+        }));
+        request.variables = HashMap::from([
+            ("host".into(), "127.0.0.1".into()),
+            ("field_name".into(), "username".into()),
+            ("username".into(), "default".into()),
+            ("key".into(), "greeting".into()),
+            ("value".into(), "hello".into()),
+        ]);
+
+        let resolved = resolve_request(request, &VariableScope::default()).expect("resolve");
+        assert_eq!(resolved.target, "redis://127.0.0.1:6379");
+        let ProtocolPayload::Raw(payload) = resolved.payload else {
+            panic!("raw")
+        };
+        assert_eq!(payload["username"], "default");
+        assert_eq!(payload["commands"][0], serde_json::json!(["SET", "greeting", "hello"]));
+        assert_eq!(payload["database"], 2);
+        assert_eq!(payload["transactional"], true);
     }
 
     #[test]
@@ -417,8 +579,10 @@ mod tests {
         let parameter = |location, name: &str, value: &str| GlobalParameter {
             location,
             name: name.into(),
+            parameter_type: "string".into(),
             value: value.into(),
             enabled: true,
+            required: false,
             description: String::new(),
         };
         let scope = VariableScope {
@@ -454,5 +618,41 @@ mod tests {
             serde_json::from_str(payload.body.as_deref().unwrap()).unwrap();
         assert_eq!(body["local"], true);
         assert_eq!(body["global"], "yes");
+    }
+
+    #[test]
+    fn request_metadata_overrides_global_parameter_enabled_state() {
+        let parameter = |name: &str, enabled| GlobalParameter {
+            location: GlobalParameterLocation::Header,
+            name: name.into(),
+            parameter_type: "string".into(),
+            value: "value".into(),
+            enabled,
+            required: false,
+            description: String::new(),
+        };
+        let scope = VariableScope {
+            global_parameters: vec![
+                parameter("X-Globally-On", true),
+                parameter("X-Globally-Off", false),
+            ],
+            ..VariableScope::default()
+        };
+        let mut req = RequestEnvelope::http_get("t", "https://example.test");
+        req.metadata = serde_json::json!({
+            GLOBAL_PARAMETER_OVERRIDES_METADATA_KEY: {
+                "header:x-globally-on": false,
+                "header:x-globally-off": true
+            }
+        });
+
+        let resolved = resolve_request(req, &scope).expect("resolve");
+        let ProtocolPayload::Http(payload) = resolved.payload else {
+            panic!("http")
+        };
+        assert!(!payload.headers.iter().any(|(name, _)| name == "X-Globally-On"));
+        assert!(payload
+            .headers
+            .contains(&("X-Globally-Off".into(), "value".into())));
     }
 }

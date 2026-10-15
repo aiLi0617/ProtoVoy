@@ -21,11 +21,19 @@ pub enum GlobalParameterLocation {
 pub struct GlobalParameter {
     pub location: GlobalParameterLocation,
     pub name: String,
+    #[serde(default = "default_parameter_type")]
+    pub parameter_type: String,
     pub value: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
     pub description: String,
+}
+
+fn default_parameter_type() -> String {
+    "string".into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

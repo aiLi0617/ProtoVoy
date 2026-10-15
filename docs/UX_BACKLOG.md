@@ -14,9 +14,9 @@
 
 | ID | Level | Summary | Status |
 |----|-------|---------|--------|
-| UIA-001 | P1 | Workbench private controls vs shared primitives | open |
-| UIA-002 | P1 | Incomplete i18n across workbenches | open |
-| UIA-003 | P1 | Protocol / workbench icons collide on `bolt` | open |
+| UIA-001 | P1 | Workbench private controls vs shared primitives | done |
+| UIA-002 | P1 | Incomplete i18n across workbenches | partial |
+| UIA-003 | P1 | Protocol / workbench icons collide on `bolt` | done |
 | UIA-004 | P2 | Character glyphs used as control icons | done |
 | UIA-005 | P1 | Hit targets below 36px / 44px | open |
 | UIA-006 | P1 | Excessive 9–10px type | open |
@@ -43,7 +43,7 @@
 | UIA-027 | P2 | Disabled opacity hurts contrast | partial |
 | UIA-028 | P2 | Custom menus lack keyboard model | open |
 | UIA-029 | P2 | `100vh` + overflow hidden on mobile | done |
-| UIA-030 | P1 | Design docs marked complete while UX debt remains | open |
+| UIA-030 | P1 | Design docs marked complete while UX debt remains | done |
 | UIA-031 | P2 | No component gallery / theme matrix | open |
 | UIA-032 | P2 | E2E thin on keyboard / i18n / contrast | open |
 | UIA-033 | P2 | Empty states not using shared EmptyState | open |

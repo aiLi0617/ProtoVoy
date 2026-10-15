@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { applyTheme } from "@protovoy/design-system";
-import { Icon } from "./Icons";
+import { Icon, type IconName } from "./Icons";
 import { Button, IconButton } from "./Components";
 import { useAppStore } from "./appStore";
-import { DEFAULT_WORKBENCH_GROUPS, WORKBENCH_LABELS } from "./WorkbenchDeck";
+import { DEFAULT_WORKBENCH_GROUPS, WORKBENCH_ICONS, WORKBENCH_LABELS } from "./WorkbenchDeck";
 import { useI18n } from "./i18n";
-import { FeedbackProvider } from "./Feedback";
+import { FeedbackProvider, useFeedback } from "./Feedback";
 import { SettingsDialog } from "./SettingsDialog";
 import { BrandMark } from "./BrandMark";
 import { CollaborationHub, type CollaborationTab } from "./CollaborationHub";
@@ -47,10 +47,18 @@ export function calculateExplorerWidth(clientX: number, explorerLeft: number, ma
 function EnvironmentVariablesDialog({ open, onClose, environment }: { open: boolean; onClose: () => void; environment?: EnvironmentEditorProps }) {
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const { confirm } = useFeedback();
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => { if (!open) setDirty(false); }, [open]);
+  const requestClose = async () => {
+    if (dirty && !await confirm({ title: "放弃未保存的更改？", description: "关闭环境管理后，尚未保存的内容将丢失。", confirmLabel: "放弃并关闭", tone: "danger" })) return;
+    setDirty(false);
+    onClose();
+  };
   if (!open) return null;
-  return <ModalFrame open={open} onClose={onClose} className="environment-dialog" ariaLabelledBy={titleId} initialFocusRef={closeRef}>
-    <header className="settings-dialog-header"><div><h2 id={titleId}>环境管理</h2></div><IconButton ref={closeRef} label="关闭环境管理" icon="close" onClick={onClose} /></header>
-    <div className="environment-dialog-body">{environment ? <EnvironmentEditor {...environment}/> : <p className="settings-hint">当前运行端未提供环境变量编辑能力。</p>}</div>
+  return <ModalFrame open={open} onClose={() => void requestClose()} className="environment-dialog" ariaLabelledBy={titleId} initialFocusRef={closeRef}>
+    <header className="settings-dialog-header"><div><h2 id={titleId}>环境管理</h2></div><IconButton ref={closeRef} label="关闭环境管理" icon="close" onClick={() => void requestClose()} /></header>
+    <div className="environment-dialog-body">{environment ? <EnvironmentEditor {...environment} onDirtyChange={setDirty}/> : <p className="settings-hint">当前运行端未提供环境变量编辑能力。</p>}</div>
   </ModalFrame>;
 }
 
@@ -329,18 +337,18 @@ export function AppShell({ title = "ProtoVoy", channelLabel, children, explorer,
     setCollaborationOpen(true);
   };
 
-  const workbenchCommands = DEFAULT_WORKBENCH_GROUPS.flatMap((group) => group.workbenchIds.filter((id) => id !== "runner").map((id) => ({ id, group: group.label, label: WORKBENCH_LABELS[id] ?? id }))).filter((item) => `${item.label} ${item.group}`.toLowerCase().includes(search.toLowerCase()));
+  const workbenchCommands = DEFAULT_WORKBENCH_GROUPS.flatMap((group) => group.workbenchIds.filter((id) => id !== "runner").map((id) => ({ id, group: group.label, label: WORKBENCH_LABELS[id] ?? id, icon: WORKBENCH_ICONS[id] ?? "command" as IconName }))).filter((item) => `${item.label} ${item.group}`.toLowerCase().includes(search.toLowerCase()));
   const actions = [
     { id: "action-settings", label: applicationSettingsLabel, icon: "sliders" as const, run: () => openSettings() },
     ...(collaboration ? [{ id: "action-collab", label: t("collaboration.open"), icon: "users" as const, run: () => openCollaboration("team") }] : []),
     { id: "action-theme", label: t("command.theme"), icon: "sun" as const, run: () => cycleTheme() },
     { id: "action-import", label: t("command.import"), icon: "download" as const, run: () => { setPaletteOpen(false); window.dispatchEvent(new CustomEvent("protovoy-import-requests")); } },
     { id: "action-history", label: t("command.history"), icon: "activity" as const, run: () => { setPaletteOpen(false); openProjectModule("history"); } },
-    { id: "action-ai", label: t("command.openAi"), icon: "bolt" as const, run: () => { setPaletteOpen(false); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "ai" })); } },
+    { id: "action-ai", label: t("command.openAi"), icon: WORKBENCH_ICONS.ai, run: () => { setPaletteOpen(false); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "ai" })); } },
   ].filter((item) => !search.trim() || item.label.toLowerCase().includes(search.toLowerCase()));
   const commandResults = [
     ...actions.map((action) => ({ id: action.id, label: action.label, icon: action.icon, run: action.run, group: "actions" as const })),
-    ...workbenchCommands.map((command) => ({ id: `workbench-${command.id}`, label: command.label, icon: "bolt" as const, run: () => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: command.id })), group: "workbenches" as const })),
+    ...workbenchCommands.map((command) => ({ id: `workbench-${command.id}`, label: command.label, icon: command.icon, run: () => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: command.id })), group: "workbenches" as const })),
   ];
   useEffect(() => { setActiveCommand(0); }, [search, paletteOpen]);
   useDialogFocus(paletteOpen, paletteRef, () => setPaletteOpen(false), paletteInputRef);
@@ -381,7 +389,7 @@ export function AppShell({ title = "ProtoVoy", channelLabel, children, explorer,
     <div ref={workspaceRef} className={`app-workspace${showProjectRail ? " has-project-rail" : ""} ${showExplorer ? "explorer-open" : "explorer-collapsed"}`} style={{ "--explorer-width": `${explorerWidth}px` } as CSSProperties}>
       {showProjectRail ? <nav className="project-module-nav" aria-label="项目功能">
         <button type="button" className={projectModule === "resources" ? "is-active" : undefined} onClick={() => { openProjectModule("resources"); window.dispatchEvent(new CustomEvent("protovoy-project-resources")); }}><Icon name="folder"/><span>接口管理</span></button>
-        <button type="button" className={projectModule === "automation" ? "is-active" : undefined} onClick={() => { openProjectModule("automation"); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "runner" })); }}><Icon name="bolt"/><span>自动化测试</span></button>
+        <button type="button" className={projectModule === "automation" ? "is-active" : undefined} onClick={() => { openProjectModule("automation"); window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "runner" })); }}><Icon name={WORKBENCH_ICONS.runner}/><span>自动化测试</span></button>
         <button type="button" className={projectModule === "history" ? "is-active" : undefined} onClick={() => openProjectModule("history")}><Icon name="activity"/><span>请求历史</span></button>
         <button type="button" className={`project-module-settings${projectModule === "settings" ? " is-active" : ""}`} onClick={() => { setPaletteOpen(false); setSettingsOpen(false); setProjectSettingsCategory("basic"); openProjectModule("settings"); }}><Icon name="sliders"/><span>项目设置</span></button>
         <div className="project-rail-brand" aria-label={title}><span className="brand-mark"><BrandMark /></span><strong>{title}</strong></div>
@@ -398,7 +406,7 @@ export function AppShell({ title = "ProtoVoy", channelLabel, children, explorer,
       <div id="protovoy-command-results" role="listbox" aria-label={commandTitle}>
       {actions.length ? <><div className="command-group-label">{t("command.actions")}</div>{actions.map((action, index) => <button id={`command-${action.id}`} role="option" aria-selected={activeCommand === index} className={activeCommand === index ? "is-active" : undefined} key={action.id} type="button" onMouseEnter={() => setActiveCommand(index)} onClick={() => runCommand(index)}><span><Icon name={action.icon}/>{action.label}</span></button>)}</> : null}
       <div className="command-group-label">{t("command.workbenches")}</div>
-      {workbenchCommands.map((command, index) => { const resultIndex = actions.length + index; return <button type="button" id={`command-workbench-${command.id}`} role="option" aria-selected={activeCommand === resultIndex} className={activeCommand === resultIndex ? "is-active" : undefined} key={command.id} onMouseEnter={() => setActiveCommand(resultIndex)} onClick={() => runCommand(resultIndex)}><span><Icon name="bolt"/>{command.label}</span><kbd>Enter</kbd></button>; })}
+      {workbenchCommands.map((command, index) => { const resultIndex = actions.length + index; return <button type="button" id={`command-workbench-${command.id}`} role="option" aria-selected={activeCommand === resultIndex} className={activeCommand === resultIndex ? "is-active" : undefined} key={command.id} onMouseEnter={() => setActiveCommand(resultIndex)} onClick={() => runCommand(resultIndex)}><span><Icon name={command.icon}/>{command.label}</span><kbd>Enter</kbd></button>; })}
       {workbenchCommands.length === 0 && actions.length === 0 ? <div className="command-empty">{t("command.empty")}</div> : null}
     </div></div></div> : null}
     <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} channelLabel={channelLabel} />

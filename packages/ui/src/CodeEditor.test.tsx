@@ -17,3 +17,17 @@ test("renders response content with stable line numbers and highlighting while M
   assert.match(markup, /color:#C586C0[^>]*>true/);
   assert.doesNotMatch(markup, /visibility:hidden/);
 });
+
+test("renders editable JSON with syntax colors instead of a gray plaintext flash", () => {
+  const markup = renderToStaticMarkup(<CodeEditor value={'{\n  "count": 12\n}'} onChange={() => {}} language="json"/>);
+
+  assert.match(markup, /class="code-editor-fallback"/);
+  assert.match(markup, /aria-hidden="true"/);
+  assert.match(markup, /class="code-editor-fallback-line-number"/);
+  assert.match(markup, /color:#9CDCFE/);
+  assert.match(markup, /color:#B5CEA8[^>]*>12/);
+  assert.match(markup, /class="code-editor-fallback-input"/);
+  assert.match(markup, /color:transparent/);
+  assert.match(markup, /-webkit-text-fill-color:transparent/);
+  assert.doesNotMatch(markup, /color:var\(--protovoy-text\)/);
+});

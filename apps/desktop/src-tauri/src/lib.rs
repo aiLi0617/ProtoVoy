@@ -673,6 +673,7 @@ async fn save_request(
     let mut envelope = build_envelope(&request);
     envelope.variables = request.variables;
     envelope.assertions = request.assertions;
+    envelope.environment_ref = request.environment_id;
     envelope.auth_ref = request.auth.map(Into::into);
     state
         .store

@@ -2,7 +2,26 @@ import { forwardRef, lazy, Suspense, useEffect, useImperativeHandle, useRef, use
 import type { editor } from "monaco-editor";
 import { useAppStore } from "./appStore";
 
-const MonacoEditor = lazy(() => import("./MonacoEditorImpl"));
+type MonacoEditorModule = typeof import("./MonacoEditorImpl");
+let monacoEditorModulePromise: Promise<MonacoEditorModule> | undefined;
+let preloadedMonacoEditor: MonacoEditorModule["default"] | undefined;
+
+function loadMonacoEditor(): Promise<MonacoEditorModule> {
+  monacoEditorModulePromise ??= import("./MonacoEditorImpl").then((module) => {
+    preloadedMonacoEditor = module.default;
+    return module;
+  }).catch((error) => {
+    monacoEditorModulePromise = undefined;
+    throw error;
+  });
+  return monacoEditorModulePromise;
+}
+
+const LazyMonacoEditor = lazy(loadMonacoEditor);
+
+export async function preloadCodeEditor(): Promise<void> {
+  await loadMonacoEditor();
+}
 
 export interface CodeEditorProps {
   value: string;
@@ -43,29 +62,40 @@ function highlightFallbackLine(line: string, language: string, dark: boolean): R
 }
 
 function CodeEditorFallback({ value, readOnly, onChange, language, theme, wordWrap }: Pick<CodeEditorProps, "value" | "readOnly" | "onChange" | "language" | "wordWrap"> & { theme: string }) {
-  if (readOnly) {
-    const dark = theme === "protovoy-dark";
-    const lines = value.split("\n");
-    return <div
+  const dark = theme === "protovoy-dark";
+  const lines = value.split("\n");
+  const highlightedContentRef = useRef<HTMLDivElement | null>(null);
+  const highlightedContent = <div
+      ref={highlightedContentRef}
       className="code-editor-fallback"
-      role="textbox"
-      aria-label="代码编辑器正在加载"
-      aria-readonly="true"
+      role={readOnly ? "textbox" : undefined}
+      aria-label={readOnly ? "代码编辑器正在加载" : undefined}
+      aria-readonly={readOnly ? "true" : undefined}
+      aria-hidden={readOnly ? undefined : "true"}
       style={{ boxSizing: "border-box", width: "100%", height: "100%", overflow: "auto", padding: "6px 0 10px", background: "var(--protovoy-bg-elevated)", color: dark ? "#D4D4D4" : "#172033", font: "12px/19px var(--protovoy-mono)" }}
     >
       {lines.map((line, index) => <div className="code-editor-fallback-line" key={index} style={{ display: "flex", minHeight: 19 }}>
-        <span className="code-editor-fallback-line-number" aria-hidden="true" style={{ width: 56, flex: "0 0 56px", boxSizing: "border-box", paddingRight: 12, color: dark ? "#858585" : "#6E7681", textAlign: "right", userSelect: "none" }}>{index + 1}</span>
-        <code style={{ minWidth: 0, flex: 1, paddingRight: 12, color: "inherit", font: "inherit", whiteSpace: wordWrap ? "pre-wrap" : "pre", overflowWrap: wordWrap ? "anywhere" : "normal" }}>{highlightFallbackLine(line, language ?? "plaintext", dark)}</code>
+        <span className="code-editor-fallback-line-number" aria-hidden="true" style={{ width: 34, flex: "0 0 34px", boxSizing: "border-box", paddingRight: 12, color: dark ? "#858585" : "#6E7681", textAlign: "right", userSelect: "none" }}>{index + 1}</span>
+        <code style={{ minWidth: 0, flex: 1, paddingLeft: 14, paddingRight: 12, color: "inherit", font: "inherit", whiteSpace: wordWrap ? "pre-wrap" : "pre", overflowWrap: wordWrap ? "anywhere" : "normal" }}>{highlightFallbackLine(line, language ?? "plaintext", dark)}</code>
       </div>)}
     </div>;
-  }
-  return <textarea
-    aria-label="代码编辑器正在加载"
-    value={value}
-    onChange={(event) => onChange(event.target.value)}
-    readOnly={readOnly}
-    style={{ boxSizing: "border-box", width: "100%", height: "100%", resize: "none", margin: 0, border: 0, outline: 0, padding: "6px 12px 10px", background: "var(--protovoy-bg-elevated)", color: "var(--protovoy-text)", font: "12px/19px var(--protovoy-mono)", whiteSpace: "pre" }}
-  />;
+  if (readOnly) return highlightedContent;
+  return <div style={{ position: "relative", width: "100%", height: "100%" }}>
+    {highlightedContent}
+    <textarea
+      className="code-editor-fallback-input"
+      aria-label="代码编辑器正在加载"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      onScroll={(event) => {
+        if (!highlightedContentRef.current) return;
+        highlightedContentRef.current.scrollTop = event.currentTarget.scrollTop;
+        highlightedContentRef.current.scrollLeft = event.currentTarget.scrollLeft;
+      }}
+      spellCheck={false}
+      style={{ position: "absolute", inset: 0, boxSizing: "border-box", width: "100%", height: "100%", resize: "none", margin: 0, border: 0, outline: 0, padding: "6px 12px 10px 48px", overflow: "auto", background: "transparent", color: "transparent", WebkitTextFillColor: "transparent", caretColor: dark ? "#D4D4D4" : "#172033", font: "12px/19px var(--protovoy-mono)", whiteSpace: wordWrap ? "pre-wrap" : "pre", overflowWrap: wordWrap ? "anywhere" : "normal" }}
+    />
+  </div>;
 }
 
 function useResolvedEditorTheme() {
@@ -84,6 +114,8 @@ function useResolvedEditorTheme() {
 
 export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEditor({ value, onChange, language = "plaintext", height = 180, readOnly = false, bare = false, wordWrap = true, revealLine, findTrigger }, ref) {
   const canLoadEditor = typeof window !== "undefined";
+  const hasPreloadedEditor = Boolean(preloadedMonacoEditor);
+  const MonacoEditor = preloadedMonacoEditor ?? LazyMonacoEditor;
   const editorTheme = useResolvedEditorTheme();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const readyFramesRef = useRef<number[]>([]);
@@ -111,7 +143,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
   useEffect(() => () => { readyFramesRef.current.forEach((frame) => cancelAnimationFrame(frame)); }, []);
   const fallback = <CodeEditorFallback value={value} onChange={onChange} readOnly={readOnly} language={language} theme={editorTheme} wordWrap={wordWrap}/>;
   return <div className={bare ? "code-editor code-editor-bare" : "code-editor"} style={{ position: "relative", height, marginTop: bare ? 0 : 6, overflow: "hidden", border: bare ? 0 : "1px solid var(--protovoy-border)", borderRadius: bare ? 0 : 9, background: "var(--protovoy-bg-elevated)" }}>
-    {canLoadEditor ? <div aria-hidden={!editorReady} style={{ height: "100%", visibility: editorReady ? "visible" : "hidden" }}>
+    {canLoadEditor ? <div aria-hidden={!editorReady} style={{ height: "100%", visibility: editorReady || hasPreloadedEditor ? "visible" : "hidden" }}>
       <Suspense fallback={null}>
         <MonacoEditor
           height="100%"
@@ -137,6 +169,6 @@ export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function
         />
       </Suspense>
     </div> : null}
-    {!editorReady ? <div style={{ position: "absolute", inset: 0, zIndex: 1 }}>{fallback}</div> : null}
+    {!editorReady && !hasPreloadedEditor ? <div style={{ position: "absolute", inset: 0, zIndex: 1 }}>{fallback}</div> : null}
   </div>;
 });

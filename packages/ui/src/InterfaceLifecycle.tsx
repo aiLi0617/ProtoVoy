@@ -394,7 +394,7 @@ export function InterfaceLifecycleShell({
       aria-label={`${title} \u63a5\u53e3\u5de5\u4f5c\u53f0`}
     >
       <div className="interface-lifecycle-header">
-        <RovingTabList className="interface-lifecycle-tabs" ariaLabel="接口生命周期" style={{ flex: "0 1 auto", paddingRight: 0, borderBottom: 0, background: "transparent" }}>
+        <RovingTabList className="interface-lifecycle-tabs" ariaLabel="接口生命周期" style={{ flex: "0 0 auto", paddingRight: 0, borderBottom: 0, background: "transparent" }}>
           {availableTabs.map((id) => {
             const tab = TABS[id];
             return (
@@ -414,10 +414,11 @@ export function InterfaceLifecycleShell({
           })}
         </RovingTabList>
         <div
-          ref={setNameTarget}
           id={`interface-name-${sessionId}`}
           className={`interface-lifecycle-name-slot ${isSaved ? "is-saved" : "is-unsaved"}`}
-        />
+        >
+          <div ref={setNameTarget} className="interface-lifecycle-name-control" />
+        </div>
       </div>
       <div id={`interface-commandbar-${sessionId}`} data-active-tab={active} className={`interface-lifecycle-commandbar${active === "debug" || active === "definition" ? "" : " is-hidden"}`} />
       <div

@@ -14,6 +14,7 @@ import {
   Code2,
   Command,
   Copy,
+  CircleMinus,
   Database,
   Download,
   ExternalLink,
@@ -58,6 +59,7 @@ export type IconName =
   | "code"
   | "command"
   | "copy"
+  | "minus-circle"
   | "database"
   | "download"
   | "edit"
@@ -99,6 +101,7 @@ const map: Record<IconName, ComponentType<LucideProps>> = {
   code: Code2,
   command: Command,
   copy: Copy,
+  "minus-circle": CircleMinus,
   database: Database,
   download: Download,
   edit: Pencil,
@@ -141,22 +144,23 @@ export function Icon({
 /** Stable protocol / workbench icon hints (UIA-003). */
 export const workbenchIconName: Record<string, IconName> = {
   http: "globe",
-  graphql: "code",
+  graphql: "gitBranch",
   grpc: "network",
-  rpc: "network",
+  rpc: "module",
   websocket: "websocket",
   sse: "activity",
-  tcp: "network",
-  udp: "network",
+  tcp: "arrow-up",
+  udp: "arrow-down",
   mqtt: "send",
-  amqp: "send",
-  kafka: "activity",
+  amqp: "archive",
+  kafka: "wrap",
   redis: "database",
-  sql: "database",
-  mock: "archive",
-  runner: "bolt",
-  gateway: "network",
+  sql: "code",
+  mock: "triangle",
+  runner: "send",
+  gateway: "external",
   capture: "search",
-  plugins: "bolt",
+  plugins: "command",
   ai: "star",
+  __scripts: "settings",
 };

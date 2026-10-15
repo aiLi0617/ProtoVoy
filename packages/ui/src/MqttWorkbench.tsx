@@ -4,6 +4,7 @@ import { ProtocolWorkbenchLayout } from "./ProtocolWorkbenchLayout";
 import { Checkbox, Select, Textarea, TextInput } from "./Components";
 import { ProtocolField, ProtocolFormCard, ProtocolFormGrid, ProtocolFormOptions } from "./ProtocolForm";
 import { useWorkbenchHydration } from "./useWorkbenchHydration";
+import { useI18n } from "./i18n";
 
 export interface MqttWorkbenchRequest {
   name: string; target: string; mode: "publish" | "subscribe"; clientId: string;
@@ -18,6 +19,7 @@ export interface MqttWorkbenchProps {
 }
 
 export function MqttWorkbench({ onSend, onSave, onCancel }: MqttWorkbenchProps) {
+  const { t } = useI18n();
   const [name,setName]=useState("MQTT request"), [target,setTarget]=useState("mqtt://127.0.0.1:1883");
   const [mode,setMode]=useState<"publish"|"subscribe">("publish"), [clientId,setClientId]=useState(`protovoy-${crypto.randomUUID().slice(0,8)}`);
   const [username,setUsername]=useState(""), [passwordRef,setPasswordRef]=useState(""), [cleanSession,setCleanSession]=useState(true), [keepAliveSeconds,setKeepAliveSeconds]=useState(30);
@@ -29,7 +31,7 @@ export function MqttWorkbench({ onSend, onSave, onCancel }: MqttWorkbenchProps) 
   useWorkbenchHydration("mqtt", (detail) => { const envelope = detail as { protocolId?: string; name?: string; target?: string; payload?: { type?: string; value?: Partial<MqttWorkbenchRequest> } & Partial<MqttWorkbenchRequest> }; if (envelope.protocolId !== "mqtt" || envelope.payload?.type !== "raw") return; const raw = envelope.payload.value ?? envelope.payload; setName(envelope.name ?? ""); setTarget(envelope.target ?? ""); setMode(raw.mode ?? "publish"); setClientId(raw.clientId ?? ""); setUsername(raw.username ?? ""); setPasswordRef(raw.passwordRef ?? ""); setCleanSession(raw.cleanSession ?? true); setKeepAliveSeconds(raw.keepAliveSeconds ?? 30); setTopic(raw.topic ?? ""); setPayload(raw.payload ?? ""); setEncoding(raw.encoding ?? "text"); setQos(raw.qos ?? 0); setRetain(raw.retain ?? false); setReceiveLimit(raw.receiveLimit ?? 1); setCaPemRef(raw.caPemRef ?? ""); setServerName(raw.serverName ?? ""); });
   const build=():MqttWorkbenchRequest=>({name,target,mode,clientId,username,passwordRef,cleanSession,keepAliveSeconds,topic,payload,encoding,qos,retain,receiveLimit,caPemRef,serverName,timeoutMs:30000});
   async function send(){setLoading(true);setResult(null);setMessage("");try{setResult(await onSend(build(),{onStarted:setExecutionId,onChunk:()=>{}}))}catch(error){setMessage(error instanceof Error?error.message:String(error))}finally{setLoading(false);setExecutionId(null)}}
-  async function save(){if(!onSave)return;try{await onSave(build());setMessage("已保存到集合")}catch(error){setMessage(error instanceof Error?error.message:String(error))}}
+  async function save(){if(!onSave)return;try{await onSave(build());setMessage(t("status.savedToCollection"))}catch(error){setMessage(error instanceof Error?error.message:String(error))}}
   const tls=target.startsWith("mqtts://");
   return <ProtocolWorkbenchLayout id="mqtt" protocol="MQTT" name={name} target={target} targetLabel="MQTT Broker 地址" actionLabel={mode==="publish"?"Publish":"Subscribe"} loading={loading} result={result} responseTitle={mode==="publish"?"Publish acknowledgement":"Incoming messages"} emptyResponse={mode==="publish"?"发布确认会显示在这里":"订阅消息会实时追加到这里"} message={message} onNameChange={setName} onTargetChange={setTarget} onRun={()=>void send()} onSave={onSave?()=>void save():undefined} onCancel={onCancel&&executionId?()=>void onCancel(executionId):undefined} controls={<><button type="button" role="tab" tabIndex={mode==="publish"?0:-1} aria-selected={mode==="publish"} onClick={()=>setMode("publish")}>Publish</button><button type="button" role="tab" tabIndex={mode==="subscribe"?0:-1} aria-selected={mode==="subscribe"} onClick={()=>setMode("subscribe")}>Subscribe</button></>}>
     <ProtocolFormCard>

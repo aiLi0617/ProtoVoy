@@ -548,12 +548,16 @@ impl LocalStore {
             params![
                 "default-env",
                 "default-project",
-                "Default",
+                "本地环境",
                 "{}",
                 "[]",
                 "[]",
                 now,
             ],
+        )?;
+        self.conn.execute(
+            "UPDATE environments SET name = '本地环境' WHERE id = 'default-env' AND name IN ('Default', '默认', '默认环境')",
+            [],
         )?;
         Ok(())
     }
@@ -2328,7 +2332,9 @@ mod tests {
         let environments = store
             .list_environments(Some("default-project"))
             .expect("list envs");
-        assert!(environments.iter().any(|item| item.id == "default-env"));
+        assert!(environments
+            .iter()
+            .any(|item| item.id == "default-env" && item.name == "本地环境"));
         let now = Utc::now();
         let script = ScriptRecord {
             id: "script-test".into(),
@@ -2401,8 +2407,10 @@ mod tests {
         env.global_parameters.push(core_domain::GlobalParameter {
             location: core_domain::GlobalParameterLocation::Header,
             name: "X-Client".into(),
+            parameter_type: "string".into(),
             value: "ProtoVoy".into(),
             enabled: true,
+            required: false,
             description: "client marker".into(),
         });
         env.secret_refs.push("apiToken".into());
