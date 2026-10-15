@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { createEnvironmentResource, deleteEnvironmentResource, listEnvironmentResources, updateEnvironmentResource, type EnvironmentResource } from "./agentResources";
-import { LOCAL_ENVIRONMENT_ID, LOCAL_ENVIRONMENT_NAME } from "./environmentPresentation";
+import { GLOBAL_VARIABLES_ENVIRONMENT_ID, LOCAL_ENVIRONMENT_ID, LOCAL_ENVIRONMENT_NAME } from "./environmentPresentation";
 import { Icon } from "./Icons";
 import { Button } from "./Components";
 import { useFeedback } from "./Feedback";
@@ -175,20 +175,21 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret, onSecretExists,
   const [busy, setBusy] = useState(false);
 
   const selectedEnvironment = environments.find((item) => item.id === active);
+  const isLocalEnvironment = selectedEnvironment?.id === LOCAL_ENVIRONMENT_ID;
   const hasUnsavedChanges = active === "global-variables"
     ? text !== formatKv(defaultVariables)
     : active === "global-parameters"
       ? JSON.stringify(globalParameters) !== JSON.stringify(savedGlobalParameters)
       : active === "vault"
         ? JSON.stringify(parseSecretRefs(secretRefs)) !== JSON.stringify(defaultSecretRefs)
-        : Boolean(selectedEnvironment && (selectedEnvironment.id.startsWith("draft-") || environmentName !== selectedEnvironment.name || text !== formatKv(selectedEnvironment.variables)));
+        : Boolean(selectedEnvironment && (selectedEnvironment.id.startsWith("draft-") || (!isLocalEnvironment && environmentName !== selectedEnvironment.name) || text !== formatKv(selectedEnvironment.variables)));
 
   async function reload() {
     setBusy(true);
     setMessage("");
     try {
       const [list, defaults] = await Promise.all([onListEnvironments(), onLoad()]);
-      setEnvironments(list.filter((item) => item.id !== LOCAL_ENVIRONMENT_ID));
+      setEnvironments(list.filter((item) => item.id !== GLOBAL_VARIABLES_ENVIRONMENT_ID));
       setDefaultVariables(defaults.variables ?? {});
       setGlobalParameters(defaults.globalParameters ?? []);
       setSavedGlobalParameters(defaults.globalParameters ?? []);
@@ -321,7 +322,7 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret, onSecretExists,
   }
 
   async function removeEnvironment() {
-    if (!selectedEnvironment || !await confirm({ title: "删除环境", description: `删除环境“${selectedEnvironment.name}”后无法恢复。`, confirmLabel: "删除环境", tone: "danger" })) return;
+    if (!selectedEnvironment || isLocalEnvironment || !await confirm({ title: "删除环境", description: `删除环境“${selectedEnvironment.name}”后无法恢复。`, confirmLabel: "删除环境", tone: "danger" })) return;
     if (selectedEnvironment.id.startsWith("draft-")) {
       setEnvironments((items) => items.filter((item) => item.id !== selectedEnvironment.id));
       setActive("global-variables");
@@ -369,23 +370,23 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret, onSecretExists,
     finally { setBusy(false); }
   }
 
-  const editorTitle = active === "global-variables" ? LOCAL_ENVIRONMENT_NAME : active === "global-parameters" ? "全局参数" : active === "vault" ? "Vault Secrets（密钥库）" : selectedEnvironment?.name ?? "环境";
-  const editorHint = active === "global-variables" ? "本地基础变量可被所有协议请求引用；选择其他环境时，同名变量会被环境值覆盖。" : active === "global-parameters" ? "为 HTTP 请求统一注入 Header、Cookie、Query 和 Body 字段。" : active === "vault" ? "密钥值只写入系统安全存储，项目中仅保存引用名称。" : "当前环境的变量会覆盖同名本地变量。";
+  const editorTitle = active === "global-variables" ? "全局变量" : active === "global-parameters" ? "全局参数" : active === "vault" ? "Vault Secrets（密钥库）" : isLocalEnvironment ? LOCAL_ENVIRONMENT_NAME : selectedEnvironment?.name ?? "环境";
+  const editorHint = active === "global-variables" ? "所有环境和协议请求均可引用的公共变量。" : active === "global-parameters" ? "为 HTTP 请求统一注入 Header、Cookie、Query 和 Body 字段。" : active === "vault" ? "密钥值只写入系统安全存储，项目中仅保存引用名称。" : isLocalEnvironment ? "默认用于本地调试；切换到其他环境时将使用对应的环境变量。" : "当前环境的变量会覆盖同名全局变量。";
 
   return <div className="environment-manager">
     <aside className="environment-manager-nav" aria-label="环境配置导航">
       <section><div className="environment-nav-label">全局</div>
-        <button type="button" className={active === "global-variables" ? "is-active" : undefined} onClick={() => void selectSection("global-variables")}><Icon name="globe"/><span>{LOCAL_ENVIRONMENT_NAME}</span></button>
+        <button type="button" className={active === "global-variables" ? "is-active" : undefined} onClick={() => void selectSection("global-variables")}><Icon name="globe"/><span>全局变量</span></button>
         <button type="button" className={active === "global-parameters" ? "is-active" : undefined} onClick={() => void selectSection("global-parameters")}><Icon name="sliders"/><span>全局参数</span></button>
         <button type="button" className={active === "vault" ? "is-active" : undefined} onClick={() => void selectSection("vault")}><Icon name="archive"/><span>Vault Secrets（密钥库）</span></button>
       </section>
       <section className="environment-list"><div className="environment-nav-label">环境</div>
-        {environments.map((environment) => <button type="button" key={environment.id} className={active === environment.id ? "is-active" : undefined} onClick={() => void selectSection(environment.id)}><b>{environmentBadge(environment.name)}</b><span>{environment.name || "未命名环境"}</span></button>)}
+        {environments.map((environment) => { const name = environment.id === LOCAL_ENVIRONMENT_ID ? LOCAL_ENVIRONMENT_NAME : environment.name || "未命名环境"; return <button type="button" key={environment.id} className={active === environment.id ? "is-active" : undefined} onClick={() => void selectSection(environment.id)}><b>{environmentBadge(name)}</b><span>{name}</span></button>; })}
         <button type="button" className="environment-add" disabled={busy} onClick={() => void addEnvironment()}><Icon name="plus"/><span>新建环境</span></button>
       </section>
     </aside>
     <main className="environment-manager-content">
-      <header><div><span className="environment-title-badge">{active === "vault" ? "密" : active.startsWith("global-") ? "全" : environmentBadge(editorTitle)}</span><div>{selectedEnvironment ? <input className="environment-name-input" aria-label="环境名称" value={environmentName} onChange={(event) => { setEnvironmentName(event.target.value); setValidationError(""); }} placeholder="填写环境名称" disabled={busy} autoFocus={selectedEnvironment.id.startsWith("draft-")}/> : <h3>{editorTitle}</h3>}<p>{editorHint}</p></div></div></header>
+      <header><div><span className="environment-title-badge">{active === "vault" ? "密" : active.startsWith("global-") ? "全" : environmentBadge(editorTitle)}</span><div>{selectedEnvironment && !isLocalEnvironment ? <input className="environment-name-input" aria-label="环境名称" value={environmentName} onChange={(event) => { setEnvironmentName(event.target.value); setValidationError(""); }} placeholder="填写环境名称" disabled={busy} autoFocus={selectedEnvironment.id.startsWith("draft-")}/> : <h3>{editorTitle}</h3>}<p>{editorHint}</p></div></div></header>
       <div className="environment-editor-panel">
         {active === "vault" ? <>
           <label className="settings-field"><span>已关联的密钥引用</span><input value={secretRefs} onChange={(event) => { setSecretRefs(event.target.value); setValidationError(""); }} placeholder="例如：api_token, client_secret" disabled={busy}/><small>引用名会保存到工作区；密钥值不会写入数据库、导出文件或团队快照。</small></label>
@@ -393,7 +394,7 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret, onSecretExists,
           {onPutSecret ? <div className="environment-vault-card"><div><strong>添加或更新密钥</strong><small>保存后无法读取明文，只能通过引用名称使用。</small></div><div className="environment-secret-row"><input aria-label="密钥名称" value={secretName} onChange={(event) => setSecretName(event.target.value)} placeholder="密钥名称" disabled={busy}/><input aria-label="密钥值" type="password" value={secretValue} onChange={(event) => setSecretValue(event.target.value)} placeholder="密钥值" disabled={busy}/><Button variant="secondary" disabled={busy || !secretName.trim() || !secretValue} onClick={() => void putSecret()}>保存密钥</Button></div></div> : null}
         </> : active === "global-parameters" ? <GlobalParameterEditor value={globalParameters} onChange={(next) => { setGlobalParameters(next); setValidationError(""); }} disabled={busy}/> : <KeyValueEditor key={active} kind="变量" value={text} onChange={(next) => { setText(next); setValidationError(""); }} disabled={busy}/>}
       </div>
-      <footer><div className="environment-footer-leading">{selectedEnvironment ? <Button variant="danger" icon="trash" disabled={busy} onClick={() => void removeEnvironment()}>删除环境</Button> : null}<span role="status" className={validationError ? "is-error" : hasUnsavedChanges ? "is-dirty" : undefined}>{validationError || (hasUnsavedChanges ? "有未保存的更改" : message)}</span></div><div>{selectedEnvironment ? <Button variant="secondary" icon="copy" disabled={busy || hasUnsavedChanges || selectedEnvironment.id.startsWith("draft-")} onClick={() => void copyEnvironment()}>复制</Button> : null}<Button variant="secondary" disabled={busy} onClick={() => void requestReload()}>重新加载</Button><Button variant="primary" disabled={busy || !hasUnsavedChanges} onClick={() => void saveCurrent()}>保存</Button></div></footer>
+      <footer><div className="environment-footer-leading">{selectedEnvironment && !isLocalEnvironment ? <Button variant="danger" icon="trash" disabled={busy} onClick={() => void removeEnvironment()}>删除环境</Button> : null}<span role="status" className={validationError ? "is-error" : hasUnsavedChanges ? "is-dirty" : undefined}>{validationError || (hasUnsavedChanges ? "有未保存的更改" : message)}</span></div><div>{selectedEnvironment ? <Button variant="secondary" icon="copy" disabled={busy || hasUnsavedChanges || selectedEnvironment.id.startsWith("draft-")} onClick={() => void copyEnvironment()}>复制</Button> : null}<Button variant="secondary" disabled={busy} onClick={() => void requestReload()}>重新加载</Button><Button variant="primary" disabled={busy || !hasUnsavedChanges} onClick={() => void saveCurrent()}>保存</Button></div></footer>
     </main>
   </div>;
 }

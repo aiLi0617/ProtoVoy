@@ -548,7 +548,7 @@ impl LocalStore {
             params![
                 "default-env",
                 "default-project",
-                "本地环境",
+                "Default",
                 "{}",
                 "[]",
                 "[]",
@@ -556,8 +556,23 @@ impl LocalStore {
             ],
         )?;
         self.conn.execute(
-            "UPDATE environments SET name = '本地环境' WHERE id = 'default-env' AND name IN ('Default', '默认', '默认环境')",
+            "UPDATE environments SET name = 'Default' WHERE id = 'default-env' AND name IN ('本地环境', '默认', '默认环境')",
             [],
+        )?;
+        self.conn.execute(
+            r#"
+            INSERT OR IGNORE INTO environments (id, project_id, name, variables_json, global_parameters_json, secret_refs_json, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#,
+            params![
+                "local-env",
+                "default-project",
+                "本地环境",
+                "{}",
+                "[]",
+                "[]",
+                now,
+            ],
         )?;
         Ok(())
     }
@@ -2097,9 +2112,9 @@ impl LocalStore {
     }
 
     pub fn delete_environment(&self, id: &str) -> StoreResult<()> {
-        if id == "default-env" {
+        if matches!(id, "default-env" | "local-env") {
             return Err(StoreError::InvalidId(
-                "default-env cannot be deleted".into(),
+                format!("{id} cannot be deleted"),
             ));
         }
         self.conn
@@ -2334,7 +2349,10 @@ mod tests {
             .expect("list envs");
         assert!(environments
             .iter()
-            .any(|item| item.id == "default-env" && item.name == "本地环境"));
+            .any(|item| item.id == "default-env" && item.name == "Default"));
+        assert!(environments
+            .iter()
+            .any(|item| item.id == "local-env" && item.name == "本地环境"));
         let now = Utc::now();
         let script = ScriptRecord {
             id: "script-test".into(),

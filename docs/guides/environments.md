@@ -6,7 +6,8 @@ ProtoVoy supports scoped variables resolved at execution time with `{{name}}` sy
 
 | Scope | Typical use |
 |-------|-------------|
-| Local environment | Base variables available to every request; selected environments override matching names |
+| Global variables | Base variables available to every request and environment |
+| Local environment | The default selectable environment created for local debugging |
 | Environment | `dev`, `staging`, `prod` base URLs |
 | Collection | Shared variables for a folder |
 | Request | Overrides for a single request |
@@ -31,7 +32,7 @@ Built-in helpers include `$uuid`, `$timestamp`, and `$isoTimestamp` (see executi
 
 ## Global request parameters
 
-Global parameters are persisted with the local environment (`default-env`) and can inject defaults into HTTP requests in four locations:
+Global variables and global parameters are persisted with the internal global record (`default-env`). The independently persisted local environment uses `local-env`. Global parameters can inject defaults into HTTP requests in four locations:
 
 | Location | Behavior |
 |----------|----------|

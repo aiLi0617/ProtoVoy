@@ -112,6 +112,7 @@ export interface InterfaceLifecycleShellProps {
   caseMode?: boolean;
   caseInterfaceName?: string;
   caseName?: string;
+  onOpenInterface?: () => void;
   cases?: InterfaceCaseSummary[];
   onOpenCase?: (caseId: string) => void;
   onSaveCase?: (caseId: string | null, input: { name: string; group: string; tags: string[]; request?: HttpWorkbenchRequest }) => Promise<void>;
@@ -287,6 +288,7 @@ export function InterfaceLifecycleShell({
   caseMode = false,
   caseInterfaceName,
   caseName,
+  onOpenInterface,
   cases = [],
   onOpenCase,
   onSaveCase,
@@ -365,17 +367,16 @@ export function InterfaceLifecycleShell({
 
   if (caseMode) {
     return (
+      <InterfaceNameTargetProvider target={nameTarget}>
       <section className="interface-lifecycle interface-case-workspace has-commandbar" aria-label={`${title} \u7528\u4f8b\u5de5\u4f5c\u53f0`}>
         <header className="interface-case-header">
           <span className="interface-case-header-icon" aria-hidden="true"><Icon name="bolt" /></span>
-          <span className="interface-case-header-copy">
-            <span className="interface-case-breadcrumb" aria-label="用例所属接口">
-              <span>{caseInterfaceName || "所属接口"}</span>
-              <Icon name="chevron" />
-              <strong>{caseName || "用例详情"}</strong>
-            </span>
-            <small>继承接口结构，独立保存参数值、前后置操作与断言</small>
-          </span>
+          <div className="interface-case-name-composer" aria-label={`${caseInterfaceName || "所属接口"}，用例名称 ${caseName || "用例详情"}`}>
+            {onOpenInterface ? <button type="button" className="interface-case-parent-link" title={`打开接口 ${caseInterfaceName || "所属接口"}`} onClick={onOpenInterface}>{caseInterfaceName || "所属接口"}</button> : <span className="interface-case-parent-name">{caseInterfaceName || "所属接口"}</span>}
+            <span aria-hidden="true">（</span>
+            <div ref={setNameTarget} className="interface-case-name-control" />
+            <span aria-hidden="true">）</span>
+          </div>
           <span className="interface-case-badge"><i aria-hidden="true" />已关联接口</span>
         </header>
         <div id={`interface-commandbar-${sessionId}`} className="interface-lifecycle-commandbar" />
@@ -383,6 +384,7 @@ export function InterfaceLifecycleShell({
           {children}
         </div>
       </section>
+      </InterfaceNameTargetProvider>
     );
   }
 

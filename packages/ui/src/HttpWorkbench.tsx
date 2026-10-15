@@ -26,6 +26,7 @@ import { ScriptStepEditor } from "./ScriptStepEditor";
 import type { ScriptAsset } from "./scriptLibrary";
 import ts from "typescript";
 import { listEnvironmentResources } from "./agentResources";
+import { environmentOptionLabel, GLOBAL_VARIABLES_ENVIRONMENT_ID, LOCAL_ENVIRONMENT_ID, LOCAL_ENVIRONMENT_NAME } from "./environmentPresentation";
 import { useI18n } from "./i18n";
 import { alignRequestToInterface, captureHttpInterfaceStructure, diffHttpInterfaceStructure, INTERFACE_STRUCTURE_METADATA_KEY, readInterfaceStructureMetadata } from "./interfaceStructureV2";
 import { DEFAULT_RESPONSE_VALIDATION_SETTINGS, readResponseValidationSettings, RESPONSE_VALIDATION_SETTINGS_EVENT, type ProjectResponseValidationSettings } from "./responseValidationSettings";
@@ -408,6 +409,14 @@ export interface GeneratedRequestHeader {
   name: string;
   value: string;
   description: string;
+  locked: boolean;
+}
+
+const DISABLED_GENERATED_HEADERS_KEY = "__protovoyDisabledGeneratedHeaders";
+
+export function disabledGeneratedRequestHeaders(metadata: Record<string, unknown>): Set<string> {
+  const value = metadata[DISABLED_GENERATED_HEADERS_KEY];
+  return new Set(Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").map((item) => item.toLowerCase()) : []);
 }
 
 export function generatedRequestHeaders(url: string, headers: Array<[string, string]>, cookieValue = ""): GeneratedRequestHeader[] {
@@ -420,14 +429,14 @@ export function generatedRequestHeaders(url: string, headers: Array<[string, str
     // Keep the computed-value hint while the URL is incomplete.
   }
   return [
-    { name: "Cache-Control", value: "no-cache", description: "避免调试请求命中中间缓存" },
-    { name: "Content-Length", value: "<发送请求时计算>", description: "根据最终请求体自动计算" },
-    { name: "Cookie", value: cookieValue || "<发送请求时计算>", description: "合并 Cookie 管理器和当前请求中的 Cookie" },
-    { name: "Host", value: host, description: "根据目标 URL 自动生成" },
-    { name: "User-Agent", value: "ProtoVoy/<当前版本>", description: "发送时替换为当前 ProtoVoy 版本" },
-    { name: "Accept", value: "*/*", description: "默认接受任意响应媒体类型" },
-    { name: "Accept-Encoding", value: "identity", description: "调试模式默认保留未压缩的响应内容" },
-    { name: "Connection", value: "keep-alive", description: "由 HTTP 传输层复用连接" },
+    { name: "Cache-Control", value: "no-cache", description: "避免调试请求命中中间缓存", locked: true },
+    { name: "Content-Length", value: "<发送请求时计算>", description: "根据最终请求体自动计算", locked: true },
+    { name: "Cookie", value: cookieValue || "<发送请求时计算>", description: "合并 Cookie 管理器和当前请求中的 Cookie", locked: false },
+    { name: "Host", value: host, description: "根据目标 URL 自动生成", locked: false },
+    { name: "User-Agent", value: "ProtoVoy/<当前版本>", description: "发送时替换为当前 ProtoVoy 版本", locked: false },
+    { name: "Accept", value: "*/*", description: "默认接受任意响应媒体类型", locked: false },
+    { name: "Accept-Encoding", value: "identity", description: "调试模式默认保留未压缩的响应内容", locked: false },
+    { name: "Connection", value: "keep-alive", description: "由 HTTP 传输层复用连接", locked: false },
   ].filter((header) => !customNames.has(header.name.toLowerCase()));
 }
 
@@ -519,7 +528,10 @@ export interface HttpWorkbenchProps {
   fixedSplitDirection?: "vertical" | "horizontal";
 }
 
-const DEFAULT_ENVIRONMENTS = [{ id: "default-env", name: "默认环境" }];
+const DEFAULT_ENVIRONMENTS = [{ id: LOCAL_ENVIRONMENT_ID, name: LOCAL_ENVIRONMENT_NAME }];
+export function selectableEnvironmentOptions(environments: Array<{ id: string; name: string }>): Array<{ id: string; name: string }> {
+  return environments.filter((environment) => environment.id !== GLOBAL_VARIABLES_ENVIRONMENT_ID);
+}
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
 
 function prettyPreview(preview: string): string {
@@ -707,7 +719,7 @@ export function HttpWorkbench({
   onOpenHistoryInterface,
   saveActionLabel,
   environments = DEFAULT_ENVIRONMENTS,
-  defaultEnvironmentId = "default-env",
+  defaultEnvironmentId = LOCAL_ENVIRONMENT_ID,
   onLoadGlobalParameters,
   toolbarTargetId,
   commandbarTargetId,
@@ -762,8 +774,8 @@ export function HttpWorkbench({
     observer.observe(commandbarTarget, { attributes: true, attributeFilter: ["data-active-tab"] });
     return () => observer.disconnect();
   }, [commandbarTarget]);
-  const [environmentOptions,setEnvironmentOptions]=useState(environments);
-  useEffect(()=>{listEnvironmentResources().then((items)=>setEnvironmentOptions(items.map(({id,name})=>({id,name})))).catch(()=>setEnvironmentOptions(environments))},[environments]);
+  const [environmentOptions,setEnvironmentOptions]=useState(() => selectableEnvironmentOptions(environments));
+  useEffect(()=>{listEnvironmentResources().then((items)=>{const next=selectableEnvironmentOptions(items.map(({id,name})=>({id,name})));setEnvironmentOptions(next.length?next:DEFAULT_ENVIRONMENTS)}).catch(()=>{const fallback=selectableEnvironmentOptions(environments);setEnvironmentOptions(fallback.length?fallback:DEFAULT_ENVIRONMENTS)})},[environments]);
   const [globalParameters, setGlobalParameters] = useState<HttpGlobalParameter[]>([]);
   useEffect(() => {
     if (!onLoadGlobalParameters) {
@@ -850,6 +862,7 @@ export function HttpWorkbench({
   const [requestWallMs, setRequestWallMs] = useState(0);
   const [requestTab, setRequestTab] = useState<RequestTab>("params");
   const [generatedHeadersVisible, setGeneratedHeadersVisible] = useState(false);
+  const [disabledGeneratedHeaders, setDisabledGeneratedHeaders] = useState<Set<string>>(() => new Set());
   const [timeline, setTimeline] = useState<Array<{ at: number; event: ExecutionEvent }>>([]);
   const [graphqlQuery, setGraphqlQuery] = useState("query Example {\n  __typename\n}");
   const [graphqlVariables, setGraphqlVariables] = useState("{}");
@@ -1005,7 +1018,7 @@ export function HttpWorkbench({
       .filter((row) => row.enabled && row.key.trim())
       .map((row) => [row.key.trim(), row.value.trim()] as [string, string]);
     const requestCookies = cookieRows.filter((row) => row.enabled && row.key.trim());
-    if (requestCookies.length) {
+    if (requestCookies.length && !disabledGeneratedHeaders.has("cookie")) {
       headers.push(["Cookie", requestCookies.map((row) => `${row.key.trim()}=${row.value}`).join("; ")]);
     }
     if (bodyMode === "soap" && soapAction.trim()) {
@@ -1038,7 +1051,7 @@ export function HttpWorkbench({
       bodySource: bodyMode === "msgpack" ? messagePackJson : bodyMode === "graphql" ? JSON.stringify({ type: "graphql", query: graphqlQuery, variables: JSON.parse(graphqlVariables || "{}"), operationName: graphqlOperationName.trim() || null }) : bodyMode === "jsonrpc" ? JSON.stringify({ type: "jsonrpc", method: rpcMethod, params: JSON.parse(rpcParams || "{}"), id: rpcId }) : undefined,
       multipart: bodyMode === "multipart" ? multipart.filter((part) => part.enabled && part.name.trim()).map(({ id: _id, enabled: _enabled, description: _description, kind: _kind, valueType: _valueType, typeSelected: _typeSelected, required: _required, ...part }) => part) : [],
       timeoutMs,
-      metadata: { ...requestMetadata, __protovoyAssertionSchemaVersion: ASSERTION_SCHEMA_VERSION, __protovoyAssertionsEnabled: assertionsEnabled },
+      metadata: { ...requestMetadata, [DISABLED_GENERATED_HEADERS_KEY]: [...disabledGeneratedHeaders], __protovoyAssertionSchemaVersion: ASSERTION_SCHEMA_VERSION, __protovoyAssertionsEnabled: assertionsEnabled },
       variables: parseKv(variablesText),
       assertions: assertionRules,
       auth: buildAuth(authKind, bearerTokenSource, bearerToken, authSecretRef, authUsername, authHeaderName, oauthTokenUrl, oauthScope, oauthAudience, oauthAuthorizationUrl, oauthRedirectUri, oauthCodeRef, oauthVerifierRef),
@@ -1093,6 +1106,7 @@ export function HttpWorkbench({
     setRequestId(loaded.id);
     setRequestTab(defaultRequestTab(loaded));
     setRequestMetadata(loaded.metadata ?? {});
+    setDisabledGeneratedHeaders(disabledGeneratedRequestHeaders(loaded.metadata ?? {}));
     const projectId = typeof loaded.metadata?.__protovoyProjectId === "string" ? loaded.metadata.__protovoyProjectId : undefined;
     setResponseValidationSettings(readResponseValidationSettings(projectId));
     const definitions = Array.isArray(loaded.metadata?.__protovoyResponseDefinitions) ? loaded.metadata.__protovoyResponseDefinitions as DesignedResponse[] : [];
@@ -1704,9 +1718,10 @@ export function HttpWorkbench({
       </details>; })}
     </div> : <div className="http-validation-empty"><strong>校验响应</strong><span>{assertionsEnabled ? "发送请求后将在这里显示校验结果" : "响应校验已关闭"}</span></div>}
   </div>;
-  const environmentControl = <div className="http-environment-select"><select aria-label="请求环境" value={environmentRef} onChange={(event)=>setEnvironmentRef(event.target.value)} disabled={loading}>{environmentOptions.map((environment)=><option key={environment.id} value={environment.id}>{environment.name}{environment.id===defaultEnvironmentId?" · 默认":""}</option>)}</select><button type="button" className="http-environment-manage" aria-label="编辑环境变量" title="编辑环境变量" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-environment"))}><Icon name="menu"/></button></div>;
+  const effectiveDefaultEnvironmentId = environmentOptions.some((environment) => environment.id === defaultEnvironmentId) ? defaultEnvironmentId : environmentOptions[0]?.id ?? defaultEnvironmentId;
+  const environmentControl = <div className="http-environment-select"><select aria-label="请求环境" value={environmentRef} onChange={(event)=>setEnvironmentRef(event.target.value)} disabled={loading}>{environmentOptions.map((environment)=><option key={environment.id} value={environment.id}>{environmentOptionLabel(environment, effectiveDefaultEnvironmentId)}</option>)}</select><button type="button" className="http-environment-manage" aria-label="编辑环境变量" title="编辑环境变量" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-environment"))}><Icon name="menu"/></button></div>;
 
-  const requestNameField = <label className="http-request-name-field" style={nameTarget ? { display: "block" } : undefined}><input aria-label={openedCaseParentId ? "接口及用例名称" : "接口名称"} style={nameTarget ? { ...styles.input, width: "100%", height: 30, padding: "5px 9px", borderRadius: 6, background: "transparent", fontSize: 11, fontWeight: 600, textOverflow: "ellipsis" } : styles.input} value={openedCaseParentId && openedCaseInterfaceName ? `${openedCaseInterfaceName}（${name}）` : name} onChange={(event) => { const value = event.target.value; if (openedCaseParentId && openedCaseInterfaceName) { const prefix = `${openedCaseInterfaceName}（`; setName(value.startsWith(prefix) ? value.slice(prefix.length).replace(/）$/, "") : value); } else setName(value); }} placeholder="接口名称" disabled={loading} /></label>;
+  const requestNameField = <label className={`http-request-name-field${openedCaseParentId ? " is-case-name" : ""}`} style={nameTarget ? { display: "block" } : undefined}><input aria-label={openedCaseParentId ? "用例名称" : "接口名称"} style={nameTarget ? { ...styles.input, width: "100%", height: 30, padding: "5px 9px", borderRadius: 6, background: "transparent", fontSize: 11, fontWeight: 600, textOverflow: "ellipsis" } : styles.input} value={name} onChange={(event) => setName(event.target.value)} placeholder={openedCaseParentId ? "用例名称" : "接口名称"} disabled={loading} /></label>;
   const requestCommandbar = <div className="http-request-commandbar">
     {nameTarget ? null : requestNameField}
     <div className="http-request-primary-actions">
@@ -1824,7 +1839,7 @@ export function HttpWorkbench({
                   </div>;
                 })}
               </section> : null}
-              <KeyValueRows rows={headerRows} setRows={setHeaderRows} kind="Header" nameLabel="Header 名称" valueLabel="Header 值" addPlaceholder="例如 Content-Type" loading={loading} inconsistentNames={caseStructureState?.differences.filter((item) => item.field.location === "header").map((item) => item.field.name)} beforeRows={<div id="http-generated-headers" className={`http-generated-headers${generatedHeadersVisible ? " is-visible" : ""}`} aria-hidden={!generatedHeadersVisible}>{generatedHeaders.map((header) => <div className="http-generated-header-row" key={header.name}><input className="http-row-enabled" type="checkbox" checked readOnly tabIndex={-1} aria-label={`${header.name} 自动生成且已启用`}/><code>{header.name}</code><span>{header.value}</span><span aria-hidden="true"/><span aria-hidden="true"/><span className="http-generated-header-description"><Icon name="info"/><span>{header.description}</span></span><span aria-hidden="true"/></div>)}</div>}/>
+              <KeyValueRows rows={headerRows} setRows={setHeaderRows} kind="Header" nameLabel="Header 名称" valueLabel="Header 值" addPlaceholder="例如 Content-Type" loading={loading} inconsistentNames={caseStructureState?.differences.filter((item) => item.field.location === "header").map((item) => item.field.name)} beforeRows={<div id="http-generated-headers" className={`http-generated-headers${generatedHeadersVisible ? " is-visible" : ""}`} aria-hidden={!generatedHeadersVisible}>{generatedHeaders.map((header) => { const enabled = header.locked || !disabledGeneratedHeaders.has(header.name.toLowerCase()); return <div className={`http-generated-header-row${enabled ? " is-enabled" : ""}`} key={header.name}><input className="http-row-enabled" type="checkbox" checked={enabled} disabled={header.locked || loading} aria-label={header.locked ? `${header.name} 固定自动生成，无法停用` : `${enabled ? "停用" : "启用"}自动 Header ${header.name}`} title={header.locked ? "固定自动生成，无法停用" : undefined} onChange={(event) => setDisabledGeneratedHeaders((current) => { const next = new Set(current); const key = header.name.toLowerCase(); event.target.checked ? next.delete(key) : next.add(key); return next; })}/><code>{header.name}</code><span>{header.value}</span><span aria-hidden="true"/><span aria-hidden="true"/><span className="http-generated-header-description"><Icon name="info"/><span>{header.description}</span></span><span aria-hidden="true"/></div>; })}</div>}/>
             </div>}
             {activeTab === "body" && <div style={styles.label}>
               <div className="http-body-toolbar" style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid var(--protovoy-border)" }}>

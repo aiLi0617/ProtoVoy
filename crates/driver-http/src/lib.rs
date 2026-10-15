@@ -24,12 +24,25 @@ use tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 const RESPONSE_PREVIEW_BYTES: usize = 10_000;
+const DISABLED_GENERATED_HEADERS_KEY: &str = "__protovoyDisabledGeneratedHeaders";
 
-fn default_request_headers() -> HeaderMap {
+fn generated_header_disabled(request: &RequestEnvelope, name: &str) -> bool {
+    request
+        .metadata
+        .get(DISABLED_GENERATED_HEADERS_KEY)
+        .and_then(|value| value.as_array())
+        .is_some_and(|values| values.iter().any(|value| value.as_str().is_some_and(|value| value.eq_ignore_ascii_case(name))))
+}
+
+fn default_request_headers(request: Option<&RequestEnvelope>) -> HeaderMap {
     let mut headers = HeaderMap::new();
     headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-cache"));
-    headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
-    headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
+    if !request.is_some_and(|request| generated_header_disabled(request, "accept")) {
+        headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+    }
+    if !request.is_some_and(|request| generated_header_disabled(request, "accept-encoding")) {
+        headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("identity"));
+    }
     headers
 }
 
@@ -44,7 +57,7 @@ impl HttpDriver {
         let cookie_jar = Arc::new(Jar::default());
         let client = Client::builder()
             .user_agent(concat!("ProtoVoy/", env!("CARGO_PKG_VERSION")))
-            .default_headers(default_request_headers())
+            .default_headers(default_request_headers(None))
             .cookie_provider(Arc::clone(&cookie_jar))
             .no_proxy()
             .build()
@@ -123,13 +136,15 @@ impl HttpDriver {
             && request.tls.verify
             && request.tls.client_cert_ref.is_none()
             && follow_redirects
+            && !["user-agent", "accept", "accept-encoding"]
+                .iter()
+                .any(|name| generated_header_disabled(request, name))
         {
             return Ok(self.client.clone());
         }
 
         let mut builder = Client::builder()
-            .user_agent(concat!("ProtoVoy/", env!("CARGO_PKG_VERSION")))
-            .default_headers(default_request_headers())
+            .default_headers(default_request_headers(Some(request)))
             .cookie_provider(Arc::clone(&self.cookie_jar))
             .no_proxy()
             .danger_accept_invalid_certs(!request.tls.verify)
@@ -138,6 +153,9 @@ impl HttpDriver {
             } else {
                 Policy::none()
             });
+        if !generated_header_disabled(request, "user-agent") {
+            builder = builder.user_agent(concat!("ProtoVoy/", env!("CARGO_PKG_VERSION")));
+        }
         if let Some(proxy_url) = request.proxy.as_deref() {
             let proxy = Proxy::all(proxy_url)
                 .map_err(|e| DriverError::Validation(format!("invalid proxy URL: {e}")))?;
@@ -595,10 +613,23 @@ mod tests {
 
     #[test]
     fn configures_visible_automatic_request_headers() {
-        let headers = default_request_headers();
+        let headers = default_request_headers(None);
         assert_eq!(headers.get(CACHE_CONTROL).unwrap(), "no-cache");
         assert_eq!(headers.get(ACCEPT).unwrap(), "*/*");
         assert_eq!(headers.get(ACCEPT_ENCODING).unwrap(), "identity");
+    }
+
+    #[test]
+    fn honors_optional_generated_header_settings() {
+        let mut request = RequestEnvelope::http_get("settings", "https://example.com");
+        request.metadata = serde_json::json!({
+            DISABLED_GENERATED_HEADERS_KEY: ["Accept", "accept-encoding", "user-agent"]
+        });
+        let headers = default_request_headers(Some(&request));
+        assert_eq!(headers.get(CACHE_CONTROL).unwrap(), "no-cache");
+        assert!(headers.get(ACCEPT).is_none());
+        assert!(headers.get(ACCEPT_ENCODING).is_none());
+        assert!(generated_header_disabled(&request, "User-Agent"));
     }
 
     #[tokio::test]

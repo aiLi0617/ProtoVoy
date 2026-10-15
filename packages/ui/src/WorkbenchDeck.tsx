@@ -558,7 +558,17 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
       const cases = session.requestId ? interfaceCases.filter((item) => item.parentId === session.requestId && item.metadata?.__protovoyCaseType === "test") : [];
       const openCase = onLoadHttpInterface ? async (caseId: string) => {
         const detail = await onLoadHttpInterface(caseId);
-        if (detail) window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: { ...detail, protocolId: "http", metadata: { ...(detail.metadata ?? {}), __protovoyCaseInterfaceName: session.title } } }));
+        if (detail) {
+          const request = { ...detail, metadata: { ...(detail.metadata ?? {}), __protovoyCaseInterfaceName: session.title } };
+          window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: { ...request, protocolId: "http", request } }));
+        }
+      } : undefined;
+      const openInterface = session.caseParentId && onLoadHttpInterface ? async () => {
+        const detail = await onLoadHttpInterface(session.caseParentId!);
+        if (detail) {
+          window.dispatchEvent(new CustomEvent("protovoy-select-request", { detail: { requestId: session.caseParentId } }));
+          window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: { ...detail, protocolId: "http", request: detail } }));
+        }
       } : undefined;
       const saveCase = onLoadHttpInterface && onCreateHttpInterface ? async (caseId: string | null, input: { name: string; group: string; tags: string[]; request?: HttpWorkbenchRequest }) => {
         const source = input.request ?? await onLoadHttpInterface(caseId ?? session.requestId ?? ""); if (!source) return;
@@ -584,7 +594,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
         })));
       } : undefined;
       const deleteCase = onDeleteHttpInterface ?? (async (caseId: string) => { window.dispatchEvent(new CustomEvent("protovoy-delete-test-case", { detail: { caseId } })); });
-      return <InterfaceLifecycleShell workbenchId={session.workbenchId} sessionId={session.id} title={session.title} projectId={selectedProjectId} requestId={session.requestId ?? session.id} isSaved={Boolean(session.requestId)} definitionClient={definitionClient} caseMode={Boolean(session.caseParentId)} caseInterfaceName={session.caseInterfaceName} caseName={caseName} cases={cases} onOpenCase={openCase} onSaveCase={saveCase} onDeleteCase={deleteCase} onDuplicateCase={duplicateCase} onRunCases={runCases} onRunRequest={sendCase} onCopyCurl={copyCurl} onLoadCase={onLoadHttpInterface} mockClient={mockClient} onLoadMockSeed={() => loadInterfaceMockSeed({ workbenchId: session.workbenchId, sessionId: session.id, projectId: selectedProjectId, requestId: session.requestId ?? session.id, title: session.title })}>{content}</InterfaceLifecycleShell>;
+      return <InterfaceLifecycleShell workbenchId={session.workbenchId} sessionId={session.id} title={session.title} projectId={selectedProjectId} requestId={session.requestId ?? session.id} isSaved={Boolean(session.requestId)} definitionClient={definitionClient} caseMode={Boolean(session.caseParentId)} caseInterfaceName={session.caseInterfaceName} caseName={caseName} onOpenInterface={openInterface} cases={cases} onOpenCase={openCase} onSaveCase={saveCase} onDeleteCase={deleteCase} onDuplicateCase={duplicateCase} onRunCases={runCases} onRunRequest={sendCase} onCopyCurl={copyCurl} onLoadCase={onLoadHttpInterface} mockClient={mockClient} onLoadMockSeed={() => loadInterfaceMockSeed({ workbenchId: session.workbenchId, sessionId: session.id, projectId: selectedProjectId, requestId: session.requestId ?? session.id, title: session.title })}>{content}</InterfaceLifecycleShell>;
     };
     const sourceWithSaveIdentity = isValidElement(source) ? (() => {
       const element = source as ReactElement<{ onSave?: (request: Record<string, unknown>) => Promise<void>; onSaveAsCase?: (request: Record<string, unknown>) => Promise<void>; onUpdateInterface?: (request: Record<string, unknown>) => Promise<void> }>;

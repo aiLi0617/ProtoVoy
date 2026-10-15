@@ -248,6 +248,26 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
   const toggleExplorerNode = useAppStore((state) => state.toggleExplorerNode);
   const importInput = useRef<HTMLInputElement>(null);
   const { notify, confirm, prompt } = useFeedback();
+  useEffect(() => {
+    const workspaceTree = props.tree;
+    if (!workspaceTree || !props.selectedRequestId) return;
+    const request = workspaceTree.requests.find((item) => item.id === props.selectedRequestId);
+    if (!request) return;
+    const expandedKeys = new Set<string>();
+    let collection = workspaceTree.collections.find((item) => item.id === request.collectionId);
+    while (collection) {
+      expandedKeys.add(`collection:${collection.id}`);
+      collection = collection.parentId ? workspaceTree.collections.find((item) => item.id === collection!.parentId) : undefined;
+    }
+    const moduleId = workspaceTree.collections.find((item) => item.id === request.collectionId)?.moduleId;
+    if (moduleId) expandedKeys.add(`module:${moduleId}`);
+    const parentId = request.envelope?.variables?.__protovoyCaseOf;
+    if (parentId) expandedKeys.add(`request:${parentId}`);
+    if (collapsedNodes.some((key) => expandedKeys.has(key))) {
+      useAppStore.setState({ collapsedExplorerNodes: collapsedNodes.filter((key) => !expandedKeys.has(key)) });
+    }
+    requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-request-id="${CSS.escape(request.id)}"]`)?.scrollIntoView({ block: "nearest" }));
+  }, [collapsedNodes, props.selectedRequestId, props.tree]);
   function onTreeKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
     if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     const root = event.currentTarget;
@@ -537,7 +557,7 @@ export function WorkspaceExplorer(props: WorkspaceExplorerProps) {
       </div>
       {!isCollapsed && children.filter(collectionMatches).map((child) => renderCollection(child, depth + 1))}
       {!isCollapsed && !!collection.tags?.length && <div className="tree-tags" style={{ paddingLeft: 31 + depth * 20 }}>{collection.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>}
-      {!isCollapsed && requests.filter((request) => !normalizedQuery || `${request.name} ${request.target}`.toLocaleLowerCase().includes(normalizedQuery)).map((request, requestIndex, visibleRequests) => <div draggable={!batchMode} onDragStart={(event) => setDrag(event, "request", request.id)} className={`tree-row tree-request-row${request.envelope?.variables?.__protovoyCaseOf ? " tree-case-row" : ""}${batchMode ? " is-batch-mode" : ""}${selectedIds.includes(request.id) ? " is-selected" : ""}${props.selectedRequestId === request.id ? " is-active" : ""}${openMenuId === `request:${request.id}` ? " is-menu-open" : ""}`} role="treeitem" aria-selected={batchMode ? selectedIds.includes(request.id) : undefined} aria-level={depth + (request.envelope?.variables?.__protovoyCaseOf ? 3 : 2)} aria-setsize={visibleRequests.length} aria-posinset={requestIndex + 1} key={request.id} style={{ paddingLeft: (request.envelope?.variables?.__protovoyCaseOf ? 73 : 38) + depth * 20 }}>
+      {!isCollapsed && requests.filter((request) => !normalizedQuery || `${request.name} ${request.target}`.toLocaleLowerCase().includes(normalizedQuery)).map((request, requestIndex, visibleRequests) => <div data-request-id={request.id} draggable={!batchMode} onDragStart={(event) => setDrag(event, "request", request.id)} className={`tree-row tree-request-row${request.envelope?.variables?.__protovoyCaseOf ? " tree-case-row" : ""}${batchMode ? " is-batch-mode" : ""}${selectedIds.includes(request.id) ? " is-selected" : ""}${props.selectedRequestId === request.id ? " is-active" : ""}${openMenuId === `request:${request.id}` ? " is-menu-open" : ""}`} role="treeitem" aria-selected={batchMode ? selectedIds.includes(request.id) : undefined} aria-level={depth + (request.envelope?.variables?.__protovoyCaseOf ? 3 : 2)} aria-setsize={visibleRequests.length} aria-posinset={requestIndex + 1} key={request.id} style={{ paddingLeft: (request.envelope?.variables?.__protovoyCaseOf ? 73 : 38) + depth * 20 }}>
         {!request.envelope?.variables?.__protovoyCaseOf ? (collectionRequests.some((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item)) ? <span className="tree-actions-leading"><button type="button" className={`tree-chevron tree-request-chevron${collapsedNodes.includes(`request:${request.id}`) ? "" : " is-expanded"}`} aria-label={`${collapsedNodes.includes(`request:${request.id}`) ? "展开" : "收起"}调试用例 ${request.name}`} aria-expanded={!collapsedNodes.includes(`request:${request.id}`)} onClick={() => toggleExplorerNode(`request:${request.id}`)}><Icon name="chevron"/></button></span> : <span className="tree-actions-leading tree-chevron-placeholder" aria-hidden="true"><span className="tree-chevron tree-request-chevron"><Icon name="chevron"/></span></span>) : null}
         <button type="button" className="tree-main tree-request-main" onClick={() => { if (batchMode) { toggleSelected(request.id); return; } const parentId = request.envelope?.variables?.__protovoyCaseOf; const parentStructure = parentId ? readInterfaceStructureMetadata(collectionRequests.find((item) => item.id === parentId)?.envelope?.metadata) : null; if (parentStructure) stashCaseInterfaceStructure(request.id, parentStructure); props.onOpenRequest(request.id); }} title={batchMode ? (selectedIds.includes(request.id) ? "取消选择" : "选择此项") : request.target}>{request.envelope?.variables?.__protovoyCaseOf ? <span className="tree-case-icon" title="调试用例"><Icon name="bolt"/></span> : request.protocolId === "websocket" ? <span className="tree-protocol-icon tree-protocol-websocket" title="WebSocket"><Icon name="websocket" /></span> : <b className="tree-request-method" data-method={(request.method ?? request.protocolId ?? "HTTP").toUpperCase()}>{request.method ?? request.protocolId?.toUpperCase() ?? "HTTP"}</b>}<span className="tree-label">{request.name}</span>{!request.envelope?.variables?.__protovoyCaseOf && collectionRequests.some((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item)) ? <small className="tree-interface-case-count" title="调试用例数量">（{collectionRequests.filter((item) => item.envelope?.variables?.__protovoyCaseOf === request.id && isDebugCase(item)).length}）</small> : null}</button>
         <span className="tree-actions tree-more" data-tree-menu={`request:${request.id}`}><button type="button" className="tree-action-button" ref={(node) => { const id = `request:${request.id}`; if (node) menuButtonRefs.current.set(id, node); else menuButtonRefs.current.delete(id); }} title="更多操作" aria-label={`${request.name} 更多操作`} aria-expanded={openMenuId === `request:${request.id}`} aria-haspopup="menu" onClick={(event) => { event.stopPropagation(); openCollectionMenu(`request:${request.id}`); }}><Icon name="more" /></button>{renderRequestMenu(request)}</span>

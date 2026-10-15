@@ -81,6 +81,18 @@ export function App() {
     window.addEventListener("protovoy-new-workbench", reset);
     return () => window.removeEventListener("protovoy-new-workbench", reset);
   }, []);
+  useEffect(() => {
+    const selectRequest = (event: Event) => {
+      const requestId = (event as CustomEvent<{ requestId?: string }>).detail?.requestId;
+      const request = requestId ? tree?.requests.find((item) => item.id === requestId) : undefined;
+      if (!request) return;
+      setSelectedProjectId(request.projectId);
+      setSelectedCollectionId(request.collectionId);
+      setSelectedRequestId(request.id);
+    };
+    window.addEventListener("protovoy-select-request", selectRequest);
+    return () => window.removeEventListener("protovoy-select-request", selectRequest);
+  }, [tree]);
 
   async function refreshTree() {
     const sequence = ++refreshSequence.current;
