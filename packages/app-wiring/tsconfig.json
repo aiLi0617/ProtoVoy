@@ -6,7 +6,9 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "../../node_modules/.cache/protovoy/tsbuildinfo/app-wiring.tsbuildinfo"
   },
   "include": ["src"]
 }

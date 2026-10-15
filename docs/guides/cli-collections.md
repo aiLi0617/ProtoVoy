@@ -45,8 +45,15 @@ Content-Type: application/json
 {
   "requests": [/* full RequestEnvelope objects in execution order */],
   "failFast": true,
-  "variables": { "baseUrl": "https://staging.example.com" }
+  "variables": { "baseUrl": "https://staging.example.com" },
+  "data": [
+    { "userId": "alice" },
+    { "userId": "bob" }
+  ],
+  "reportFormat": "junit"
 }
 ```
 
-The response contains ordered `cases` and `exitCode`. `exitCode` is `1` when any request, assertion, or variable resolution fails; otherwise it is `0`. Variables extracted by post-scripts are available to later requests in the same run only and are not persisted by the Gateway.
+`data` is optional. When present, each object runs the full collection as one numbered iteration; row values override same-named base `variables`. `reportFormat` accepts `json` (default) or `junit`.
+
+The response contains ordered `cases` with `iteration`, `exitCode`, `reportFormat`, and the rendered `report`. `exitCode` is `1` when any request, assertion, or variable resolution fails; otherwise it is `0`. With `failFast`, the Gateway stops the current collection and does not start later iterations after a failure. Variables extracted by post-scripts are available to later requests in the same iteration only and are not persisted by the Gateway.

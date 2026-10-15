@@ -14,18 +14,18 @@ Only the Web port is published. Agent SQLite/workspace data, Gateway schedules a
 
 ```bash
 cp deploy/.env.example deploy/.env
-# Replace every required value in deploy/.env before continuing.
+# Replace every required value in deploy/.env before continuing. The bootstrap token may stay empty.
 docker compose --env-file deploy/.env -f deploy/compose.yaml config --quiet
 docker compose --env-file deploy/.env -f deploy/compose.yaml up --build -d
 docker compose --env-file deploy/.env -f deploy/compose.yaml ps
 ```
 
-Open `http://localhost:8080` (or `PROTOVOY_PUBLIC_ORIGIN`). Bootstrap the first Owner from Team with `PROTOVOY_BOOTSTRAP_TOKEN`. The browser uses runtime `config.js`, so changing the public paths or Agent token only requires recreating the Web container, not rebuilding its image.
+Open `http://localhost:8080` (or `PROTOVOY_PUBLIC_ORIGIN`). If `PROTOVOY_BOOTSTRAP_TOKEN` is empty, read the generated first-owner token once from `docker compose logs collaboration`, then use Team → 首次引导. You may still preconfigure a high-entropy token. The browser uses runtime `config.js`, so changing the public paths or Agent token only requires recreating the Web container, not rebuilding its image.
 
 ## Production requirements
 
 - Put the Web port behind an HTTPS ingress or load balancer and set `PROTOVOY_PUBLIC_ORIGIN` to the exact external origin.
-- Use independently generated high-entropy values for the database password, bootstrap token, Agent token, and Gateway API key.
+- Use independently generated high-entropy values for the database password, Agent token, and Gateway API key. The collaboration service may generate the short-lived bootstrap token at startup.
 - Restrict ingress access: the runtime Agent token is delivered to authenticated users' browsers and should be treated as an internal deployment credential.
 - Back up `postgres-data`, `agent-data`, and `gateway-data`; test restore before upgrades.
 - For OIDC, register `https://your-host/collaboration/login/oauth2/code/oidc` and complete the optional variables in `.env` after the first organization exists.

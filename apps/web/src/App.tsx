@@ -16,7 +16,6 @@ import {
   deleteRequestViaAgent,
   executeViaAgent,
   executeEnvelopeViaAgent,
-  getEnvironmentViaAgent,
   getHistoryItemViaAgent,
   listHistoryViaAgent,
   getWorkspaceTreeViaAgent,
@@ -27,7 +26,6 @@ import {
   updateCollectionTagsViaAgent,
   renameProjectViaAgent,
   putSecretViaAgent,
-  saveEnvironmentViaAgent,
   saveRequestViaAgent,
   saveEnvelopeViaAgent,
   agentBaseUrl,
@@ -54,9 +52,11 @@ import {
   clearCapturesViaAgent,
   tcpSessionConnectionViaAgent,
 } from "./agentClient";
-import { runCollectionViaAgent } from "./collectionRunnerClient";
+import { listCollectionEnvironments } from "./collectionRunApi";
+import { cancelCollectionRun, getCollectionRunProgress, runCollectionWithLifecycle } from "./collectionRunLifecycleApi";
 import { useEffect, useRef, useState } from "react";
 import { describeWorkspaceBootstrapError, getWorkspaceTreeAbortable } from "./workspaceTreeClient";
+import { deleteSecret, getEnvironmentConfig, saveEnvironmentConfig, secretExists } from "./environmentClient";
 
 
 function requestIdentity(request: unknown): string { return (request as { id?: string }).id ?? crypto.randomUUID(); }
@@ -146,8 +146,10 @@ export function App() {
       requestHistory={{ onList: listHistoryViaAgent, onReplay: getHistoryItemViaAgent, requestEditor: { onSend: executeViaAgent, onSendEnvelope: executeEnvelopeViaAgent, onCancel: cancelViaAgent, onPutSecret: putSecretViaAgent, onListCookies: listCookiesViaAgent, onSetCookie: setCookieViaAgent, onDeleteCookie: deleteCookieViaAgent, onSaveInterface: async (request, collectionId) => { await saveRequestViaAgent(request, selectedProjectId, collectionId); await refreshTree(); }, onSaveEnvelopeInterface: async (request, collectionId) => { await saveEnvelopeViaAgent(request, selectedProjectId, collectionId); await refreshTree(); }, onSaveDebugCase: async (request, parent) => { await saveRequestViaAgent(request, parent.projectId, parent.collectionId); await refreshTree(); }, onSaveEnvelopeDebugCase: async (request, parent) => { await saveEnvelopeViaAgent(request, parent.projectId, parent.collectionId); await refreshTree(); }, onOpenInterface: async (id) => { const record = tree?.requests.find((request) => request.id === id); if (record) { setSelectedProjectId(record.projectId); setSelectedCollectionId(record.collectionId); setSelectedRequestId(id); } const envelope = await loadEnvelopeViaAgent(id); if (envelope) window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: envelope })); }, interfaces: (tree?.requests ?? []).filter((request) => !request.envelope?.variables?.__protovoyCaseOf).map((request) => ({ id: request.id, name: request.name, projectId: request.projectId, collectionId: request.collectionId, method: request.method, protocolId: request.protocolId, target: request.target })), saveCollections: (tree?.collections ?? []).filter((collection) => collection.projectId === selectedProjectId), saveModules: tree?.modules ?? [], defaultSaveCollectionId: selectedCollectionId } }}
       connectionStatus={treeLoading ? { label: "正在连接 Local Agent", tone: "warn" } : treeError ? { label: "Local Agent 连接异常", tone: "off" } : { label: "Local Agent 已连接", tone: "ok" }}
       environment={{
-        onLoad: getEnvironmentViaAgent,
-        onSave: async (variables, secretRefs) => { await saveEnvironmentViaAgent(variables, secretRefs); },
+        onLoad: getEnvironmentConfig,
+        onSave: saveEnvironmentConfig,
+        onSecretExists: secretExists,
+        onDeleteSecret: deleteSecret,
         onPutSecret: putSecretViaAgent,
       }}
       collaboration={{
@@ -205,7 +207,7 @@ export function App() {
       <KafkaWorkbench onSend={(request,hooks)=>executeEnvelopeViaAgent(kafkaRequestEnvelope(request),hooks)} onSave={async(request)=>{await saveEnvelopeViaAgent(kafkaRequestEnvelope(request),selectedProjectId,selectedCollectionId);await refreshTree();}} onCancel={cancelViaAgent} />
       <SqlWorkbench onSend={(request,hooks)=>executeEnvelopeViaAgent(sqlRequestEnvelope(request),hooks)} onSave={async(request)=>{await saveEnvelopeViaAgent(sqlRequestEnvelope(request),selectedProjectId,selectedCollectionId);await refreshTree();}} onCancel={cancelViaAgent} />
       <MockWorkbench baseUrl={agentBaseUrl} projectKey={selectedProjectId} serviceKey={selectedMockServiceKey} onList={listMockRulesViaAgent} onCreate={createMockRuleViaAgent} onUpdate={updateMockRuleViaAgent} onDelete={deleteMockRuleViaAgent} onStatus={getMockServerStatusViaAgent} onStart={startMockServerViaAgent} onStop={stopMockServerViaAgent} />
-      <CollectionRunner collectionId={selectedCollectionId} onRun={runCollectionViaAgent} />
+      <CollectionRunner collectionId={selectedCollectionId} environmentScope={selectedProjectId} onRun={runCollectionWithLifecycle} onGetProgress={getCollectionRunProgress} onCancel={cancelCollectionRun} onListEnvironments={() => listCollectionEnvironments(selectedProjectId)} />
       <GatewayWorkbench />
       <CaptureWorkbench onStatus={captureStatusViaAgent} onStart={startCaptureViaAgent} onStop={stopCaptureViaAgent} onList={listCapturesViaAgent} onClear={clearCapturesViaAgent} />
       <PluginCenter onList={listPluginsViaAgent} onInstall={installPluginViaAgent} onEnable={enablePluginViaAgent} onDelete={deletePluginViaAgent} onInvoke={invokePluginViaAgent} />

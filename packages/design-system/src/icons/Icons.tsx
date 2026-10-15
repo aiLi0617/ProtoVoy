@@ -20,6 +20,7 @@ import {
   Folder,
   GitBranch,
   Globe2,
+  Info,
   Menu,
   Moon,
   MoreHorizontal,
@@ -65,6 +66,7 @@ export type IconName =
   | "folder"
   | "gitBranch"
   | "globe"
+  | "info"
   | "menu"
   | "module"
   | "more"
@@ -105,6 +107,7 @@ const map: Record<IconName, ComponentType<LucideProps>> = {
   folder: Folder,
   gitBranch: GitBranch,
   globe: Globe2,
+  info: Info,
   menu: Menu,
   module: Boxes,
   more: MoreHorizontal,

@@ -16,21 +16,19 @@ ProtoVoy 的 Java 21 / Spring Boot 3 可部署协作服务，支持本地 H2 与
 ## 本地运行
 
 ```powershell
-$env:PROTOVOY_COLLAB_BOOTSTRAP_TOKEN="replace-with-a-long-random-token"
 .\gradlew.bat clean test bootRun
 ```
 
-服务默认监听 `http://localhost:8088`，健康检查地址为 `/actuator/health`。第一次启动后调用 `POST /v1/auth/bootstrap`，并通过 `X-ProtoVoy-Bootstrap-Token` Header 提供引导令牌。成功创建首位 Owner 后，引导接口会永久拒绝再次使用。
+服务默认监听 `http://localhost:8088`，健康检查地址为 `/actuator/health`。空库且未配置令牌时，启动日志会输出高熵一次性引导令牌；也可以提前设置 `PROTOVOY_COLLAB_BOOTSTRAP_TOKEN`。`GET /v1/auth/bootstrap-status` 可供客户端判断首次引导是否仍开放，但不会返回令牌。调用 `POST /v1/auth/bootstrap` 时通过 `X-ProtoVoy-Bootstrap-Token` Header 提交令牌；成功创建首位 Owner 后，引导接口永久失效。
 
 ## 私有化部署
 
 ```powershell
 $env:PROTOVOY_COLLAB_DATABASE_PASSWORD="replace-me"
-$env:PROTOVOY_COLLAB_BOOTSTRAP_TOKEN="replace-with-a-long-random-token"
 docker compose up --build
 ```
 
-生产环境必须覆盖上述密码变量，持久化数据位于 `protovoy-postgres` volume。
+生产环境必须覆盖数据库密码变量，持久化数据位于 `protovoy-postgres` volume。首次启动后从受控日志读取自动生成的令牌；若日志访问流程不合适，可显式配置独立高熵的 `PROTOVOY_COLLAB_BOOTSTRAP_TOKEN`。
 
 ## 企业 OIDC SSO
 

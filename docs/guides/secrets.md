@@ -8,6 +8,8 @@ ProtoVoy uses the OS keychain or Agent secret store by default. HTTP Bearer auth
 2. The project records a `secret_ref` identifier.
 3. At execution time the engine resolves the ref into memory only.
 
+The environment manager shows whether each referenced secret still exists without exposing its value. Deleting a secret first removes its workspace reference and then removes the credential from the OS keychain or Agent store. Secret values are never returned by the status API.
+
 For HTTP Bearer auth, choose **Direct token** only when saving the token in the local request is acceptable. Team snapshots redact this field, but local project exports must still be reviewed before sharing.
 
 ## Desktop vs Web

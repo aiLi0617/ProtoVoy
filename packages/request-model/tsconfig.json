@@ -8,7 +8,9 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "incremental": true,
+    "tsBuildInfoFile": "../../node_modules/.cache/protovoy/tsbuildinfo/request-model.tsbuildinfo"
   },
   "include": ["src"]
 }

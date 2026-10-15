@@ -25,6 +25,16 @@ assert.match(field, /Required field/);
 assert.match(field, /aria-describedby=/);
 assert.match(field, /class="ui-input"/);
 
+const invalidField = renderToStaticMarkup(<Field label="Endpoint" error="Enter a valid URL"><TextInput /></Field>);
+const invalidDescriptionId = invalidField.match(/aria-describedby="([^"]+)"/)?.[1];
+assert.ok(invalidDescriptionId);
+assert.match(invalidField, /aria-invalid="true"/);
+assert.match(invalidField, /role="alert"/);
+assert.match(invalidField, new RegExp(`id="${invalidDescriptionId}"`));
+
+const describedField = renderToStaticMarkup(<Field label="Endpoint" error="Enter a valid URL"><TextInput aria-describedby="endpoint-help" /></Field>);
+assert.match(describedField, /aria-describedby="endpoint-help [^"]+-description"/);
+
 assert.match(renderToStaticMarkup(<Select><option>One</option></Select>), /class="ui-select"/);
 assert.match(renderToStaticMarkup(<Textarea />), /class="ui-textarea"/);
 assert.match(renderToStaticMarkup(<Checkbox label="Enabled" defaultChecked />), /type="checkbox"/);

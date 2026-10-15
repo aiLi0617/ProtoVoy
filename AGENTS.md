@@ -13,12 +13,24 @@ During implementation:
 - Group related edits before validation.
 - `pnpm validate:changed` checks changed JavaScript/TypeScript and Rust workspaces
   plus their in-repository dependents. Use `--base <git-ref>` to validate a branch.
+  JavaScript workspace scripts run directly with concurrency four, so
+  `npm run validate:changed` remains available when Corepack is offline.
+- `pnpm validate:staged` limits validation to staged paths. `pnpm validate:since`
+  validates dirty files whose contents changed since the last successful matching run.
 - `pnpm test:e2e:changed` runs browser specs mapped to changed UI features. It
   falls back to the browser smoke suite for shared or unmapped UI source files.
+  The selector uses `playwright.runtime.config.ts`, whose web server starts the
+  installed Vite CLI directly so browser tests remain runnable without Corepack.
+  Use `pnpm test:e2e:staged` for staged paths or `pnpm test:e2e:since` to rerun
+  only dirty contents changed since the last successful matching browser run.
 - UI unit tests selected by `pnpm validate:changed` follow relative imports and
-  run in up to four isolated processes. Full `pnpm test` uses the same concurrency.
+  run in up to four balanced isolated shard processes. Full `pnpm test` uses the same concurrency.
   Local UI runs stop scheduling new tests after the first failure; CI keeps
-  collecting failures. Pass `--no-fail-fast` to the TSX runner when needed.
+  collecting failures. Pass `--no-fail-fast` to the TSX runner when needed. The
+  runner records local durations and balances historically slow tests across shards.
+- Routine Rust source changes test and Clippy the directly changed crates, then
+  `cargo check` their in-repository dependents. Cargo manifests, lockfiles, and
+  toolchain configuration retain full-workspace test and Clippy validation.
 
 Before completing a routine task, run `pnpm validate:changed`. Run the applicable
 full validation once before merging to `main`, cutting a release, or after changing

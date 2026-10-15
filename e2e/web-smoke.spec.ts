@@ -277,6 +277,31 @@ test("HTTP target URL has an accessible label and neutral empty state", async ({
   await expect(input).not.toHaveAttribute("aria-invalid", "true");
 });
 
+test("HTTP parameter entry row keeps the same height as populated rows", async ({ page }) => {
+  const panel = page.locator(".workbench-panel:not([hidden])");
+  await panel.getByLabel("Param 1 名称").fill("page");
+
+  const rows = panel.locator(".http-param-row");
+  await expect(rows).toHaveCount(2);
+  const heights = await rows.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));
+
+  expect(heights[1]).toBeCloseTo(heights[0], 5);
+
+  const entryRow = rows.nth(1);
+  const typeSelect = entryRow.locator(".http-param-type-cell select");
+  const requiredCell = entryRow.locator(".http-required-row");
+  const requiredButton = requiredCell.locator("button");
+  await entryRow.locator(".http-param-name-cell").hover();
+  await expect(typeSelect).toBeHidden();
+  await expect(requiredButton).toHaveCSS("opacity", "0");
+  await entryRow.locator(".http-param-type-cell").hover();
+  await expect(typeSelect).toBeVisible();
+  await expect(requiredButton).toHaveCSS("opacity", "1");
+  await requiredCell.hover();
+  await expect(typeSelect).toBeVisible();
+  await expect(requiredButton).toHaveCSS("opacity", "1");
+});
+
 test("HTTP save action renders as one control with its dropdown arrow inside", async ({ page }) => {
   const control = page.locator(".workbench-panel:not([hidden]) .http-save-split");
   const save = control.locator(".http-save-button");
