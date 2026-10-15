@@ -106,11 +106,13 @@ export interface FieldProps extends HTMLAttributes<HTMLDivElement> {
 export function Field({ label, hint, error, required, children, className, ...props }: FieldProps) {
   const generatedId = useId();
   const descriptionId = `${generatedId}-description`;
+  const childProps = isValidElement(children) ? children.props as { id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean } : undefined;
+  const describedBy = [childProps?.["aria-describedby"], error || hint ? descriptionId : undefined].filter(Boolean).join(" ") || undefined;
   const control = isValidElement(children)
     ? cloneElement(children as ReactElement<{ id?: string; "aria-describedby"?: string; "aria-invalid"?: boolean }>, {
-        id: (children.props as { id?: string }).id ?? generatedId,
-        "aria-describedby": error || hint ? descriptionId : undefined,
-        "aria-invalid": error ? true : undefined,
+        id: childProps?.id ?? generatedId,
+        "aria-describedby": describedBy,
+        "aria-invalid": error ? true : childProps?.["aria-invalid"],
       })
     : children;
   return (

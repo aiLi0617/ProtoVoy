@@ -10,7 +10,7 @@ test("imports transport options without persisting auth or cookies", () => { con
 test("drops credential headers and keeps ordinary headers", () => { const r = parseCurlWithWarnings("curl https://api.example.com -H 'Authorization: Bearer top-secret' -H 'X-Api-Key: top-secret' -H 'Accept: application/json'"); assert.deepEqual(r.request.headers, [["Accept", "application/json"]]); assert.match(r.warnings.join("\n"), /Authorization Header 未导入/); assert.match(r.warnings.join("\n"), /X-Api-Key Header 未导入/); });
 test("moves data to query string for --get", () => { const r = parseCurl("curl https://api.example.com/search --get --data-urlencode 'q=hello world'"); assert.equal(r.method, "GET"); assert.equal(r.url, "https://api.example.com/search?q=hello%20world"); assert.equal(r.body, undefined); });
 test("reports unsupported and file-backed options", () => { const r = parseCurlWithWarnings("curl https://api.example.com/upload --data-binary @payload.json --cert client.pem"); assert.match(r.warnings.join("\n"), /\u6587\u4ef6\u5f15\u7528/); assert.match(r.warnings.join("\n"), /--cert/); });
-test("sanitizes transient credentials before persistence", () => {
+test("keeps direct auth while sanitizing credential headers before persistence", () => {
   const request = parseCurl("curl https://api.example.com -H 'Accept: application/json'");
   request.headers.push(
     ["Authorization", "Bearer top-secret"],
@@ -28,7 +28,7 @@ test("sanitizes transient credentials before persistence", () => {
   const saved = sanitizeHttpRequestForPersistence(request);
 
   assert.deepEqual(saved.headers, [["Accept", "application/json"]]);
-  assert.equal(saved.auth?.token, null);
+  assert.equal(saved.auth?.token, "top-secret");
   assert.deepEqual(saved.metadata, {
     __protovoySavedActualRequest: {
       auth: { secret_ref: "vault-token" },

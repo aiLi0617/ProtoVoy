@@ -123,13 +123,35 @@ struct CiCollectionRunRequest {
     fail_fast: bool,
     #[serde(default)]
     variables: HashMap<String, String>,
+    #[serde(default)]
+    data: Vec<HashMap<String, String>>,
+    #[serde(default)]
+    report_format: CollectionReportFormat,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum CollectionReportFormat {
+    #[default]
+    Json,
+    Junit,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CiCollectionRunCase {
+    iteration: usize,
+    #[serde(flatten)]
+    case: CollectionRunCase,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CiCollectionRunResponse {
-    cases: Vec<CollectionRunCase>,
+    cases: Vec<CiCollectionRunCase>,
     exit_code: i32,
+    report_format: CollectionReportFormat,
+    report: String,
 }
 
 #[tokio::main]
@@ -286,43 +308,117 @@ async fn ci_collection_execute(
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(CiCollectionRunResponse {
-                    cases: vec![CollectionRunCase {
-                        request_id: String::new(),
-                        name: "collection".into(),
-                        protocol_id: String::new(),
-                        passed: false,
-                        status: None,
-                        duration_ms: 0,
-                        error: Some(error.to_string()),
-                        failed_assertions: Vec::new(),
-                    }],
+                    cases: vec![],
                     exit_code: 1,
+                    report_format: body.report_format,
+                    report: error.to_string(),
                 }),
             );
         }
     };
-    let items = body
-        .requests
-        .into_iter()
-        .map(|request| CollectionRunItem {
-            request_id: request.id.0.to_string(),
-            scope: VariableScope {
-                environment: body.variables.clone(),
-                ..VariableScope::default()
-            },
-            request,
-        })
-        .collect();
     let engine = state.engine.read().await;
-    let result = run_collection_to_completion(&engine, items, body.fail_fast).await;
-    let exit_code = i32::from(result.cases.iter().any(|case| !case.passed));
-    (
-        StatusCode::OK,
-        Json(CiCollectionRunResponse {
-            cases: result.cases,
-            exit_code,
-        }),
-    )
+    let response = execute_ci_collection(&engine, body).await;
+    (StatusCode::OK, Json(response))
+}
+
+async fn execute_ci_collection(
+    engine: &ExecutionEngine,
+    body: CiCollectionRunRequest,
+) -> CiCollectionRunResponse {
+    let rows = if body.data.is_empty() {
+        vec![HashMap::new()]
+    } else {
+        body.data
+    };
+    let mut cases = Vec::new();
+    for (index, row) in rows.into_iter().enumerate() {
+        let mut variables = body.variables.clone();
+        variables.extend(row);
+        let items = body
+            .requests
+            .iter()
+            .cloned()
+            .map(|request| CollectionRunItem {
+                request_id: request.id.0.to_string(),
+                scope: VariableScope {
+                    environment: variables.clone(),
+                    ..VariableScope::default()
+                },
+                request,
+            })
+            .collect();
+        let result = run_collection_to_completion(engine, items, body.fail_fast).await;
+        let failed = result.cases.iter().any(|case| !case.passed);
+        cases.extend(result.cases.into_iter().map(|case| CiCollectionRunCase {
+            iteration: index + 1,
+            case,
+        }));
+        if body.fail_fast && failed {
+            break;
+        }
+    }
+    let exit_code = i32::from(cases.iter().any(|case| !case.case.passed));
+    let report = render_collection_report(&cases, body.report_format);
+    CiCollectionRunResponse {
+        cases,
+        exit_code,
+        report_format: body.report_format,
+        report,
+    }
+}
+
+fn render_collection_report(
+    cases: &[CiCollectionRunCase],
+    format: CollectionReportFormat,
+) -> String {
+    match format {
+        CollectionReportFormat::Json => serde_json::to_string_pretty(cases).unwrap_or_default(),
+        CollectionReportFormat::Junit => {
+            let failures = cases.iter().filter(|case| !case.case.passed).count();
+            let tests = cases
+                .iter()
+                .map(|item| {
+                    let case = &item.case;
+                    let failure_message = case.error.clone().or_else(|| {
+                        (!case.failed_assertions.is_empty()).then(|| {
+                            format!(
+                                "assertions failed: {}",
+                                case.failed_assertions.join(", ")
+                            )
+                        })
+                    });
+                    let failure = failure_message
+                        .as_deref()
+                        .map(|message| {
+                            format!("<failure message=\"{}\"/>", xml_escape(message))
+                        })
+                        .unwrap_or_default();
+                    format!(
+                        "<testcase name=\"[iteration {}] {}\" classname=\"{}\" time=\"{:.3}\">{}</testcase>",
+                        item.iteration,
+                        xml_escape(&case.name),
+                        xml_escape(&case.protocol_id),
+                        case.duration_ms as f64 / 1000.0,
+                        failure
+                    )
+                })
+                .collect::<String>();
+            format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?><testsuite name=\"ProtoVoy\" tests=\"{}\" failures=\"{}\">{}</testsuite>",
+                cases.len(),
+                failures,
+                tests
+            )
+        }
+    }
+}
+
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 fn execution_response(execution: GatewayExecution) -> (StatusCode, Json<GatewayExecution>) {
     let status = if execution.success {
@@ -719,6 +815,57 @@ mod tests {
             request.variables.get("host").map(String::as_str),
             Some("example.com")
         );
+        assert!(request.data.is_empty());
+        assert_eq!(request.report_format, CollectionReportFormat::Json);
+    }
+
+    #[test]
+    fn collection_runner_request_accepts_data_rows_and_junit() {
+        let request: CiCollectionRunRequest = serde_json::from_value(serde_json::json!({
+            "requests": [],
+            "variables": { "host": "example.com" },
+            "data": [{ "user": "alice" }, { "user": "bob" }],
+            "reportFormat": "junit"
+        }))
+        .expect("request");
+
+        assert_eq!(request.data.len(), 2);
+        assert_eq!(request.report_format, CollectionReportFormat::Junit);
+    }
+
+    #[tokio::test]
+    async fn collection_runner_reports_each_data_iteration_and_fail_fast() {
+        let body = CiCollectionRunRequest {
+            requests: vec![execution_engine::sample_http_get(
+                "https://{{host}}/{{user}}",
+            )],
+            fail_fast: false,
+            variables: HashMap::from([("host".into(), "example.com".into())]),
+            data: vec![
+                HashMap::from([("user".into(), "alice".into())]),
+                HashMap::from([("user".into(), "bob".into())]),
+            ],
+            report_format: CollectionReportFormat::Junit,
+        };
+        let response = execute_ci_collection(&ExecutionEngine::new(), body).await;
+
+        assert_eq!(response.cases.len(), 2);
+        assert_eq!(response.cases[0].iteration, 1);
+        assert_eq!(response.cases[1].iteration, 2);
+        assert_eq!(response.exit_code, 1);
+        assert!(response.report.contains("tests=\"2\""));
+        assert!(response.report.contains("[iteration 2]"));
+
+        let fail_fast = CiCollectionRunRequest {
+            requests: vec![execution_engine::sample_http_get("https://example.com")],
+            fail_fast: true,
+            variables: HashMap::new(),
+            data: vec![HashMap::new(), HashMap::new()],
+            report_format: CollectionReportFormat::Json,
+        };
+        let response = execute_ci_collection(&ExecutionEngine::new(), fail_fast).await;
+        assert_eq!(response.cases.len(), 1);
+        assert_eq!(response.cases[0].iteration, 1);
     }
 
     #[test]

@@ -17,6 +17,7 @@ class ApiController {
     private final CollaborationService service;
     ApiController(CollaborationService service){this.service=service;}
 
+    @GetMapping("/auth/bootstrap-status") CollaborationService.BootstrapStatus bootstrapStatus(){return service.bootstrapStatus();}
     @PostMapping("/auth/bootstrap") CollaborationService.AuthResult bootstrap(
         @RequestHeader(value="X-ProtoVoy-Bootstrap-Token", required=false) String token,
         @Valid @RequestBody Bootstrap body

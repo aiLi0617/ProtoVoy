@@ -68,8 +68,34 @@
 
 集合执行开始从多端重复循环收敛到 `execution-engine`：新增共享顺序 Runner，统一 fail-fast、失败断言判定以及后置脚本变量在单次运行内向后传递的语义，且不再要求把提取变量写回持久环境。Gateway 保留原单请求 CI API，同时新增 `/v1/runner/collection`，可按顺序执行完整 envelopes 并返回 CI `exitCode`。
 
-当前 ISS-013/ISS-018 标记为 `in_progress` 而非虚假关闭：Gateway、Desktop 与 Local Agent/Web 已接入共享编排，Web 不再在浏览器中下载资源树并逐条发起执行；Desktop/Agent 均保留执行历史，脚本提取变量只在本次集合运行中传递。CLI 迁移、数据迭代、项目包输入以及 UI 的环境选择、进度/取消仍是下一批工作。
+ISS-013/ISS-018 已在后续补齐后关闭：Gateway、Desktop 与 Local Agent/Web 已接入共享编排，Web 不再在浏览器中下载资源树并逐条发起执行；Desktop/Agent 均保留执行历史，脚本提取变量只在本次集合运行中传递。CLI 支持数据迭代、并发与 JUnit；并发请求采用隔离作用域，依赖前序提取变量的场景继续使用默认顺序执行。Gateway 的无状态 CI 接口接受完整 envelopes，而不直接解包尚未稳定的项目归档格式。
 
 验证：共享 Runner 变量串联和 fail-fast `2 passed`；Gateway `7 passed`；Local Agent `2 passed`；Web/Agent 集合入口桌面与移动浏览器 `2 passed`；Engine、Agent、Desktop、Gateway 严格 Clippy 通过。
 
 安全前置审查同时发现 `quinn-proto 0.11.16` 与 `wasmtime 47.0.4` 的 10 个 RustSec 公告（含 critical）。已分别升级到 `0.11.18` 与 `48.0.4`，未加入 audit ignore；`cargo audit -D warnings`、Plugin Runtime 回归、单线程完整 Rust workspace 测试和全 workspace Clippy 均通过，记录为 ISS-022 并关闭。
+
+## 2026-10-14 第四轮修复
+
+Desktop 与 Web 的 Collection Runner 增加稳定运行 ID、已完成/总数进度、运行中锁定配置和可访问的取消操作。Desktop 与 Local Agent 都提供进度查询和取消入口；取消会终止集合调度，并保证不再启动下一条请求。环境覆盖、fail-fast 和运行内变量链均由共享 Runner 承担，ISS-013 因而闭环。
+
+验证：Web/Desktop/UI 类型检查通过；集合环境与运行生命周期浏览器回归 `2 passed`，取消进度视觉截图已复核；变更选择器覆盖的 34 个 UI 测试文件、Rust 测试与仓库内依赖检查通过；相关 Rust 包严格 Clippy 通过。`validate:changed` 的原生 Clippy 步骤受本机旧 `cargo-clippy.exe` shim 架构不兼容影响，已使用稳定工具链对同一包集合执行等价命令并通过。
+
+## 2026-10-15 第五轮修复
+
+协作服务首次 Owner 引导不再要求部署者预先生成并同步一串环境变量。空库启动时，缺失、空白或仍为示例占位值的配置会被替换为 256-bit URL-safe 随机令牌，并仅在启动日志提示；已有用户时不输出。公开的 `/v1/auth/bootstrap-status` 只暴露引导是否开放、是否需要令牌以及令牌是否由服务生成，不返回凭证本身。Team 客户端据此隐藏已关闭的首次引导入口，并在自动生成场景说明从受控启动日志取值。
+
+部署 Compose 允许引导令牌留空，仍支持生产环境显式注入独立高熵值。完成首位 Owner 创建后，既有服务端用户数门禁继续让引导接口永久失效。安全审查确认：未削弱 Local Agent 鉴权、未启用远程绑定、未记录 Authorization Header；唯一明文输出是空库首次启动所需的一次性引导凭证，符合 ISS-001 既定威胁模型。
+
+验证：协作服务 Gradle 回归通过；UI 类型检查通过；首次引导开放/关闭两条桌面 Chromium 回归 `2 passed`，并复核自动生成提示截图。ISS-001 关闭。
+
+## 2026-10-15 第六轮修复
+
+字段级错误反馈完成无障碍闭环。共享 `Field` 原语的错误描述继续作为 `role=alert`，并通过稳定 ID 与控件的 `aria-describedby` 对应；回归测试新增 ID 一致性断言。此前绕开共享原语的 HTTP 状态码组合框、Mock 客户端 IP 与 UDP 目标地址也增加可见的就地恢复提示，并同步 `aria-invalid` / `aria-describedby`，避免只依赖红色边框、placeholder 或 title。
+
+验证：UI 类型检查与共享组件测试通过；Mock 与 UDP 两条桌面 Chromium 无障碍回归 `2 passed`，视觉截图已复核。UIA-020 关闭。
+
+## 2026-10-15 第七轮修复
+
+模态交互完成共享焦点闭环。保存接口、新建目录、测试用例预览/创建和执行历史统一接入 `ModalFrame`；焦点管理增加模态栈，嵌套弹窗打开时只有最上层处理 Tab 与 Escape，关闭后焦点返回各自触发控件。命令面板继续使用同一焦点约束能力；响应校验配置和参数差异提示属于页面内非模态浮层，不错误标记为 `aria-modal`。
+
+验证：`npm run validate:changed -- --js` 通过；执行历史焦点锁定、Escape 关闭与焦点恢复桌面 Chromium 回归 `2 passed`，视觉截图已复核。UIA-011 关闭。

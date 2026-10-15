@@ -28,6 +28,13 @@ smoke，修改 Playwright 配置或 e2e 公共支持代码时仍运行全套浏�
 import 关系选择，并以最多 4 个隔离进程执行；本地首次失败后停止派发新单测，CI 继续收集
 全部失败。移动端浏览器项目只由 CSS、响应式壳层或 `mobileSpecs` 中的用例触发。桌面编译只跑
 Linux，Cargo 安全审计只在依赖与工具链配置变化时运行。
+本地短循环可用 `pnpm validate:staged` 或 `pnpm validate:since`，但 PR 门禁仍以
+`pnpm validate:changed --base <git-ref>` 为准。
+变更 E2E 映射时需确认选择器启动即通过映射完整性检查，不得引用已删除的 spec；排查 UI
+单测误选可使用 `test-changed-ui.mjs --dry-run --explain` 查看运行时依赖链。
+重复修复循环会优先重跑上次失败及本次修复新影响的 workspace 任务；公共导出图之外的
+内部 TypeScript 实现不会扩散下游 typecheck。E2E selector 对 `web-smoke.spec.ts` 按功能
+标题分组过滤，未映射 UI 仍保留完整 smoke 兜底。
 完整的跨平台安装、升级和卸载验证由 `Installer lifecycle` 每晚运行，也可通过
 `workflow_dispatch` 随时手动触发。发布标签仍执行完整的跨平台发布验证。
 

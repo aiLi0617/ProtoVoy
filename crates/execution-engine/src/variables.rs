@@ -7,7 +7,10 @@
 use std::collections::HashMap;
 
 use chrono::Utc;
-use core_domain::{HttpPayload, ProtocolPayload, RequestEnvelope};
+use core_domain::{
+    GlobalParameter, GlobalParameterLocation, HttpPayload, MultipartPart, ProtocolPayload,
+    RequestEnvelope,
+};
 use regex::Regex;
 use thiserror::Error;
 use uuid::Uuid;
@@ -29,6 +32,8 @@ impl ResolveError {
 #[derive(Debug, Clone, Default)]
 pub struct VariableScope {
     pub global: HashMap<String, String>,
+    /// Request parameters inherited by every HTTP request. Request-local values win.
+    pub global_parameters: Vec<GlobalParameter>,
     pub environment: HashMap<String, String>,
     pub collection: HashMap<String, String>,
     pub request: HashMap<String, String>,
@@ -101,6 +106,8 @@ pub fn resolve_request(
     if let Some(proxy) = request.proxy.clone() {
         request.proxy = Some(resolve_template(&proxy, &vars)?);
     }
+
+    apply_global_parameters(&mut request, &scope.global_parameters, &vars)?;
 
     match &mut request.payload {
         ProtocolPayload::Http(HttpPayload {
@@ -189,6 +196,160 @@ pub fn resolve_request(
     Ok(request)
 }
 
+fn apply_global_parameters(
+    request: &mut RequestEnvelope,
+    parameters: &[GlobalParameter],
+    vars: &HashMap<String, String>,
+) -> Result<(), ResolveError> {
+    let ProtocolPayload::Http(payload) = &mut request.payload else {
+        return Ok(());
+    };
+    for parameter in parameters.iter().filter(|parameter| parameter.enabled) {
+        let name = resolve_template(parameter.name.trim(), vars)?;
+        if name.is_empty() {
+            continue;
+        }
+        let value = resolve_template(&parameter.value, vars)?;
+        match parameter.location {
+            GlobalParameterLocation::Header => {
+                if !payload
+                    .headers
+                    .iter()
+                    .any(|(existing, _)| existing.eq_ignore_ascii_case(&name))
+                {
+                    payload.headers.push((name, value));
+                }
+            }
+            GlobalParameterLocation::Cookie => {
+                let cookie_index = payload
+                    .headers
+                    .iter()
+                    .position(|(header, _)| header.eq_ignore_ascii_case("cookie"));
+                let already_present = cookie_index
+                    .map(|index| cookie_contains(&payload.headers[index].1, &name))
+                    .unwrap_or(false);
+                if !already_present {
+                    if let Some(index) = cookie_index {
+                        let separator = if payload.headers[index].1.trim().is_empty() {
+                            ""
+                        } else {
+                            "; "
+                        };
+                        payload.headers[index].1.push_str(separator);
+                        payload.headers[index]
+                            .1
+                            .push_str(&format!("{name}={value}"));
+                    } else {
+                        payload
+                            .headers
+                            .push(("Cookie".into(), format!("{name}={value}")));
+                    }
+                }
+            }
+            GlobalParameterLocation::Query => {
+                if let Ok(mut url) = reqwest::Url::parse(&request.target) {
+                    let exists = url.query_pairs().any(|(key, _)| key == name);
+                    if !exists {
+                        url.query_pairs_mut().append_pair(&name, &value);
+                        request.target = url.into();
+                    }
+                }
+            }
+            GlobalParameterLocation::Body => apply_body_parameter(payload, &name, &value),
+        }
+    }
+    Ok(())
+}
+
+fn cookie_contains(header: &str, name: &str) -> bool {
+    header.split(';').any(|part| {
+        part.split_once('=')
+            .map(|(key, _)| key.trim() == name)
+            .unwrap_or(false)
+    })
+}
+
+fn apply_body_parameter(payload: &mut HttpPayload, name: &str, value: &str) {
+    if !payload.multipart.is_empty() {
+        if !payload.multipart.iter().any(|part| part.name == name) {
+            payload.multipart.push(MultipartPart {
+                name: name.into(),
+                value: value.into(),
+                file_name: None,
+                content_type: None,
+                base64: false,
+            });
+        }
+        return;
+    }
+    let content_type = payload
+        .headers
+        .iter()
+        .find(|(header, _)| header.eq_ignore_ascii_case("content-type"))
+        .map(|(_, value)| value.to_ascii_lowercase())
+        .unwrap_or_default();
+    if content_type.contains("application/x-www-form-urlencoded") {
+        let body = payload.body.get_or_insert_with(String::new);
+        let encoded_name = form_urlencode_component(name);
+        let exists = body.split('&').any(|pair| {
+            pair.split_once('=')
+                .map(|(key, _)| key == name || key == encoded_name)
+                .unwrap_or(false)
+        });
+        if !exists {
+            if !body.is_empty() {
+                body.push('&');
+            }
+            body.push_str(&encoded_name);
+            body.push('=');
+            body.push_str(&form_urlencode_component(value));
+        }
+        return;
+    }
+    let body_is_empty = payload
+        .body
+        .as_deref()
+        .is_none_or(|body| body.trim().is_empty());
+    let parsed_body = payload
+        .body
+        .as_deref()
+        .filter(|body| !body.trim().is_empty())
+        .and_then(|body| serde_json::from_str::<serde_json::Value>(body).ok());
+    let inferred_json = content_type.is_empty()
+        && matches!(parsed_body.as_ref(), Some(serde_json::Value::Object(_)));
+    if body_is_empty || content_type.contains("application/json") || inferred_json {
+        let parsed = parsed_body.unwrap_or_else(|| serde_json::json!({}));
+        if let serde_json::Value::Object(mut object) = parsed {
+            if !object.contains_key(name) {
+                object.insert(name.into(), serde_json::Value::String(value.into()));
+                payload.body = serde_json::to_string(&object).ok();
+                if !payload
+                    .headers
+                    .iter()
+                    .any(|(header, _)| header.eq_ignore_ascii_case("content-type"))
+                {
+                    payload
+                        .headers
+                        .push(("Content-Type".into(), "application/json".into()));
+                }
+            }
+        }
+    }
+}
+
+fn form_urlencode_component(value: &str) -> String {
+    value
+        .bytes()
+        .map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (byte as char).to_string()
+            }
+            b' ' => "+".into(),
+            _ => format!("%{byte:02X}"),
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,5 +397,62 @@ mod tests {
             ProtocolPayload::Http(p) => assert_eq!(p.headers[0].1, "abc"),
             _ => panic!("expected http"),
         }
+    }
+
+    #[test]
+    fn applies_typed_global_parameters_without_overriding_request_values() {
+        let mut req = RequestEnvelope::http_get("t", "https://example.test/items?local=1");
+        req.payload = ProtocolPayload::Http(HttpPayload {
+            method: "POST".into(),
+            headers: vec![
+                ("X-Local".into(), "request".into()),
+                ("Cookie".into(), "session=request".into()),
+            ],
+            body: Some("{\"local\":true}".into()),
+            body_encoding: "text".into(),
+            body_source: None,
+            multipart: vec![],
+            follow_redirects: true,
+        });
+        let parameter = |location, name: &str, value: &str| GlobalParameter {
+            location,
+            name: name.into(),
+            value: value.into(),
+            enabled: true,
+            description: String::new(),
+        };
+        let scope = VariableScope {
+            global: HashMap::from([("token".into(), "secret".into())]),
+            global_parameters: vec![
+                parameter(GlobalParameterLocation::Header, "X-Global", "{{token}}"),
+                parameter(GlobalParameterLocation::Header, "X-Local", "global"),
+                parameter(GlobalParameterLocation::Cookie, "region", "cn"),
+                parameter(GlobalParameterLocation::Cookie, "session", "global"),
+                parameter(GlobalParameterLocation::Query, "locale", "zh-CN"),
+                parameter(GlobalParameterLocation::Body, "global", "yes"),
+                parameter(GlobalParameterLocation::Body, "local", "false"),
+            ],
+            ..VariableScope::default()
+        };
+
+        let resolved = resolve_request(req, &scope).expect("resolve");
+        assert!(resolved.target.contains("locale=zh-CN"));
+        let ProtocolPayload::Http(payload) = resolved.payload else {
+            panic!("http")
+        };
+        assert!(payload
+            .headers
+            .contains(&("X-Global".into(), "secret".into())));
+        assert!(payload
+            .headers
+            .contains(&("X-Local".into(), "request".into())));
+        assert!(payload
+            .headers
+            .iter()
+            .any(|(name, value)| name == "Cookie" && value == "session=request; region=cn"));
+        let body: serde_json::Value =
+            serde_json::from_str(payload.body.as_deref().unwrap()).unwrap();
+        assert_eq!(body["local"], true);
+        assert_eq!(body["global"], "yes");
     }
 }

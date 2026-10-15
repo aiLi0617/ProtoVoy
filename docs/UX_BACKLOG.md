@@ -24,7 +24,7 @@
 | UIA-008 | P2 | Hard-coded colors bypass tokens | open |
 | UIA-009 | P2 | Raw z-index numbers vs tokens | open |
 | UIA-010 | P1 | Tabs missing keyboard model outside HTTP | partial |
-| UIA-011 | P1 | Dialogs missing shared focus trap | open |
+| UIA-011 | P1 | Dialogs missing shared focus trap | done |
 | UIA-012 | P2 | Dirty create dialogs close on backdrop | done |
 | UIA-013 | P1 | Automation rail has no dedicated view | done |
 | UIA-014 | P1 | Project settings “克隆项目” has no `onClick` (project cards elsewhere may clone) | done |
@@ -33,7 +33,7 @@
 | UIA-017 | P1 | Dangerous delete confirm inconsistent | partial |
 | UIA-018 | P2 | Forms use div+click instead of submit | open |
 | UIA-019 | P2 | Field label patterns inconsistent | open |
-| UIA-020 | P1 | Field errors not fully aria-linked | open |
+| UIA-020 | P1 | Field errors not fully aria-linked | done |
 | UIA-021 | P2 | Loading / success feedback inconsistent | open |
 | UIA-022 | P1 | WS messages / full tree not virtualized | open |
 | UIA-023 | P1 | Fixed multi-column layouts break narrow viewports | open |
@@ -58,7 +58,7 @@
 | UIA-042 | P2 | Capture proxy text concatenation | done |
 | UIA-043 | P2 | Mobile keeps permanent project rail | done |
 | UIA-044 | P2 | Status bar shows internal IDs | done |
-| UIA-045 | P2 | Mobile top bar loses project context | open |
+| UIA-045 | P2 | Mobile top bar loses project context | done |
 | UIA-046 | P2 | Tool workbenches lack mobile task flow | partial |
 
 ## Notes
@@ -74,6 +74,12 @@
 - 2026-10-14 contrast follow-up: UIA-027 is partial. Shared buttons, checkboxes and switches now retain full foreground opacity and use semantic muted colors; non-control page sections that use `.is-disabled` still need a case-by-case visual pass.
 
 - 2026-10-14 status-language follow-up: UIA-026 is partial. Capture and Comments now use Chinese state labels; AI、SSO、Gateway and Team still contain English status badges that should move into the locale dictionary rather than receive more page-local replacements.
+
+- 2026-10-14 mobile-context follow-up: UIA-045 is closed. The narrow header retains the current project selector while collapsing the home action to its icon; a mobile browser regression asserts that the selected project remains visible.
+
+- 2026-10-15 field-error follow-up: UIA-020 is closed. Shared `Field` errors retain `aria-invalid`, an alert description and deterministic `aria-describedby`; custom HTTP status, Mock client-IP and UDP target controls now expose visible recovery text and link it to the invalid control. Component and desktop Chromium regressions cover the shared and custom paths.
+
+- 2026-10-15 dialog-focus follow-up: UIA-011 is closed. Save-interface dialogs, nested directory creation, test-case drawers and execution history now use the shared modal frame. Its stack-aware focus manager limits Tab/Escape handling to the topmost dialog and restores focus to the opener after close; desktop Chromium regression covers focus trapping, Escape and restoration.
 
 - Do not mark [UI_UX_DESIGN_SYSTEM.md](./UI_UX_DESIGN_SYSTEM.md) rows as “done” without a closed UIA/ISS and test evidence (UIA-030).
 - Closed historical IA walkthrough: [archive/UX_WALKTHROUGH.md](./archive/UX_WALKTHROUGH.md) (not SoT).

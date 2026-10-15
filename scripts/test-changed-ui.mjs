@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import ts from "typescript";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const uiRoot = join(repoRoot, "packages", "ui");
@@ -18,9 +19,10 @@ function walk(directory) {
 }
 
 function parseArguments(argv) {
-  const options = { dryRun: false, files: [] };
+  const options = { dryRun: false, explain: false, files: [] };
   for (let index = 0; index < argv.length; index += 1) {
     if (argv[index] === "--dry-run") options.dryRun = true;
+    else if (argv[index] === "--explain") options.explain = true;
     else if (argv[index] === "--file") options.files.push(argv[++index]);
     else throw new Error(`Unknown argument: ${argv[index]}`);
   }
@@ -35,6 +37,38 @@ function resolveImport(fromFile, specifier) {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
+function moduleSpecifierText(node) {
+  return node && ts.isStringLiteralLike(node) ? node.text : undefined;
+}
+
+function collectImports(file, source) {
+  const runtime = [];
+  const typeOnly = [];
+  const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, false, file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  function add(specifier, isTypeOnly) {
+    if (specifier?.startsWith(".")) (isTypeOnly ? typeOnly : runtime).push(specifier);
+  }
+  function visit(node) {
+    if (ts.isImportDeclaration(node)) {
+      const clause = node.importClause;
+      const bindings = clause?.namedBindings;
+      const onlyTypeBindings = bindings && ts.isNamedImports(bindings) && bindings.elements.length > 0 && bindings.elements.every((element) => element.isTypeOnly);
+      add(moduleSpecifierText(node.moduleSpecifier), Boolean(clause?.isTypeOnly || (!clause?.name && onlyTypeBindings)));
+    } else if (ts.isExportDeclaration(node)) {
+      const exports = node.exportClause;
+      const onlyTypeExports = exports && ts.isNamedExports(exports) && exports.elements.length > 0 && exports.elements.every((element) => element.isTypeOnly);
+      add(moduleSpecifierText(node.moduleSpecifier), Boolean(node.isTypeOnly || onlyTypeExports));
+    } else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      add(moduleSpecifierText(node.arguments[0]), false);
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      add(moduleSpecifierText(node.moduleReference.expression), node.isTypeOnly);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(sourceFile);
+  return { runtime, typeOnly };
+}
+
 const options = parseArguments(process.argv.slice(2));
 const sourceFiles = walk(srcRoot).filter((file) => [".ts", ".tsx", ".css"].includes(extname(file)));
 const packageJson = JSON.parse(readFileSync(join(uiRoot, "package.json"), "utf8"));
@@ -47,10 +81,10 @@ const normalizedChanges = options.files.map((file) => file.replaceAll("\\", "/")
 const changedSources = new Set(normalizedChanges.filter((file) => file.startsWith("packages/ui/src/")).map((file) => resolve(repoRoot, file)));
 
 let selected = [];
+const selectionReasons = new Map();
 if (
   normalizedChanges.some((file) =>
     [
-      "package.json",
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
       "packages/ui/package.json",
@@ -60,31 +94,64 @@ if (
   )
 ) {
   selected = tests;
+  for (const test of tests) selectionReasons.set(test, "shared manifest or test runner changed");
 } else {
   const imports = new Map();
+  const runtimeDependencies = new Set();
+  const typeOnlyDependencies = new Set();
   for (const file of sourceFiles.filter((candidate) => extname(candidate) !== ".css")) {
     const dependencies = [];
-    for (const match of readFileSync(file, "utf8").matchAll(/(?:from\s*|import\s*)["']([^"']+)["']/g)) {
-      const dependency = resolveImport(file, match[1]);
-      if (dependency) dependencies.push(dependency);
+    const source = readFileSync(file, "utf8");
+    const parsedImports = collectImports(file, source);
+    for (const specifier of parsedImports.runtime) {
+      const dependency = resolveImport(file, specifier);
+      if (dependency) {
+        dependencies.push(dependency);
+        runtimeDependencies.add(dependency);
+      }
+    }
+    for (const specifier of parsedImports.typeOnly) {
+      const dependency = resolveImport(file, specifier);
+      if (dependency) typeOnlyDependencies.add(dependency);
     }
     imports.set(file, dependencies);
   }
 
-  function reachesChanged(file, seen = new Set()) {
-    if (changedSources.has(file)) return true;
-    if (seen.has(file)) return false;
+  function pathToChanged(file, seen = new Set()) {
+    if (changedSources.has(file)) return [file];
+    if (seen.has(file)) return undefined;
     seen.add(file);
-    return (imports.get(file) ?? []).some((dependency) => reachesChanged(dependency, new Set(seen)));
+    for (const dependency of imports.get(file) ?? []) {
+      const path = pathToChanged(dependency, new Set(seen));
+      if (path) return [file, ...path];
+    }
+    return undefined;
   }
 
-  selected = tests.filter((test) => reachesChanged(test));
+  selected = tests.filter((test) => {
+    const path = pathToChanged(test);
+    if (!path) return false;
+    selectionReasons.set(test, path.map((file) => relative(uiRoot, file).replaceAll("\\", "/")).join(" -> "));
+    return true;
+  });
   for (const changed of changedSources) {
-    if (/\.test\.tsx?$/.test(changed) && existsSync(changed) && !selected.includes(changed)) selected.push(changed);
+    if (/\.test\.tsx?$/.test(changed) && existsSync(changed) && !selected.includes(changed)) {
+      selected.push(changed);
+      selectionReasons.set(changed, "changed test file");
+    }
     const stem = changed.replace(/\.(tsx?|css)$/, "");
-    for (const test of tests) if (test.startsWith(`${stem}.`) && !selected.includes(test)) selected.push(test);
+    for (const test of tests) if (test.startsWith(`${stem}.`) && !selected.includes(test)) {
+      selected.push(test);
+      selectionReasons.set(test, "matching colocated test");
+    }
   }
-  if (changedSources.size > 0 && selected.length === 0) selected = tests;
+  const onlyTypeDependenciesChanged = changedSources.size > 0 && [...changedSources].every(
+    (changed) => typeOnlyDependencies.has(changed) && !runtimeDependencies.has(changed),
+  );
+  if (changedSources.size > 0 && selected.length === 0 && !onlyTypeDependenciesChanged) {
+    selected = tests;
+    for (const test of tests) selectionReasons.set(test, "unmapped UI source fallback");
+  }
 }
 
 if (selected.length === 0) {
@@ -94,6 +161,11 @@ if (selected.length === 0) {
 
 const relativeTests = selected.sort().map((file) => relative(uiRoot, file).replaceAll("\\", "/"));
 console.log(`[test:ui:changed] Selected ${relativeTests.length}/${tests.length}: ${relativeTests.join(", ")}`);
+if (options.explain) {
+  for (const test of selected.sort()) {
+    console.log(`[test:ui:changed] Why ${relative(uiRoot, test).replaceAll("\\", "/")}: ${selectionReasons.get(test) ?? "selected"}`);
+  }
+}
 const args = ["scripts/run-tsx-tests.mjs", "--cwd", "packages/ui", "--concurrency", "4", ...relativeTests];
 if (options.dryRun) {
   console.log(`[test:ui:changed] node ${args.join(" ")}`);

@@ -14,7 +14,10 @@ use driver_sql::SqlDriver;
 use driver_sse::SseDriver;
 use driver_tcp_udp::{TcpDriver, UdpDriver};
 use driver_websocket::WebSocketDriver;
-use execution_engine::{sample_http_get, ExecutionEngine, VariableScope};
+use execution_engine::{
+    run_collection_to_completion, sample_http_get, CollectionRunItem, ExecutionEngine,
+    VariableScope,
+};
 use serde::Serialize;
 use tracing_subscriber::EnvFilter;
 
@@ -274,30 +277,41 @@ async fn run_iteration(
     iteration: usize,
     fail_fast: bool,
 ) -> Vec<RunCase> {
-    let mut cases = Vec::new();
-    let mut collection_variables = HashMap::new();
-    for request in requests {
-        let scope = VariableScope {
-            environment: data.clone(),
-            collection: collection_variables.clone(),
-            ..Default::default()
-        };
-        let (case, extracted) = run_case(engine, request, scope, iteration).await;
-        collection_variables.extend(extracted);
-        let failed = !case.passed;
-        eprintln!(
-            "{} iteration={} {} — {}",
-            if case.passed { "PASS" } else { "FAIL" },
-            iteration,
-            case.protocol_id,
-            case.name
-        );
-        cases.push(case);
-        if fail_fast && failed {
-            break;
-        }
-    }
-    cases
+    let items = requests
+        .into_iter()
+        .map(|request| CollectionRunItem {
+            request_id: request.id.0.to_string(),
+            request,
+            scope: VariableScope {
+                environment: data.clone(),
+                ..Default::default()
+            },
+        })
+        .collect();
+    let result = run_collection_to_completion(engine, items, fail_fast).await;
+    result
+        .cases
+        .into_iter()
+        .map(|case| {
+            let case = RunCase {
+                iteration,
+                name: case.name,
+                protocol_id: case.protocol_id,
+                passed: case.passed,
+                duration_ms: case.duration_ms,
+                error: case.error,
+                failed_assertions: case.failed_assertions,
+            };
+            eprintln!(
+                "{} iteration={} {} — {}",
+                if case.passed { "PASS" } else { "FAIL" },
+                iteration,
+                case.protocol_id,
+                case.name
+            );
+            case
+        })
+        .collect()
 }
 
 #[tokio::main]
@@ -410,27 +424,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
             if concurrency <= 1 {
-                let mut cases = Vec::new();
-                let mut collection_variables = HashMap::new();
-                for request in requests {
-                    let scope = VariableScope {
-                        collection: collection_variables.clone(),
-                        ..Default::default()
-                    };
-                    let (case, extracted) = run_case(&engine, request, scope, 1).await;
-                    collection_variables.extend(extracted);
-                    let failed = !case.passed;
-                    eprintln!(
-                        "{} {} — {}",
-                        if case.passed { "PASS" } else { "FAIL" },
-                        case.protocol_id,
-                        case.name
-                    );
-                    cases.push(case);
-                    if fail_fast && failed {
-                        break;
-                    }
-                }
+                let cases = run_iteration(&engine, requests, HashMap::new(), 1, fail_fast).await;
                 let passed = cases.iter().all(|case| case.passed);
                 let output = if report_format.eq_ignore_ascii_case("junit") {
                     junit(&cases)

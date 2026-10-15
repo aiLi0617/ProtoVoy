@@ -25,6 +25,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "playwright.config.ts"
+      - "playwright.runtime.config.ts"
       - ".npmrc"
       - ".github/workflows/ci.yml"
   pull_request:
@@ -47,6 +48,7 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "playwright.config.ts"
+      - "playwright.runtime.config.ts"
       - ".npmrc"
       - ".github/workflows/ci.yml"
   workflow_dispatch:
@@ -103,6 +105,7 @@ jobs:
             e2e:
               - 'e2e/**'
               - 'playwright.config.ts'
+              - 'playwright.runtime.config.ts'
               - 'apps/web/**'
               - 'packages/ui/**'
               - 'packages/request-model/**'

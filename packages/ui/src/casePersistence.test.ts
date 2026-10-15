@@ -40,7 +40,7 @@ test("case persistence keeps every request configuration tab", () => {
     ["X-Tenant", "demo"],
     ["Cookie", "sid=; locale={{locale}}"],
   ]);
-  assert.deepEqual(saved.auth, { kind: "bearer", token: null, secret_ref: "api-token" });
+  assert.deepEqual(saved.auth, { kind: "bearer", token: "transient-token", secret_ref: "api-token" });
   assert.deepEqual(saved.preScripts, request.preScripts);
   assert.deepEqual(saved.postScripts, request.postScripts);
   assert.equal(saved.timeoutMs, request.timeoutMs);
