@@ -15,8 +15,8 @@
     "@protovoy/app-wiring": "workspace:*",
     "@protovoy/request-model": "workspace:*",
     "@protovoy/ui": "workspace:*",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@types/react": "^19.3.0",
