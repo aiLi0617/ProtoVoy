@@ -318,7 +318,8 @@ export function InterfaceLifecycleShell({
       context.font = style.font;
       const textWidth = context.measureText(input.value || input.placeholder).width;
       const chromeWidth = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
-      nameTarget.style.setProperty("--interface-name-width", `${Math.ceil(textWidth + chromeWidth)}px`);
+      const caretClearance = 4;
+      nameTarget.style.setProperty("--interface-name-width", `${Math.ceil(textWidth + chromeWidth + caretClearance)}px`);
     };
     const attachInput = () => {
       const nextInput = nameTarget.querySelector<HTMLInputElement>("input");

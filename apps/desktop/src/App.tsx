@@ -1,6 +1,16 @@
 import { amqpRequestEnvelope, kafkaRequestEnvelope, mqttRequestEnvelope, redisRequestEnvelope, sqlRequestEnvelope } from "@protovoy/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+
+interface EnvironmentResource {
+  id: string;
+  projectId: string;
+  name: string;
+  variables: Record<string, string>;
+  globalParameters?: Array<{ location: "header" | "cookie" | "query" | "body"; name: string; value: string; enabled: boolean; description: string }>;
+  secretRefs: string[];
+  updatedAt: string;
+}
 import {
   AppShell,
   HttpWorkbench,
@@ -312,7 +322,11 @@ export function App() {
       connectionStatus={null}
       environment={{
         onLoad: async () => invoke<{ variables: Record<string, string>; globalParameters?: Array<{ location: "header" | "cookie" | "query" | "body"; name: string; value: string; enabled: boolean; description: string }>; secretRefs?: string[] }>("get_environment", { id: "default-env" }),
-        onSave: async (variables, secretRefs, globalParameters) => { await invoke("save_environment", { environment: { id: "default-env", variables, secretRefs, globalParameters } }); },
+        onSave: async (variables, secretRefs, globalParameters) => { await invoke("save_environment", { request: { variables, secretRefs, globalParameters } }); },
+        onListEnvironments: async () => invoke<EnvironmentResource[]>("list_environments", { projectId: null }),
+        onCreateEnvironment: async (environment) => invoke<EnvironmentResource>("create_environment", { request: { projectId: environment.projectId ?? "default-project", name: environment.name ?? "未命名环境", variables: environment.variables ?? {}, globalParameters: [], secretRefs: environment.secretRefs ?? [] } }),
+        onUpdateEnvironment: async (environment) => invoke<EnvironmentResource>("update_environment", { id: environment.id, request: { projectId: environment.projectId, name: environment.name, variables: environment.variables, globalParameters: [], secretRefs: environment.secretRefs } }),
+        onDeleteEnvironment: async (id) => { await invoke("delete_environment", { id }); },
         onPutSecret: async (name, value) => { await invoke("put_secret", { request: { name, value } }); },
         onSecretExists: async (name) => invoke<boolean>("secret_exists", { name }),
         onDeleteSecret: async (name) => { await invoke("delete_secret", { name }); },
