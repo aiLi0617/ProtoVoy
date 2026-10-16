@@ -628,7 +628,7 @@ dependencies = [
 
 [[package]]
 name = "capture-proxy"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "bytes",
  "chrono",
@@ -912,7 +912,7 @@ dependencies = [
 
 [[package]]
 name = "core-domain"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "driver-amqp"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1613,7 +1613,7 @@ dependencies = [
 
 [[package]]
 name = "driver-graphql"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1632,7 +1632,7 @@ dependencies = [
 
 [[package]]
 name = "driver-grpc"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1653,7 +1653,7 @@ dependencies = [
 
 [[package]]
 name = "driver-http"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1674,7 +1674,7 @@ dependencies = [
 
 [[package]]
 name = "driver-kafka"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1690,7 +1690,7 @@ dependencies = [
 
 [[package]]
 name = "driver-mqtt"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1709,7 +1709,7 @@ dependencies = [
 
 [[package]]
 name = "driver-redis"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1724,7 +1724,7 @@ dependencies = [
 
 [[package]]
 name = "driver-rpc-http"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1739,7 +1739,7 @@ dependencies = [
 
 [[package]]
 name = "driver-sql"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1757,7 +1757,7 @@ dependencies = [
 
 [[package]]
 name = "driver-sse"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1773,7 +1773,7 @@ dependencies = [
 
 [[package]]
 name = "driver-tcp-udp"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1792,7 +1792,7 @@ dependencies = [
 
 [[package]]
 name = "driver-websocket"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -1982,7 +1982,7 @@ dependencies = [
 
 [[package]]
 name = "event-stream"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "core-domain",
  "serde",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "execution-engine"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -3406,7 +3406,7 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "local-store"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "core-domain",
@@ -3550,7 +3550,7 @@ dependencies = [
 
 [[package]]
 name = "mock-server-core"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "regex",
  "serde",
@@ -4234,7 +4234,7 @@ dependencies = [
 
 [[package]]
 name = "plugin-runtime"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "ed25519-dalek",
@@ -4433,7 +4433,7 @@ dependencies = [
 
 [[package]]
 name = "protovoy-cli"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "clap",
  "core-domain",
@@ -4460,7 +4460,7 @@ dependencies = [
 
 [[package]]
 name = "protovoy-desktop"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "capture-proxy",
@@ -4492,7 +4492,7 @@ dependencies = [
 
 [[package]]
 name = "protovoy-local-agent"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -4529,7 +4529,7 @@ dependencies = [
 
 [[package]]
 name = "protovoy-mock-server"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "axum",
  "futures",
@@ -4545,7 +4545,7 @@ dependencies = [
 
 [[package]]
 name = "protovoy-protocol-gateway"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
@@ -5319,7 +5319,7 @@ dependencies = [
 
 [[package]]
 name = "secret-store"
-version = "0.2.0"
+version = "0.1.0"
 dependencies = [
  "keyring",
  "serde",

@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
     const { pathname } = new URL(route.request().url());
     const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" };
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
-    if (pathname === "/health") return route.fulfill({ headers, json: { service: "protovoy-agent", version: "0.2.0", agentVersion: "0.2.0", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } });
+    if (pathname === "/health") return route.fulfill({ headers, json: { service: "protovoy-agent", version: "0.1.0", agentVersion: "0.1.0", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } });
     if (pathname === "/v1/session") return route.fulfill({ headers, json: { token: "ui-preview-session" } });
     if (pathname === "/v1/workspace-tree") return route.fulfill({ headers, json: {
       workspaces: [{ id: "default-workspace", name: "Local workspace" }],
