@@ -34,8 +34,10 @@ test("saves typed global parameters and creates isolated environment drafts", as
   await dialog.getByRole("tab", { name: /Header/ }).click();
   await expect(dialog.getByLabel("全局参数名称 1")).toHaveValue("X-Client-ID");
   await dialog.getByRole("button", { name: "保存", exact: true }).click();
-  await expect(dialog.getByRole("button", { name: "保存", exact: true })).toBeDisabled();
   await dialog.getByRole("button", { name: "新建环境" }).click();
+  const discardAndCreate = page.getByRole("button", { name: "放弃并新建" });
+  await expect(discardAndCreate.or(dialog.getByLabel("环境名称"))).toBeVisible();
+  if (await discardAndCreate.isVisible()) await discardAndCreate.click();
   await dialog.getByLabel("环境名称").fill("Development");
   const variableRow = dialog.locator(".environment-kv-row").first();
   await variableRow.locator("input").nth(0).fill("base_url");

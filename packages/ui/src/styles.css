@@ -379,7 +379,7 @@ small { color: var(--protovoy-muted); }
  .project-capability-grid { grid-template-columns: 1fr; }
  .protovoy-workbench > div { grid-template-columns: 1fr !important; }
  .interface-lifecycle-tabs { flex:1 1 auto !important; min-width:0; overflow-x:auto; }
- .interface-lifecycle-tabs button { padding-inline:10px; }
+ .interface-lifecycle-tabs button { padding-inline:10px !important; }
  .interface-lifecycle-name-slot.is-saved { flex:0 0 auto; }
 }
 @media (max-width: 420px) { .brand-lockup span:last-child, .locale-select { display: none; } }
@@ -1559,7 +1559,7 @@ small { color: var(--protovoy-muted); }
 .http-apifox-row > .http-kv-delete:hover,.http-apifox-row > .http-kv-delete:focus-visible { border-color:transparent; background:color-mix(in srgb,var(--protovoy-danger) 11%,transparent); color:var(--protovoy-danger); }
 .http-apifox-row > .http-kv-delete svg { width:14px; height:14px; }
 @media (pointer:coarse) {
-  .http-apifox-row { min-height:46px; }
+  .http-apifox-row { min-height:47px; }
   .http-apifox-row.has-content > .http-row-enabled,
   .http-apifox-row.has-content > .http-kv-delete { opacity:1; }
 }

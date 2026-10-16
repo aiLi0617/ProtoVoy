@@ -7,7 +7,7 @@ test("uses the lifecycle header name field for every protocol workbench", async 
 
   for (const protocol of ["grpc", "websocket", "sse", "tcp", "udp", "mqtt", "amqp", "kafka", "redis", "sql"]) {
     await page.goto(`/#workbench=${protocol}`);
-    const activePanel = page.locator(".workbench-panel:not([hidden])");
+    const activePanel = page.locator(`.workbench-panel[data-workbench-id="${protocol}"]:not([hidden])`);
     await expect(page.getByTestId(`workbench-${protocol}`).first()).toHaveAttribute("aria-current", "page");
     await expect(activePanel).toBeVisible();
     const lifecycleTabs = activePanel.locator(".interface-lifecycle-tabs");

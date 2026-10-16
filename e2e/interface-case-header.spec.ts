@@ -42,6 +42,8 @@ test("edits only the case name and selects the parent interface after navigation
   if (await explorerToggle.isVisible()) await explorerToggle.click();
   await expect(debugCaseTreeItem).toBeVisible();
   await debugCaseTreeItem.click();
+  const explorerBackdrop = page.locator(".explorer-backdrop");
+  if (await explorerBackdrop.isVisible()) await explorerBackdrop.click();
   const header = page.locator(".interface-case-header");
   const interfaceLink = header.getByRole("button", { name: "提交报价" });
   const caseName = header.getByRole("textbox", { name: "用例名称" });

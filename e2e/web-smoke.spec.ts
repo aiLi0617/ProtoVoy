@@ -4,7 +4,7 @@ const workbenchIds = ["http", "grpc", "websocket", "sse", "tcp", "udp", "mqtt", 
 
 async function expectActiveWorkbench(page: Page, id: string) {
   await expect(page.getByTestId(`workbench-${id}`).first()).toHaveAttribute("aria-current", "page");
-  const activePanel = page.locator(".workbench-panel:not([hidden])");
+  const activePanel = page.locator(`.workbench-panel[data-workbench-id="${id}"]:not([hidden])`);
   await expect(activePanel).toBeVisible();
   const frame = activePanel.locator(".workbench-frame");
   await expect(frame).toBeVisible();
@@ -360,7 +360,7 @@ test("broker and database workbenches keep save action compact and request conte
   for (const id of ["mqtt", "amqp", "kafka", "redis", "sql"]) {
     await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: workbenchId })), id);
     await expectActiveWorkbench(page, id);
-    const activePanel = page.locator(".workbench-panel:not([hidden])");
+    const activePanel = page.locator(`.workbench-panel[data-workbench-id="${id}"]:not([hidden])`);
     await expect(activePanel).toBeVisible();
     const frame = activePanel.locator(".workbench-frame");
     const save = frame.getByRole("button", { name: "保存", exact: true });
