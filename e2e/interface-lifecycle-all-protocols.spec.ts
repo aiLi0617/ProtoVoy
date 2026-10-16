@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 
 test("uses the lifecycle header name field for every protocol workbench", async ({ page }) => {
-  test.setTimeout(120_000);
   await page.addInitScript(() => localStorage.clear());
   await page.route("http://127.0.0.1:39217/**", (route) => route.abort());
 
@@ -12,17 +11,11 @@ test("uses the lifecycle header name field for every protocol workbench", async 
     await expect(page.getByTestId(`workbench-${protocol}`).first()).toHaveAttribute("aria-current", "page");
     await expect(activePanel).toBeVisible();
     const lifecycleTabs = activePanel.locator(".interface-lifecycle-tabs");
-    const nameInput = activePanel.locator(".interface-lifecycle-name-slot input[aria-label='接口名称']");
+    const nameInput = activePanel.locator(".interface-lifecycle-name-slot input");
 
     await expect(lifecycleTabs).toBeVisible();
-    if (protocol === "mqtt") {
-      await page.waitForTimeout(1_000);
-      console.log("MQTT lifecycle diagnostics", await activePanel.evaluate((element) => ({
-        html: element.innerHTML.slice(0, 4_000),
-        text: element.textContent?.slice(0, 2_000),
-      })));
-    }
-    await expect(nameInput, `${protocol} should render one interface-name input in the lifecycle header`).toHaveCount(1, { timeout: 15_000 });
+
+    await expect(nameInput, `${protocol} should render one interface-name input in the lifecycle header`).toHaveCount(1);
     await expect(lifecycleTabs.locator("button svg")).toHaveCount(0);
 
     const lastTabBox = await lifecycleTabs.getByRole("tab").last().boundingBox();

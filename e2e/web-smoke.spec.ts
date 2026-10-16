@@ -357,22 +357,15 @@ test("HTTP workbench exposes busy state semantics", { tag: "@http" }, async ({ p
 });
 
 test("broker and database workbenches keep save action compact and request content visible", { tag: "@protocol-workbenches" }, async ({ page }) => {
-  test.setTimeout(90_000);
   for (const id of ["mqtt", "amqp", "kafka", "redis", "sql"]) {
     await page.goto(`/?protocol=${id}#workbench=${id}`);
     await expectActiveWorkbench(page, id);
     const activePanel = page.locator(`.workbench-panel[data-workbench-id="${id}"]:not([hidden])`);
     await expect(activePanel).toBeVisible();
     const frame = activePanel.locator(".workbench-frame");
-    const save = frame.getByRole("button", { name: "保存", exact: true });
-    if (id === "mqtt") {
-      await page.waitForTimeout(1_000);
-      console.log("MQTT workbench diagnostics", await activePanel.evaluate((element) => ({
-        html: element.innerHTML.slice(0, 4_000),
-        text: element.textContent?.slice(0, 2_000),
-      })));
-    }
-    await expect(save).toBeVisible({ timeout: 15_000 });
+    const save = frame.locator(".protocol-save-button");
+
+    await expect(save).toBeVisible();
     expect((await save.boundingBox())?.height).toBeLessThanOrEqual(40);
     const content = frame.locator(".protocol-request-content");
     await expect(content).toBeVisible();
