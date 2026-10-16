@@ -6,7 +6,7 @@ test("shows module actions and renames the module", async ({ page }, testInfo) =
     const { pathname } = new URL(route.request().url());
     const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*" };
     if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers });
-    if (pathname === "/health") return route.fulfill({ headers, json: { service: "protovoy-agent", version: "0.2.0", agentVersion: "0.2.0", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } });
+    if (pathname === "/health") return route.fulfill({ headers, json: { service: "protovoy-agent", version: "0.1.0", agentVersion: "0.1.0", protocolApiVersion: "1", minProtocolApiVersion: "1", maxProtocolApiVersion: "1", authRequired: false } });
     if (pathname === "/v1/session") return route.fulfill({ headers, json: { token: "ui-preview-session" } });
     if (pathname === "/v1/modules/m1" && route.request().method() === "PATCH") {
       moduleName = (route.request().postDataJSON() as { name: string }).name;

@@ -1,6 +1,6 @@
 {
   "name": "@protovoy/protocol-ui-sdk",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Re-exports protocol UI schema from @protovoy/design-system (compat shim).",
