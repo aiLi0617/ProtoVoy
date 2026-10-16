@@ -45,9 +45,9 @@ use execution_engine::{
 use futures::stream::{self, Stream};
 use futures::{SinkExt, StreamExt};
 use local_store::{
-    ApiDefinitionRecord, CollectionRecord, EnvironmentRecord, ExecutionFilter, ExecutionRecord,
-    LocalStore, ModuleRecord, ProjectRecord, RequestDefinitionBinding, ScriptRecord, StoredRequest,
-    WorkspaceRecord,
+    protovoy_config_dir, ApiDefinitionRecord, CollectionRecord, EnvironmentRecord, ExecutionFilter,
+    ExecutionRecord, LocalStore, ModuleRecord, ProjectRecord, RequestDefinitionBinding,
+    ScriptRecord, StoredRequest, WorkspaceRecord,
 };
 use mock_server_core::{normalize_mock_path, MockMatchConditions, MockRule};
 use plugin_runtime::{InstalledPlugin, PluginManager, PluginManifest, PluginPermission};
@@ -495,7 +495,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let token = Arc::new(load_or_create_pairing_token()?);
-    let db_path = config_dir().join("protovoy-local.db");
+    let db_path = protovoy_config_dir().join("protovoy-local.db");
     let store = LocalStore::open(&db_path)?;
     info!(path = %db_path.display(), "opened local store");
 
@@ -516,11 +516,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     engine.register(Arc::new(KafkaDriver));
     engine.register(Arc::new(SqlDriver));
 
-    let mock_rules_path = config_dir().join("mock-rules.json");
+    let mock_rules_path = protovoy_config_dir().join("mock-rules.json");
     let mock_rules = load_mock_rules(&mock_rules_path);
-    let plugins =
-        PluginManager::new_from_env(config_dir().join("plugins"), plugin_permission_grants())
-            .map_err(|error| error.to_string())?;
+    let plugins = PluginManager::new_from_env(
+        protovoy_config_dir().join("plugins"),
+        plugin_permission_grants(),
+    )
+    .map_err(|error| error.to_string())?;
     let origins = allowed_origins()?;
     let allowed_origin_strings = origins
         .iter()
@@ -699,22 +701,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn config_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("PROTOVOY_CONFIG_DIR") {
-        return PathBuf::from(dir);
-    }
-    if let Ok(appdata) = std::env::var("APPDATA") {
-        return PathBuf::from(&appdata).join("protovoy");
-    }
-    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
-        return PathBuf::from(&xdg).join("protovoy");
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return PathBuf::from(&home).join(".config").join("protovoy");
-    }
-    PathBuf::from(".protovoy")
-}
-
 fn agent_bind_addr() -> Result<SocketAddr, Box<dyn std::error::Error>> {
     Ok(std::env::var("PROTOVOY_AGENT_BIND")
         .unwrap_or_else(|_| "127.0.0.1:39217".to_string())
@@ -755,7 +741,7 @@ fn load_or_create_pairing_token() -> Result<String, Box<dyn std::error::Error>> 
         }
     }
 
-    let dir = config_dir();
+    let dir = protovoy_config_dir();
     let path = dir.join("agent-token");
     if path.is_file() {
         let token = fs::read_to_string(&path)?.trim().to_string();

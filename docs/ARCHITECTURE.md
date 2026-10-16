@@ -28,7 +28,9 @@ User edits request in UI or CLI
 
 ### Desktop
 
-Tauri invokes Rust commands directly or spawns/bundles `protovoy-agent`. SQLite and blob storage live under the user config directory (`.protovoy`).
+Tauri invokes Rust commands directly or spawns/bundles `protovoy-agent`. Desktop and Local Agent resolve the same per-user ProtoVoy config directory and share its SQLite database, blob store, and plugin directory. `PROTOVOY_CONFIG_DIR` can select an isolated profile when both processes are started with the same value.
+
+When Desktop first adopts the shared directory, it copies a legacy Desktop-only store only if the shared database does not already exist. It never overwrites an existing Agent database, and the legacy directory is retained as a backup.
 
 ### Web + Agent
 
@@ -42,8 +44,8 @@ The Web app talks to Agent at `127.0.0.1:39217` with Bearer token and Origin che
 
 | Data | Location |
 |------|----------|
-| Workspace metadata | SQLite (`crates/local-store`) |
-| Large response bodies | External blob files indexed in SQLite |
+| Workspace metadata | Shared per-user SQLite database (`crates/local-store`) used by Desktop and Local Agent |
+| Large response bodies | Shared external blob files indexed in SQLite |
 | Secrets | OS keychain (Desktop) or Agent secret store; projects store `secret_ref` only |
 | Drafts | Browser localStorage / Desktop local store |
 | Capture records | In-memory ring buffer (not persisted by default) |

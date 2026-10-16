@@ -142,7 +142,7 @@ Desktop / Web UI  →  Local Agent or Tauri commands  →  ExecutionEngine  → 
 CLI               →  ExecutionEngine (in-process)   →  Protocol drivers
 ```
 
-Data defaults to **SQLite + local blob files + OS keychain**. Optional collaboration server and protocol gateway support self-hosted deployment.
+Desktop and Local Agent use the same per-user **SQLite + local blob files + OS keychain** data directory by default, so Desktop and a locally paired Web workbench see the same persisted workspace data. Set `PROTOVOY_CONFIG_DIR` before starting both processes to use an isolated profile. Optional collaboration server and protocol gateway support self-hosted deployment.
 
 Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/PORTS.md](docs/PORTS.md) · [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) · [docs/ISSUES.md](docs/ISSUES.md) · [docs/UX_BACKLOG.md](docs/UX_BACKLOG.md)
 

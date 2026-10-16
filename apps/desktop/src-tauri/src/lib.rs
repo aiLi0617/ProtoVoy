@@ -1,6 +1,7 @@
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use capture_proxy::{CaptureProxy, CaptureStatus, CapturedExchange};
@@ -26,9 +27,9 @@ use execution_engine::{
     CollectionRunItem, ExecutionEngine, VariableScope,
 };
 use local_store::{
-    ApiDefinitionRecord, CollectionRecord, EnvironmentRecord, ExecutionFilter, ExecutionRecord,
-    LocalStore, ModuleRecord, ProjectRecord, RequestDefinitionBinding, StoredRequest,
-    WorkspaceRecord,
+    protovoy_config_dir, ApiDefinitionRecord, CollectionRecord, EnvironmentRecord, ExecutionFilter,
+    ExecutionRecord, LocalStore, ModuleRecord, ProjectRecord, RequestDefinitionBinding,
+    StoredRequest, WorkspaceRecord,
 };
 use plugin_runtime::{InstalledPlugin, PluginManager, PluginManifest, PluginPermission};
 use secret_store::{SecretBackendKind, SecretStore};
@@ -1572,11 +1573,95 @@ fn state_name(state: ExecutionState) -> &'static str {
     }
 }
 
-fn default_db_path(app: &AppHandle) -> PathBuf {
-    app.path()
-        .app_data_dir()
-        .unwrap_or_else(|_| PathBuf::from(".protovoy"))
-        .join("protovoy-local.db")
+fn default_db_path() -> PathBuf {
+    protovoy_config_dir().join("protovoy-local.db")
+}
+
+fn copy_directory_contents(source: &Path, destination: &Path) -> std::io::Result<()> {
+    if !source.is_dir() {
+        return Ok(());
+    }
+    fs::create_dir_all(destination)?;
+    for entry in fs::read_dir(source)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let target = destination.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_directory_contents(&entry.path(), &target)?;
+        } else if file_type.is_file() && !target.exists() {
+            fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
+fn migrate_legacy_store_if_needed(legacy_dir: &Path, shared_dir: &Path) -> std::io::Result<()> {
+    let legacy_db = legacy_dir.join("protovoy-local.db");
+    let shared_db = shared_dir.join("protovoy-local.db");
+    if legacy_dir == shared_dir || shared_db.exists() || !legacy_db.is_file() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(shared_dir)?;
+    copy_directory_contents(&legacy_dir.join("blobs"), &shared_dir.join("blobs"))?;
+    copy_directory_contents(&legacy_dir.join("plugins"), &shared_dir.join("plugins"))?;
+
+    let importing_db = shared_dir.join(format!(
+        "protovoy-local.db.importing-{}",
+        std::process::id()
+    ));
+    fs::copy(&legacy_db, &importing_db)?;
+    fs::OpenOptions::new()
+        .write(true)
+        .open(&importing_db)?
+        .sync_all()?;
+    match fs::rename(&importing_db, &shared_db) {
+        Ok(()) => Ok(()),
+        Err(_error) if shared_db.exists() => {
+            let _ = fs::remove_file(importing_db);
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(test)]
+mod storage_path_tests {
+    use super::*;
+
+    #[test]
+    fn migrates_legacy_store_without_overwriting_shared_data() {
+        let root = std::env::temp_dir().join(format!(
+            "protovoy-desktop-store-migration-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let legacy = root.join("legacy");
+        let shared = root.join("shared");
+        fs::create_dir_all(legacy.join("blobs").join("ab")).expect("create legacy directories");
+        fs::write(legacy.join("protovoy-local.db"), b"legacy-db").expect("write legacy database");
+        fs::write(legacy.join("blobs").join("ab").join("body"), b"response")
+            .expect("write legacy blob");
+
+        migrate_legacy_store_if_needed(&legacy, &shared).expect("migrate legacy store");
+        assert_eq!(
+            fs::read(shared.join("protovoy-local.db")).expect("read shared database"),
+            b"legacy-db"
+        );
+        assert_eq!(
+            fs::read(shared.join("blobs").join("ab").join("body")).expect("read shared blob"),
+            b"response"
+        );
+
+        fs::write(legacy.join("protovoy-local.db"), b"new-legacy-data")
+            .expect("update legacy database");
+        migrate_legacy_store_if_needed(&legacy, &shared).expect("keep existing shared store");
+        assert_eq!(
+            fs::read(shared.join("protovoy-local.db")).expect("read preserved shared database"),
+            b"legacy-db"
+        );
+
+        fs::remove_dir_all(root).expect("remove migration test directory");
+    }
 }
 
 fn plugin_permission_grants() -> Vec<PluginPermission> {
@@ -1597,7 +1682,13 @@ fn plugin_permission_grants() -> Vec<PluginPermission> {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let db_path = default_db_path(app.handle());
+            let db_path = default_db_path();
+            if let (Ok(legacy_dir), Some(shared_dir)) =
+                (app.path().app_data_dir(), db_path.parent())
+            {
+                migrate_legacy_store_if_needed(&legacy_dir, shared_dir)
+                    .map_err(|error| error.to_string())?;
+            }
             let store = LocalStore::open(&db_path).map_err(|e| e.to_string())?;
             let mut engine = ExecutionEngine::new();
             let http_driver = Arc::new(HttpDriver::new());
