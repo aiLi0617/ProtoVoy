@@ -15,6 +15,41 @@ use uuid::Uuid;
 /// Bodies / previews larger than this are written to `blob_index` + disk.
 pub const BLOB_THRESHOLD_BYTES: usize = 64 * 1024;
 
+/// Resolve the shared per-user directory used by Desktop and Local Agent.
+///
+/// `PROTOVOY_CONFIG_DIR` is primarily useful for isolated development and test
+/// profiles. The remaining precedence intentionally matches the Local Agent's
+/// historical behavior so existing Web data remains in place.
+pub fn protovoy_config_dir() -> PathBuf {
+    protovoy_config_dir_from(
+        std::env::var_os("PROTOVOY_CONFIG_DIR").map(PathBuf::from),
+        std::env::var_os("APPDATA").map(PathBuf::from),
+        std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from),
+        std::env::var_os("HOME").map(PathBuf::from),
+    )
+}
+
+fn protovoy_config_dir_from(
+    override_dir: Option<PathBuf>,
+    appdata: Option<PathBuf>,
+    xdg_config_home: Option<PathBuf>,
+    home: Option<PathBuf>,
+) -> PathBuf {
+    if let Some(dir) = override_dir {
+        return dir;
+    }
+    if let Some(dir) = appdata {
+        return dir.join("protovoy");
+    }
+    if let Some(dir) = xdg_config_home {
+        return dir.join("protovoy");
+    }
+    if let Some(dir) = home {
+        return dir.join(".config").join("protovoy");
+    }
+    PathBuf::from(".protovoy")
+}
+
 #[derive(Debug, Error)]
 pub enum StoreError {
     #[error("sqlite: {0}")]
@@ -2213,6 +2248,45 @@ fn replace_mock_response_ids(value: &mut serde_json::Value, id_map: &HashMap<Str
 mod tests {
     use super::*;
     use core_domain::RequestEnvelope;
+
+    #[test]
+    fn shared_config_dir_uses_the_existing_agent_precedence() {
+        let override_dir = PathBuf::from("override");
+        let appdata = PathBuf::from("appdata");
+        let xdg = PathBuf::from("xdg");
+        let home = PathBuf::from("home");
+
+        assert_eq!(
+            protovoy_config_dir_from(
+                Some(override_dir.clone()),
+                Some(appdata.clone()),
+                Some(xdg.clone()),
+                Some(home.clone()),
+            ),
+            override_dir
+        );
+        assert_eq!(
+            protovoy_config_dir_from(
+                None,
+                Some(appdata.clone()),
+                Some(xdg.clone()),
+                Some(home.clone()),
+            ),
+            appdata.join("protovoy")
+        );
+        assert_eq!(
+            protovoy_config_dir_from(None, None, Some(xdg.clone()), Some(home.clone())),
+            xdg.join("protovoy")
+        );
+        assert_eq!(
+            protovoy_config_dir_from(None, None, None, Some(home.clone())),
+            home.join(".config").join("protovoy")
+        );
+        assert_eq!(
+            protovoy_config_dir_from(None, None, None, None),
+            PathBuf::from(".protovoy")
+        );
+    }
 
     #[test]
     fn assigns_numeric_mock_ids_and_preserves_response_references() {
