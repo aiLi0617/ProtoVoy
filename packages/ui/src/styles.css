@@ -379,6 +379,7 @@ small { color: var(--protovoy-muted); }
  .project-capability-grid { grid-template-columns: 1fr; }
  .protovoy-workbench > div { grid-template-columns: 1fr !important; }
  .interface-lifecycle-tabs { flex:1 1 auto !important; min-width:0; overflow-x:auto; }
+ .interface-lifecycle-tabs button { padding-inline:10px; }
  .interface-lifecycle-name-slot.is-saved { flex:0 0 auto; }
 }
 @media (max-width: 420px) { .brand-lockup span:last-child, .locale-select { display: none; } }
@@ -1050,7 +1051,7 @@ small { color: var(--protovoy-muted); }
 .interface-lifecycle-commandbar .http-save-split .http-save-menu-trigger { height:100%; min-height:0; }
 .interface-lifecycle-commandbar .http-request-primary-actions > select { min-width:82px; padding:0 24px 0 9px !important; line-height:normal !important; }
 .interface-lifecycle-header { min-width:0;display:flex;align-items:center;overflow:hidden;border-bottom:1px solid var(--protovoy-border);background:color-mix(in srgb,var(--protovoy-bg-elevated) 62%,var(--protovoy-workspace)); }
-.interface-lifecycle-name-slot { min-width:0;margin-left:8px;padding-left:16px;overflow:hidden;border-left:1px solid var(--protovoy-border); }
+.interface-lifecycle-name-slot { box-sizing:border-box;min-width:0;margin-left:8px;padding-left:16px;overflow:hidden;border-left:1px solid var(--protovoy-border); }
 .interface-lifecycle-name-slot.is-unsaved { flex:1 1 auto; }
 .interface-lifecycle-name-slot.is-saved { box-sizing:border-box;flex:0 1 auto;inline-size:max-content;max-inline-size:100%;padding-right:6px; }
 .interface-lifecycle-name-control { min-width:0;max-width:100%;overflow:hidden; }
@@ -1558,6 +1559,7 @@ small { color: var(--protovoy-muted); }
 .http-apifox-row > .http-kv-delete:hover,.http-apifox-row > .http-kv-delete:focus-visible { border-color:transparent; background:color-mix(in srgb,var(--protovoy-danger) 11%,transparent); color:var(--protovoy-danger); }
 .http-apifox-row > .http-kv-delete svg { width:14px; height:14px; }
 @media (pointer:coarse) {
+  .http-apifox-row { min-height:46px; }
   .http-apifox-row.has-content > .http-row-enabled,
   .http-apifox-row.has-content > .http-kv-delete { opacity:1; }
 }

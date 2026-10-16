@@ -30,5 +30,5 @@ test("creates an environment without leaking its draft into the next one", async
   await dialog.getByRole("button", { name: "新建环境" }).click();
   await expect(dialog.getByLabel("环境名称")).toHaveValue("");
   await expect(dialog.getByLabel("新变量名称")).toHaveValue("");
-  await expect(page.getByDisplayValue("https://dev.example.com")).toHaveCount(0);
+  await expect.poll(() => dialog.locator("input").evaluateAll((inputs) => inputs.some((input) => input.value === "https://dev.example.com"))).toBe(false);
 });

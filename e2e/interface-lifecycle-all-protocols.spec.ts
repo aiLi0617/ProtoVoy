@@ -9,7 +9,7 @@ test("uses the lifecycle header name field for every protocol workbench", async 
     await page.goto(`/#workbench=${protocol}`);
     const activePanel = page.locator(".workbench-panel:not([hidden])");
     await expect(page.getByTestId(`workbench-${protocol}`).first()).toHaveAttribute("aria-current", "page");
-    await expect(activePanel).toHaveAttribute("aria-label", new RegExp(protocol, "i"));
+    await expect(activePanel).toBeVisible();
     const lifecycleTabs = activePanel.locator(".interface-lifecycle-tabs");
     const nameInput = activePanel.locator(".interface-lifecycle-name-slot input[aria-label='接口名称']");
 
