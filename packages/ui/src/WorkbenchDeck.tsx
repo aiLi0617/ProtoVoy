@@ -134,6 +134,12 @@ function openDebugTab(sessionId: string) {
 
 export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], selectedProjectId, onSelectProject, onCreateProject, onRenameProject, onCloneProject, onDeleteProject, onOpenProjectInNewWindow, definitionClient: providedDefinitionClient, onCreateHttpInterface, saveCollections, saveModules, onCreateSaveCollection, onLoadHttpInterface, interfaceCases = [], onDeleteHttpInterface }: WorkbenchDeckProps) {
   const items = Children.toArray(children); const { t } = useI18n();
+  const keyedItems = new Map(items.flatMap((item) => {
+    if (!isValidElement(item) || item.key == null) return [];
+    const key = String(item.key).replace(/^\.\$/, "");
+    return [[key, item] as const];
+  }));
+  const itemForWorkbench = (id: string, index: number) => keyedItems.get(id) ?? items[index];
   const definitionClient = useMemo(() => providedDefinitionClient ?? agentDefinitionClient(), [providedDefinitionClient]);
   const active = useAppStore((state) => state.activeWorkbench); const setActive = useAppStore((state) => state.setActiveWorkbench);
   const favorites = useAppStore((state) => state.favoriteWorkbenches); const recent = useAppStore((state) => state.recentWorkbenches);
@@ -164,8 +170,9 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
   const pickerRef = useRef<HTMLDivElement>(null);
   const selectedTab = selectedIndex >= 0 ? tabs[selectedIndex] : null;
   const mockTabIndex = tabs.findIndex((tab) => tab.id === "mock");
-  const mockClient = mockTabIndex >= 0 && isValidElement(items[mockTabIndex])
-    ? (items[mockTabIndex] as ReactElement<MockWorkbenchProps>).props
+  const mockWorkbench = itemForWorkbench("mock", mockTabIndex);
+  const mockClient = mockTabIndex >= 0 && isValidElement(mockWorkbench)
+    ? (mockWorkbench as ReactElement<MockWorkbenchProps>).props
     : undefined;
 
   async function loadInterfaceMockSeed(detail: InterfaceMockEventDetail): Promise<MockDraftSeed> {
@@ -476,7 +483,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
     if (onCreateHttpInterface) await onCreateHttpInterface(saved, projectId, collectionId);
     else {
       const httpIndex = tabs.findIndex((tab) => tab.id === "http");
-      const httpWorkbench = items[httpIndex];
+      const httpWorkbench = itemForWorkbench("http", httpIndex);
       if (isValidElement(httpWorkbench)) await (httpWorkbench as ReactElement<{ onSave?: (value: HttpWorkbenchRequest) => Promise<void> }>).props.onSave?.(saved);
     }
     const session = createWorkbench("http", true, true, { id, name: saved.name });
@@ -550,7 +557,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
     if (session.workbenchId === "__project") return renderProjectHomePage(session.id);
     if(session.workbenchId==="__scripts") return <ScriptLibraryWorkbench projectId={saveTargetLabel?.split(" / ")[0] || "default-project"}/>;
     const index = tabs.findIndex((tab) => tab.id === session.workbenchId); if (index < 0) return null;
-    const tab = tabs[index]; const source = items[index];
+    const tab = tabs[index]; const source = itemForWorkbench(session.workbenchId, index);
     const lifecycle = (content: ReactNode) => {
       const caseName = session.caseInterfaceName && session.title.startsWith(`${session.caseInterfaceName}（`)
         ? session.title.slice(session.caseInterfaceName.length + 1).replace(/）$/, "")
