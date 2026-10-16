@@ -1625,45 +1625,6 @@ fn migrate_legacy_store_if_needed(legacy_dir: &Path, shared_dir: &Path) -> std::
     }
 }
 
-#[cfg(test)]
-mod storage_path_tests {
-    use super::*;
-
-    #[test]
-    fn migrates_legacy_store_without_overwriting_shared_data() {
-        let root = std::env::temp_dir().join(format!(
-            "protovoy-desktop-store-migration-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let legacy = root.join("legacy");
-        let shared = root.join("shared");
-        fs::create_dir_all(legacy.join("blobs").join("ab")).expect("create legacy directories");
-        fs::write(legacy.join("protovoy-local.db"), b"legacy-db").expect("write legacy database");
-        fs::write(legacy.join("blobs").join("ab").join("body"), b"response")
-            .expect("write legacy blob");
-
-        migrate_legacy_store_if_needed(&legacy, &shared).expect("migrate legacy store");
-        assert_eq!(
-            fs::read(shared.join("protovoy-local.db")).expect("read shared database"),
-            b"legacy-db"
-        );
-        assert_eq!(
-            fs::read(shared.join("blobs").join("ab").join("body")).expect("read shared blob"),
-            b"response"
-        );
-
-        fs::write(legacy.join("protovoy-local.db"), b"new-legacy-data")
-            .expect("update legacy database");
-        migrate_legacy_store_if_needed(&legacy, &shared).expect("keep existing shared store");
-        assert_eq!(
-            fs::read(shared.join("protovoy-local.db")).expect("read preserved shared database"),
-            b"legacy-db"
-        );
-
-        fs::remove_dir_all(root).expect("remove migration test directory");
-    }
-}
-
 fn plugin_permission_grants() -> Vec<PluginPermission> {
     std::env::var("PROTOVOY_PLUGIN_PERMISSIONS")
         .unwrap_or_default()
@@ -1791,4 +1752,43 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running ProtoVoy desktop");
+}
+
+#[cfg(test)]
+mod storage_path_tests {
+    use super::*;
+
+    #[test]
+    fn migrates_legacy_store_without_overwriting_shared_data() {
+        let root = std::env::temp_dir().join(format!(
+            "protovoy-desktop-store-migration-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let legacy = root.join("legacy");
+        let shared = root.join("shared");
+        fs::create_dir_all(legacy.join("blobs").join("ab")).expect("create legacy directories");
+        fs::write(legacy.join("protovoy-local.db"), b"legacy-db").expect("write legacy database");
+        fs::write(legacy.join("blobs").join("ab").join("body"), b"response")
+            .expect("write legacy blob");
+
+        migrate_legacy_store_if_needed(&legacy, &shared).expect("migrate legacy store");
+        assert_eq!(
+            fs::read(shared.join("protovoy-local.db")).expect("read shared database"),
+            b"legacy-db"
+        );
+        assert_eq!(
+            fs::read(shared.join("blobs").join("ab").join("body")).expect("read shared blob"),
+            b"response"
+        );
+
+        fs::write(legacy.join("protovoy-local.db"), b"new-legacy-data")
+            .expect("update legacy database");
+        migrate_legacy_store_if_needed(&legacy, &shared).expect("keep existing shared store");
+        assert_eq!(
+            fs::read(shared.join("protovoy-local.db")).expect("read preserved shared database"),
+            b"legacy-db"
+        );
+
+        fs::remove_dir_all(root).expect("remove migration test directory");
+    }
 }
