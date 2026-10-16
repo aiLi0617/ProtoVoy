@@ -2,7 +2,7 @@
 
 > 规范文档（tokens、组件、图标、无障碍）。**实施状态与 UX 债**见 [UX_BACKLOG.md](./UX_BACKLOG.md)；工程 bug 见 [ISSUES.md](./ISSUES.md)。
 >
-> 最近更新：2026-09-17
+> 最近更新：2026-10-15
 
 ## 1. 产品与设计方向
 
@@ -62,7 +62,7 @@
 
 禁止 emoji / 字符字形充当控件图标（`•••`、`×`、`✓` 等）。Icon-only 控件必须有可访问名称。
 
-协议语义映射建议：HTTP=`Globe2`、gRPC=`Network`、WebSocket=`RadioTower`、Redis/SQL=`Database`、Runner=`Play`、Gateway=`Route`、Capture=`ScanSearch`、Plugins=`PlugZap`、AI=`Bot`/`Sparkles`。缺口见 [UIA-003](./UX_BACKLOG.md)。
+协议语义映射建议：HTTP=`Globe2`、gRPC=`Network`、WebSocket=`RadioTower`、Redis/SQL 使用可区分的数据图标、Runner=`Play`、Gateway=`Route`、Capture=`ScanSearch`、Plugins=`PlugZap`、AI=`Bot`/`Sparkles`。实施状态与验证证据见 [UIA-003](./UX_BACKLOG.md)。
 
 ## 5. 公共组件
 
@@ -79,6 +79,14 @@
 - 破坏性操作统一确认；
 - 长列表虚拟化；
 - `focus-visible` 与 hover 齐全。
+
+### 环境管理
+
+- 全局变量、环境变量和全局参数采用表格内直接编辑，并始终保留一条末尾占位行用于新增；全局参数占位行默认显示“添加参数”，悬浮或聚焦时展开各字段；输入过程中不得重建当前编辑行；
+- 全局参数按 Header、Cookie、Query、Body 分页签管理，启用状态使用可访问的开关控件；
+- 页面采用显式保存。存在未保存修改时，切换作用域、新建环境、重新加载或关闭弹窗必须先确认是否放弃；
+- 新环境在首次保存前只作为本地草稿存在，环境名称不能为空，变量名及同位置的全局参数名不得重复；
+- 敏感值写入系统安全存储，工作区只持久化密钥引用名称。
 
 ## 7. 禁止事项
 

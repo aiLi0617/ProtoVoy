@@ -100,6 +100,23 @@ cargo check --workspace
 pnpm dev:desktop
 ```
 
+On Windows, the repository also includes a one-command bootstrap script. It
+checks the required tools, installs the locked dependencies, compiles the
+desktop application, and starts it:
+
+```powershell
+powershell -NoProfile -File .\scripts\start.ps1
+```
+
+To build the release application (including the Local Agent sidecar and the
+Tauri installer) and then launch the release executable:
+
+```powershell
+powershell -NoProfile -File .\scripts\start.ps1 -Mode Release
+```
+
+Pass `-SkipInstall` on later runs when the dependencies are already installed.
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for validation commands and pull request expectations.
 
 ## Downloads

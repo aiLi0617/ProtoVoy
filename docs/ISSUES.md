@@ -12,7 +12,7 @@
 
 | ID | 标题 | 等级 | 状态 | 更新日期 |
 |----|------|------|------|----------|
-| [ISS-001](#iss-001-协作引导令牌需人工生成与配置) | 协作引导令牌需人工生成与配置 | P2 | open | 2026-08-12 |
+| [ISS-001](#iss-001-协作引导令牌需人工生成与配置) | 协作引导令牌需人工生成与配置 | P2 | done | 2026-10-15 |
 | [ISS-002](#iss-002-请求响应左右分栏不便查看) | 请求/响应左右分栏不便查看 | P1 | done | 2026-08-12 |
 | [ISS-003](#iss-003-窄屏下主工作区被压缩为侧栏宽度) | 窄屏下主工作区被压缩为侧栏宽度 | P0 | done | 2026-09-17 |
 | [ISS-004](#iss-004-workbench-直达链接被项目主页吞掉) | Workbench 直达链接被项目主页吞掉 | P1 | done | 2026-08-18 |
@@ -23,16 +23,17 @@
 | [ISS-009](#iss-009-wss-执行因-rustls-cryptoprovider-未初始化而崩溃) | WSS 执行因 Rustls CryptoProvider 未初始化而崩溃 | P0 | done | 2026-08-15 |
 | [ISS-010](#iss-010-glib-安全修复被-tauri-gtk3-栈挡住无法自动升级) | glib 安全修复被 Tauri GTK3 栈挡住，无法自动升级 | P2 | open | 2026-08-18 |
 | [ISS-011](#iss-011-集合运行按最近修改倒序执行) | 集合运行按最近修改倒序执行 | P1 | done | 2026-09-17 |
-| [ISS-012](#iss-012-集合运行忽略所选环境且不递归子集合) | 集合运行忽略所选环境且不递归子集合 | P1 | in_progress | 2026-09-17 |
-| [ISS-013](#iss-013-desktopwebcli-集合运行器实现与变量语义分裂) | Desktop/Web/CLI 集合运行器实现与变量语义分裂 | P1 | open | 2026-08-18 |
+| [ISS-012](#iss-012-集合运行忽略所选环境且不递归子集合) | 集合运行忽略所选环境且不递归子集合 | P1 | done | 2026-10-14 |
+| [ISS-013](#iss-013-desktopwebcli-集合运行器实现与变量语义分裂) | Desktop/Web/CLI 集合运行器实现与变量语义分裂 | P1 | done | 2026-10-14 |
 | [ISS-014](#iss-014-ci-未按路径按需触发) | CI 未按路径按需触发 | P1 | done | 2026-08-18 |
 | [ISS-015](#iss-015-release-校验缺少-e2e-与协作服务测试) | Release 校验缺少 E2E 与协作服务测试 | P2 | done | 2026-09-17 |
-| [ISS-016](#iss-016-安装包与私有化工作流漏监听-crates) | 安装包与私有化工作流漏监听 crates | P2 | open | 2026-08-18 |
+| [ISS-016](#iss-016-安装包与私有化工作流漏监听-crates) | 安装包与私有化工作流漏监听 crates | P2 | done | 2026-08-18 |
 | [ISS-017](#iss-017-协议网关默认绑定全接口) | 协议网关默认绑定 0.0.0.0 | P1 | done | 2026-09-17 |
-| [ISS-018](#iss-018-网关-ci-runner-只能执行单条请求) | 网关 CI Runner 只能执行单条请求 | P2 | open | 2026-08-18 |
+| [ISS-018](#iss-018-网关-ci-runner-只能执行单条请求) | 网关 CI Runner 只能执行单条请求 | P2 | done | 2026-10-14 |
 | [ISS-019](#iss-019-installer-tools-冒烟断言了错误的-health-service-名) | Installer tools 冒烟断言了错误的 health service 名 | P1 | done | 2026-08-26 |
 | [ISS-020](#iss-020-传递依赖-h2-安全公告拖红-ci-security) | 传递依赖 h2 安全公告拖红 CI security | P1 | done | 2026-08-26 |
 | [ISS-021](#iss-021-codeql-告警未纳入前置审查清单) | CodeQL 告警未纳入前置审查清单 | P1 | done | 2026-08-26 |
+| [ISS-022](#iss-022-quinn-proto-与-wasmtime-安全公告) | quinn-proto 与 wasmtime 安全公告 | P0 | done | 2026-10-14 |
 | [UX backlog](./UX_BACKLOG.md) | UI/UX 债（UIA-*） | P1–P2 | open | 2026-09-17 |
 | [UX 走查归档](./archive/UX_WALKTHROUGH.md) | 功能放置与交互（UX-001–055 已关闭） | P0–P2 | done | 2026-08-12 |
 
@@ -43,7 +44,7 @@
 | 字段 | 内容 |
 |------|------|
 | **等级** | P2 |
-| **状态** | open |
+| **状态** | done |
 | **模块** | collaboration-server / Team 首次引导 / 私有化部署 |
 | **记录日期** | 2026-08-12 |
 | **关联** | `PROTOVOY_COLLAB_BOOTSTRAP_TOKEN` / `PROTOVOY_BOOTSTRAP_TOKEN`、`POST /v1/auth/bootstrap`、Team「首次引导」 |
@@ -92,6 +93,7 @@
 | 日期 | 说明 |
 |------|------|
 | 2026-08-12 | 建单；状态 open；等级 P2 |
+| 2026-10-15 | 空库且未配置或仍为占位值时自动生成 256-bit URL-safe 引导令牌并仅在启动日志显示；新增不泄露令牌的 `GET /v1/auth/bootstrap-status`；Team 按状态显隐首次引导并提示令牌来源；Compose 不再强制手填。协作服务回归与浏览器用例通过，状态改为 done。 |
 
 ---
 
@@ -410,7 +412,7 @@ Runner 按树顺序执行：父集合 → 子集合 → 同级 `sort_order`。�
 | 字段 | 内容 |
 |------|------|
 | **等级** | P1 |
-| **状态** | in_progress |
+| **状态** | done |
 | **模块** | Collection Runner / Desktop / Web / Agent |
 | **记录日期** | 2026-08-18 |
 | **关联** | `run_collection` 写死 `default-env`；`list_requests` 仅 `collection_id = 当前 id`；HTTP 工作台环境选择 |
@@ -429,8 +431,8 @@ Runner 按树顺序执行：父集合 → 子集合 → 同级 `sort_order`。�
 
 | 项 | 说明 |
 |----|------|
-| **建议方案** | 与 ISS-013 的共享 CollectionRunner 一并做：环境覆盖入参、递归收集、UI 开关 |
-| **不做的理由** | （暂无） |
+| **已做** | Desktop、Web/Agent 均递归收集子集合；Runner 提供“按请求配置/指定环境”选择，显式覆盖仅作用于本次运行 |
+| **后续** | 集合级取消与逐步进度属于运行生命周期能力，继续由 ISS-013 跟踪 |
 
 ### 变更记录
 
@@ -438,6 +440,8 @@ Runner 按树顺序执行：父集合 → 子集合 → 同级 `sort_order`。�
 |------|------|
 | 2026-08-18 | 建单；状态 open；等级 P1 |
 | 2026-09-17 | Desktop 改为按请求的 `environmentRef` 读取环境；Desktop 与 Web 均递归运行子集合。运行时环境覆盖与集合级取消仍待共享 Runner 实现。 |
+| 2026-10-14 | Agent 集合 API 支持可选 `environmentId` 覆盖；未提供时沿用每条请求的环境。UI 尚未提供选择器，集合级取消仍待实现。 |
+| 2026-10-14 | Desktop 与 Web Runner 增加环境选择并向各自后端传递覆盖值；保留“按请求配置”为安全默认，递归与环境语义闭环，状态改为 done。 |
 
 ---
 
@@ -446,7 +450,7 @@ Runner 按树顺序执行：父集合 → 子集合 → 同级 `sort_order`。�
 | 字段 | 内容 |
 |------|------|
 | **等级** | P1 |
-| **状态** | open |
+| **状态** | done |
 | **模块** | Collection Runner / CLI / Local Agent / 协议网关 |
 | **记录日期** | 2026-08-18 |
 | **关联** | Desktop `run_collection`、Web `runCollectionViaAgent`、`apps/cli` `run`、ISS-011、ISS-012 |
@@ -457,11 +461,11 @@ Runner 按树顺序执行：父集合 → 子集合 → 同级 `sort_order`。�
 
 | 通道 | 现状 |
 |------|------|
-| CLI | 内存 `collection_variables` 跨请求传递，不改落盘环境；支持并发、数据迭代、JSON/JUnit |
-| Desktop | 每条独立 `VariableScope`；后置脚本提取的变量写回 `default-env`，污染用户环境 |
-| Web | 浏览器 for-loop 调 Agent；关页即停；没有集合级取消；依赖 Agent 写回环境才能「串联」 |
+| CLI | 顺序与数据迭代路径复用共享 Runner，保留并发、JSON/JUnit；运行变量不写回环境 |
+| Desktop | 已使用共享编排器，保留执行历史；后置脚本提取变量仅在本次运行内传递，不再写回环境 |
+| Web / Agent | Web 已改为调用 Agent 集合级 API；Agent 递归加载、保留历史并复用共享编排器，不再依赖浏览器 for-loop |
 
-UI Runner 不能取消、不能选环境、不能看逐步进度。网关 `POST /v1/runner/execute` 只跑一条请求（见 ISS-018）。
+UI Runner 已支持集合级取消与已完成/总数进度。环境覆盖已在 Desktop/Web 暴露；顺序与数据迭代路径已迁移共享 Runner，Gateway 的数据迭代与报告能力见 ISS-018。
 
 `PHASE_PLAN` 还计划把 Java `automation` 拆成协作微服务。执行已经在 Rust Engine / Agent / CLI / Gateway，Java 再做一套协议执行会变成第四套。
 
@@ -473,7 +477,8 @@ UI Runner 不能取消、不能选环境、不能看逐步进度。网关 `POST 
 
 | 项 | 说明 |
 |----|------|
-| **建议方案** | 先修 ISS-011/012 语义，再抽共享 runner；UI 补取消与进度；Gateway CI 改为跑整个 collection |
+| **已做** | Engine 提供共享顺序编排、run-local 集合变量、fail-fast 与取消令牌；Desktop、Agent/Web、Gateway 及 CLI 顺序/数据迭代路径已接入；UI 支持环境覆盖、取消与逐步进度 |
+| **并发约束** | CLI 请求级并发保持作用域隔离，不跨并发请求传播提取变量；需要确定性变量链时使用默认顺序模式。该差异是显式语义，而非另一套 Runner |
 | **不要做的** | 不要在 Java 协作服务里再实现协议执行引擎 |
 
 ### 变更记录
@@ -481,6 +486,10 @@ UI Runner 不能取消、不能选环境、不能看逐步进度。网关 `POST 
 | 日期 | 说明 |
 |------|------|
 | 2026-08-18 | 建单；状态 open；等级 P1 |
+| 2026-10-14 | `execution-engine` 新增共享顺序 Runner：统一 fail-fast、断言结果与运行内集合变量传递，提取变量不落盘；Gateway collection 入口已开始复用。Desktop、Agent/Web、CLI 迁移以及 UI 取消/进度仍待完成，状态改为 in_progress。 |
+| 2026-10-14 | Desktop 与 Agent/Web 接入共享编排；Agent 新增 `POST /v1/collections/{id}/runs`，Web 删除运行路径上的树下载与浏览器逐条循环。CLI、UI 取消/进度仍待完成。 |
+| 2026-10-14 | CLI 顺序与数据迭代路径迁移至共享 Runner；Desktop/Web Runner 增加本次运行环境覆盖。剩余范围收敛为 UI 取消/进度、并发与 Gateway 报告对齐。 |
+| 2026-10-14 | Desktop/Web 增加运行 ID、进度查询与取消入口；UI 展示已完成/总数并允许取消，取消后不再启动下一条请求。CLI 并发模式明确采用隔离作用域，Gateway 报告由 ISS-018 闭环，状态改为 done。 |
 
 ---
 
@@ -554,7 +563,7 @@ tag `v*` 的 Release `validate` 曾缺少 `pnpm test:e2e` 与 collaboration-serv
 | 字段 | 内容 |
 |------|------|
 | **等级** | P2 |
-| **状态** | open |
+| **状态** | done |
 | **模块** | `.github/workflows/installer-lifecycle.yml` / `private-deploy.yml` |
 | **记录日期** | 2026-08-18 |
 | **关联** | `deploy/agent.Dockerfile`、`deploy/gateway.Dockerfile`、`deploy/web.Dockerfile` |
@@ -574,14 +583,15 @@ tag `v*` 的 Release `validate` 曾缺少 `pnpm test:e2e` 与 collaboration-serv
 
 | 项 | 说明 |
 |----|------|
-| **建议方案** | 按 Dockerfile / Tauri 构建输入补 `paths`；避免再对文档触发 |
-| **不做的理由** | （暂无） |
+| **已做** | `private-deploy` 的 PR/main 路径覆盖 Dockerfile 实际读取的 apps、packages、crates、Cargo 与 pnpm 根配置；`installer-lifecycle` 在合并到 `main` 时对同一组构建输入运行完整跨平台安装生命周期 |
+| **保留策略** | PR 仅对安装器配置与 sidecar 装配变更触发重型跨平台安装任务；普通实现变更由快速 CI 覆盖，并在合并 main 后执行安装生命周期 |
 
 ### 变更记录
 
 | 日期 | 说明 |
 |------|------|
 | 2026-08-18 | 建单；状态 open；等级 P2 |
+| 2026-10-14 | 补齐私有化镜像构建输入路径；安装生命周期新增 `push: main` 构建输入门禁；状态 done。 |
 
 ---
 
@@ -621,7 +631,7 @@ tag `v*` 的 Release `validate` 曾缺少 `pnpm test:e2e` 与 collaboration-serv
 | 字段 | 内容 |
 |------|------|
 | **等级** | P2 |
-| **状态** | open |
+| **状态** | done |
 | **模块** | protocol-gateway / CLI |
 | **记录日期** | 2026-08-18 |
 | **关联** | `POST /v1/runner/execute`、ISS-013、`docs/guides/cli-collections.md` |
@@ -638,14 +648,17 @@ Gateway CI 接收 collection（或项目包），复用共享 CollectionRunner�
 
 | 项 | 说明 |
 |----|------|
-| **建议方案** | 依赖 ISS-013 的共享 runner；保留现有单条接口做兼容，新增 collection 入口 |
-| **不做的理由** | （暂无） |
+| **已做** | 保留 `POST /v1/runner/execute` 兼容入口；`POST /v1/runner/collection` 接收完整 `RequestEnvelope[]`、`failFast`、基础变量与 `data` 迭代行，复用共享 Runner；响应包含带 `iteration` 的用例、CLI 对齐的 JSON/JUnit 报告及 `exitCode` |
+| **后续** | 项目包上传/引用属于制品传输与版本治理能力，后续在明确包格式、大小限制和签名策略后单独立项，不继续扩大 CI Runner 执行语义 |
+| **不做的理由** | 当前项目包格式尚未形成稳定跨端契约；直接接收 envelopes 已覆盖无状态 CI 执行，并避免 Gateway 解包不可信归档文件 |
 
 ### 变更记录
 
 | 日期 | 说明 |
 |------|------|
 | 2026-08-18 | 建单；状态 open；等级 P2 |
+| 2026-10-14 | 新增 Gateway collection CI 入口并接入共享 Runner；集合执行与退出码闭环完成，数据迭代/项目包仍待对齐，状态改为 in_progress。 |
+| 2026-10-14 | 集合入口新增数据迭代、迭代编号、JSON/JUnit 报告；基础变量与每行数据合并且行值优先，fail-fast 同时停止当前迭代和后续迭代。项目包解包因安全与格式契约未定拆出后续范围，本 ISS 关闭。 |
 
 ---
 
@@ -752,3 +765,32 @@ UI/导入/路径写入变更按审查清单 §2 自查；Codex/维护者审查�
 | 日期 | 说明 |
 |------|------|
 | 2026-08-26 | 建单、修复并落审查清单；状态 done |
+
+---
+
+## ISS-022 quinn-proto 与 wasmtime 安全公告
+
+| 字段 | 内容 |
+|------|------|
+| **等级** | P0 |
+| **状态** | done |
+| **模块** | `Cargo.lock` / HTTP3 传递依赖 / Plugin Runtime |
+| **记录日期** | 2026-10-14 |
+| **关联** | `RUSTSEC-2026-0338` 至 `0342`、`RUSTSEC-2026-0315/0316/0325/0326/0327` |
+
+### 问题
+
+安全复查发现 `quinn-proto 0.11.16` 存在远端 panic 与内存耗尽类风险；`wasmtime 47.0.4` 存在 fuel 绕过、GC 内存破坏与 native stack buffer overflow，其中最高严重度为 critical。Plugin Runtime 会处理不可信插件包，不能通过 audit ignore 延后。
+
+### 处理说明
+
+| 项 | 说明 |
+|----|------|
+| **已做** | `quinn-proto` 升级至 `0.11.18`；Plugin Runtime 的 `wasmtime` 升级至 `48.0.4`，同步更新 Cranelift/Wasm 依赖 |
+| **验证** | `cargo audit -D warnings` 零漏洞；Plugin Runtime 4 项测试、完整 Rust workspace 测试与全 workspace Clippy 通过 |
+
+### 变更记录
+
+| 日期 | 说明 |
+|------|------|
+| 2026-10-14 | 审计发现并直接升级；未新增忽略项；状态 done。 |

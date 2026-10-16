@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Accordion, Breadcrumbs, Button, ButtonGroup, Checkbox, DataTable, EmptyState, Field, IconButton, InlineAlert, LoadingState, Pagination, ProgressBar, SearchInput, SegmentedControl, Select, Skeleton, StatusBadge, Switch, Tabs, Tag, Textarea, TextInput, Toolbar } from "./Components";
-import "./CodeEditor.test";
-import "./MockWorkbench.test";
-import "./mockGeneration.test";
+if (!process.argv.includes("--split-component-tests")) {
+  await Promise.all([
+    import("./CodeEditor.test"),
+    import("./MockWorkbench.test"),
+    import("./mockGeneration.test"),
+  ]);
+}
 
 const button = renderToStaticMarkup(<Button variant="primary" loading>Save</Button>);
 assert.match(button, /class="ui-button primary"/);
 assert.match(button, /disabled=""/);
 assert.match(button, /aria-busy="true"/);
+
+const externallyBusyButton = renderToStaticMarkup(<Button aria-busy="true">Cancel</Button>);
+assert.match(externallyBusyButton, /aria-busy="true"/);
 
 const iconButton = renderToStaticMarkup(<IconButton label="Close" icon="close" active />);
 assert.match(iconButton, /aria-label="Close"/);
@@ -20,6 +27,16 @@ assert.match(field, /ui-field-required/);
 assert.match(field, /Required field/);
 assert.match(field, /aria-describedby=/);
 assert.match(field, /class="ui-input"/);
+
+const invalidField = renderToStaticMarkup(<Field label="Endpoint" error="Enter a valid URL"><TextInput /></Field>);
+const invalidDescriptionId = invalidField.match(/aria-describedby="([^"]+)"/)?.[1];
+assert.ok(invalidDescriptionId);
+assert.match(invalidField, /aria-invalid="true"/);
+assert.match(invalidField, /role="alert"/);
+assert.match(invalidField, new RegExp(`id="${invalidDescriptionId}"`));
+
+const describedField = renderToStaticMarkup(<Field label="Endpoint" error="Enter a valid URL"><TextInput aria-describedby="endpoint-help" /></Field>);
+assert.match(describedField, /aria-describedby="endpoint-help [^"]+-description"/);
 
 assert.match(renderToStaticMarkup(<Select><option>One</option></Select>), /class="ui-select"/);
 assert.match(renderToStaticMarkup(<Textarea />), /class="ui-textarea"/);

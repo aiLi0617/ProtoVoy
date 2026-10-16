@@ -53,7 +53,7 @@ export { ProtocolCodeGenerator, generateProtocolCode, listCodeTemplates, registe
 export { clearWorkbenchDraft, readWorkbenchDraft, useAutosaveDraft } from "./draftRecovery";
 export { getLocale, setLocale, translate, translateWorkbench, useI18n, type Locale } from "./i18n";
 export { WorkbenchDeck, DEFAULT_WORKBENCH_GROUPS, WORKBENCH_LABELS, resolveWorkbenchId, resolveHashWorkbenchId, type WorkbenchDeckProps, type WorkbenchTab, type WorkbenchDefinition, type WorkbenchGroup } from "./WorkbenchDeck";
-export { CollectionRunner, type CollectionRunnerProps, type CollectionRunCase } from "./CollectionRunner";
+export { CollectionRunner, type CollectionRunnerProps, type CollectionRunCase, type CollectionRunProgress } from "./CollectionRunner";
 export { TeamWorkbench } from "./TeamWorkbench";
 export { CommentsWorkbench } from "./CommentsWorkbench";
 export { SsoWorkbench } from "./SsoWorkbench";

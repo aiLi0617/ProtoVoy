@@ -35,9 +35,10 @@ export interface HttpStatusCodeInputProps {
   required?: boolean;
   invalid?: boolean;
   maxLength?: number;
+  "aria-describedby"?: string;
 }
 
-export function HttpStatusCodeInput({ value, onChange, onOptionSelect, ariaLabel = "HTTP 状态码", autoFocus, required, invalid = false, maxLength = 9 }: HttpStatusCodeInputProps) {
+export function HttpStatusCodeInput({ value, onChange, onOptionSelect, ariaLabel = "HTTP 状态码", autoFocus, required, invalid = false, maxLength = 9, "aria-describedby": ariaDescribedBy }: HttpStatusCodeInputProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const instanceId = useId().replace(/:/g, "");
@@ -58,7 +59,7 @@ export function HttpStatusCodeInput({ value, onChange, onOptionSelect, ariaLabel
       if (event.key === "Escape") { event.stopPropagation(); setOpen(false); return; }
       if (open && (event.key === "ArrowDown" || event.key === "ArrowUp")) { event.preventDefault(); const delta = event.key === "ArrowDown" ? 1 : -1; setActiveIndex((index) => (index + delta + HTTP_RESPONSE_STATUS_OPTIONS.length) % HTTP_RESPONSE_STATUS_OPTIONS.length); return; }
       if (event.key === "Enter" && open) { event.preventDefault(); const option = HTTP_RESPONSE_STATUS_OPTIONS[activeIndex]; if (option) selectOption(option[0], option[1]); }
-    }} aria-invalid={invalid} title={`请输入 1–${maxLength} 位数字`}/>
+    }} aria-invalid={invalid} aria-describedby={ariaDescribedBy} title={`请输入 1–${maxLength} 位数字`}/>
     {open ? <div id={listId} className="http-status-options" role="listbox">{(["1", "2", "3", "4", "5"] as const).map((group) => <div className={`http-status-group status-${group}xx`} key={group}>{HTTP_RESPONSE_STATUS_OPTIONS.map(([code, label], index) => code.startsWith(group) ? <button id={`${listId}-${code}`} type="button" role="option" aria-selected={value === code} className={activeIndex === index ? "is-active" : ""} key={code} onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setActiveIndex(index)} onClick={() => selectOption(code, label)}><b>{code}</b><span>{label}</span><i className="http-status-info" data-tooltip={httpStatusExplanation(code, label)} aria-label={`${code} 协议说明`}>i</i></button> : null)}<div className="http-status-class"><b>{group}XX</b><span>{STATUS_GROUP_LABELS[group]}</span><i className="http-status-info" data-tooltip={httpStatusClassExplanation(group)} aria-label={`${group}XX 协议说明`}>i</i></div></div>)}</div> : null}
   </div>;
 }

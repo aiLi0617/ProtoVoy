@@ -6,17 +6,22 @@ import {
   ArrowDown,
   ArrowUp,
   Bolt,
+  Boxes,
   Brush as BroomIcon,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Code2,
   Command,
   Copy,
+  CircleMinus,
   Database,
   Download,
   ExternalLink,
   Folder,
   GitBranch,
   Globe2,
+  Info,
   Menu,
   Moon,
   MoreHorizontal,
@@ -31,6 +36,7 @@ import {
   Star,
   Sun,
   Tag,
+  Triangle,
   Trash2,
   Users,
   WrapText,
@@ -48,18 +54,23 @@ export type IconName =
   | "bolt"
   | "broom"
   | "chevron"
+  | "collapse-all"
   | "close"
   | "code"
   | "command"
   | "copy"
+  | "minus-circle"
   | "database"
   | "download"
   | "edit"
   | "external"
+  | "expand-all"
   | "folder"
   | "gitBranch"
   | "globe"
+  | "info"
   | "menu"
+  | "module"
   | "more"
   | "moon"
   | "network"
@@ -71,6 +82,7 @@ export type IconName =
   | "star"
   | "sun"
   | "tag"
+  | "triangle"
   | "trash"
   | "users"
   | "websocket"
@@ -84,18 +96,23 @@ const map: Record<IconName, ComponentType<LucideProps>> = {
   bolt: Bolt,
   broom: BroomIcon,
   chevron: ChevronRight,
+  "collapse-all": ChevronsDownUp,
   close: X,
   code: Code2,
   command: Command,
   copy: Copy,
+  "minus-circle": CircleMinus,
   database: Database,
   download: Download,
   edit: Pencil,
   external: ExternalLink,
+  "expand-all": ChevronsUpDown,
   folder: Folder,
   gitBranch: GitBranch,
   globe: Globe2,
+  info: Info,
   menu: Menu,
+  module: Boxes,
   more: MoreHorizontal,
   moon: Moon,
   network: Network,
@@ -107,6 +124,7 @@ const map: Record<IconName, ComponentType<LucideProps>> = {
   star: Star,
   sun: Sun,
   tag: Tag,
+  triangle: Triangle,
   trash: Trash2,
   users: Users,
   websocket: RadioTower,
@@ -126,22 +144,23 @@ export function Icon({
 /** Stable protocol / workbench icon hints (UIA-003). */
 export const workbenchIconName: Record<string, IconName> = {
   http: "globe",
-  graphql: "code",
+  graphql: "gitBranch",
   grpc: "network",
-  rpc: "network",
+  rpc: "module",
   websocket: "websocket",
   sse: "activity",
-  tcp: "network",
-  udp: "network",
+  tcp: "arrow-up",
+  udp: "arrow-down",
   mqtt: "send",
-  amqp: "send",
-  kafka: "activity",
+  amqp: "archive",
+  kafka: "wrap",
   redis: "database",
-  sql: "database",
-  mock: "archive",
-  runner: "bolt",
-  gateway: "network",
+  sql: "code",
+  mock: "triangle",
+  runner: "send",
+  gateway: "external",
   capture: "search",
-  plugins: "bolt",
+  plugins: "command",
   ai: "star",
+  __scripts: "settings",
 };

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import "@protovoy/ui/styles.css";
 import "@protovoy/ui/curl-import.css";
 import { ProtoVoyProviders } from "@protovoy/ui";
+import { preloadCodeEditor } from "@protovoy/ui/code-editor";
 import { bootstrapClientStorage } from "@protovoy/app-wiring";
 import { App } from "./App";
 
@@ -13,3 +14,5 @@ createRoot(document.getElementById("root")!).render(
     <ProtoVoyProviders><App /></ProtoVoyProviders>
   </StrictMode>,
 );
+
+requestAnimationFrame(() => { void preloadCodeEditor().catch(() => {}); });

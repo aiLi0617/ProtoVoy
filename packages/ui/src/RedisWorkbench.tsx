@@ -4,6 +4,7 @@ import { ProtocolWorkbenchLayout } from "./ProtocolWorkbenchLayout";
 import { Textarea, TextInput } from "./Components";
 import { ProtocolField, ProtocolFormCard, ProtocolFormGrid } from "./ProtocolForm";
 import { useWorkbenchHydration } from "./useWorkbenchHydration";
+import { useI18n } from "./i18n";
 
 export interface RedisWorkbenchRequest {
   name: string;
@@ -43,6 +44,7 @@ function quoteArgument(value: string) {
 }
 
 export function RedisWorkbench({ onSend, onSave, onCancel }: RedisWorkbenchProps) {
+  const { t } = useI18n();
   const [name, setName] = useState("Redis request");
   const [target, setTarget] = useState("redis://127.0.0.1:6379");
   const [username, setUsername] = useState("");
@@ -78,7 +80,7 @@ export function RedisWorkbench({ onSend, onSave, onCancel }: RedisWorkbenchProps
 
   async function save() {
     if (!onSave) return;
-    try { await onSave(buildRequest()); setMessage("已保存到集合"); }
+    try { await onSave(buildRequest()); setMessage(t("status.savedToCollection")); }
     catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
   }
 

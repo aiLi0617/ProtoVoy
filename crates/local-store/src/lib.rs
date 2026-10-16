@@ -5,7 +5,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
-use core_domain::{HttpPayload, ProtocolPayload, RequestEnvelope, RequestId};
+use core_domain::{GlobalParameter, HttpPayload, ProtocolPayload, RequestEnvelope, RequestId};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -152,6 +152,9 @@ pub struct EnvironmentRecord {
     pub project_id: String,
     pub name: String,
     pub variables: HashMap<String, String>,
+    /// Typed defaults injected into HTTP requests. Request-local values take precedence.
+    #[serde(default)]
+    pub global_parameters: Vec<GlobalParameter>,
     /// Names of secrets stored in OS keychain (values never persisted here).
     pub secret_refs: Vec<String>,
     pub updated_at: DateTime<Utc>,
@@ -305,6 +308,7 @@ impl LocalStore {
               project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
               name TEXT NOT NULL,
               variables_json TEXT NOT NULL,
+              global_parameters_json TEXT NOT NULL DEFAULT '[]',
               secret_refs_json TEXT NOT NULL DEFAULT '[]',
               updated_at TEXT NOT NULL
             );
@@ -388,6 +392,10 @@ impl LocalStore {
         );
         let _ = self.conn.execute(
             "ALTER TABLE collections ADD COLUMN tags_json TEXT NOT NULL DEFAULT '[]'",
+            [],
+        );
+        let _ = self.conn.execute(
+            "ALTER TABLE environments ADD COLUMN global_parameters_json TEXT NOT NULL DEFAULT '[]'",
             [],
         );
         let _ = self
@@ -534,14 +542,34 @@ impl LocalStore {
         );
         self.conn.execute(
             r#"
-            INSERT OR IGNORE INTO environments (id, project_id, name, variables_json, secret_refs_json, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT OR IGNORE INTO environments (id, project_id, name, variables_json, global_parameters_json, secret_refs_json, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             "#,
             params![
                 "default-env",
                 "default-project",
                 "Default",
                 "{}",
+                "[]",
+                "[]",
+                now,
+            ],
+        )?;
+        self.conn.execute(
+            "UPDATE environments SET name = 'Default' WHERE id = 'default-env' AND name IN ('本地环境', '默认', '默认环境')",
+            [],
+        )?;
+        self.conn.execute(
+            r#"
+            INSERT OR IGNORE INTO environments (id, project_id, name, variables_json, global_parameters_json, secret_refs_json, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#,
+            params![
+                "local-env",
+                "default-project",
+                "本地环境",
+                "{}",
+                "[]",
                 "[]",
                 now,
             ],
@@ -821,6 +849,20 @@ impl LocalStore {
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    pub fn rename_module(&self, id: &str, name: &str) -> StoreResult<()> {
+        if name.trim().is_empty() {
+            return Err(StoreError::InvalidId("module name is required".into()));
+        }
+        let changed = self.conn.execute(
+            "UPDATE modules SET name = ?2 WHERE id = ?1",
+            params![id, name.trim()],
+        )?;
+        if changed == 0 {
+            return Err(StoreError::NotFound(id.into()));
+        }
+        Ok(())
     }
 
     pub fn list_projects(&self, workspace_id: &str) -> StoreResult<Vec<ProjectRecord>> {
@@ -1475,7 +1517,7 @@ impl LocalStore {
             )
             .optional()?
             .flatten();
-        let mut envelope = envelope.sanitized_for_persistence();
+        let mut envelope = envelope.clone();
         let body_blob_id = self.externalize_http_body(&mut envelope)?;
         let id = envelope.id.0.to_string();
         let updated_at = Utc::now();
@@ -1957,15 +1999,17 @@ impl LocalStore {
 
     pub fn save_environment(&self, env: &EnvironmentRecord) -> StoreResult<()> {
         let variables_json = serde_json::to_string(&env.variables)?;
+        let global_parameters_json = serde_json::to_string(&env.global_parameters)?;
         let secret_refs_json = serde_json::to_string(&env.secret_refs)?;
         self.conn.execute(
             r#"
-            INSERT INTO environments (id, project_id, name, variables_json, secret_refs_json, updated_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            INSERT INTO environments (id, project_id, name, variables_json, global_parameters_json, secret_refs_json, updated_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
             ON CONFLICT(id) DO UPDATE SET
               project_id = excluded.project_id,
               name = excluded.name,
               variables_json = excluded.variables_json,
+              global_parameters_json = excluded.global_parameters_json,
               secret_refs_json = excluded.secret_refs_json,
               updated_at = excluded.updated_at
             "#,
@@ -1974,6 +2018,7 @@ impl LocalStore {
                 env.project_id,
                 env.name,
                 variables_json,
+                global_parameters_json,
                 secret_refs_json,
                 env.updated_at.to_rfc3339(),
             ],
@@ -1985,7 +2030,7 @@ impl LocalStore {
         self.conn
             .query_row(
                 r#"
-                SELECT id, project_id, name, variables_json, secret_refs_json, updated_at
+                SELECT id, project_id, name, variables_json, global_parameters_json, secret_refs_json, updated_at
                 FROM environments WHERE id = ?1
                 "#,
                 params![id],
@@ -1997,17 +2042,19 @@ impl LocalStore {
                         row.get::<_, String>(3)?,
                         row.get::<_, String>(4)?,
                         row.get::<_, String>(5)?,
+                        row.get::<_, String>(6)?,
                     ))
                 },
             )
             .optional()?
             .map(
-                |(id, project_id, name, variables_json, secret_refs_json, updated_at)| {
+                |(id, project_id, name, variables_json, global_parameters_json, secret_refs_json, updated_at)| {
                     Ok(EnvironmentRecord {
                         id,
                         project_id,
                         name,
                         variables: serde_json::from_str(&variables_json)?,
+                        global_parameters: serde_json::from_str(&global_parameters_json)?,
                         secret_refs: serde_json::from_str(&secret_refs_json)?,
                         updated_at: parse_time(&updated_at),
                     })
@@ -2021,23 +2068,42 @@ impl LocalStore {
         project_id: Option<&str>,
     ) -> StoreResult<Vec<EnvironmentRecord>> {
         let mut statement = self.conn.prepare(if project_id.is_some() {
-            "SELECT id, project_id, name, variables_json, secret_refs_json, updated_at FROM environments WHERE project_id = ?1 ORDER BY name COLLATE NOCASE"
+            "SELECT id, project_id, name, variables_json, global_parameters_json, secret_refs_json, updated_at FROM environments WHERE project_id = ?1 ORDER BY name COLLATE NOCASE"
         } else {
-            "SELECT id, project_id, name, variables_json, secret_refs_json, updated_at FROM environments ORDER BY name COLLATE NOCASE"
+            "SELECT id, project_id, name, variables_json, global_parameters_json, secret_refs_json, updated_at FROM environments ORDER BY name COLLATE NOCASE"
         })?;
-        let read = |row: &rusqlite::Row<'_>| -> rusqlite::Result<(String,String,String,String,String,String)> { Ok((row.get(0)?,row.get(1)?,row.get(2)?,row.get(3)?,row.get(4)?,row.get(5)?)) };
+        let read = |row: &rusqlite::Row<'_>| -> rusqlite::Result<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+        )> {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            ))
+        };
         let rows = if let Some(id) = project_id {
             statement.query_map(params![id], read)?
         } else {
             statement.query_map([], read)?
         };
         rows.map(|row| {
-            let (id, project_id, name, variables, secrets, updated_at) = row?;
+            let (id, project_id, name, variables, global_parameters, secrets, updated_at) = row?;
             Ok(EnvironmentRecord {
                 id,
                 project_id,
                 name,
                 variables: serde_json::from_str(&variables)?,
+                global_parameters: serde_json::from_str(&global_parameters)?,
                 secret_refs: serde_json::from_str(&secrets)?,
                 updated_at: parse_time(&updated_at),
             })
@@ -2046,9 +2112,9 @@ impl LocalStore {
     }
 
     pub fn delete_environment(&self, id: &str) -> StoreResult<()> {
-        if id == "default-env" {
+        if matches!(id, "default-env" | "local-env") {
             return Err(StoreError::InvalidId(
-                "default-env cannot be deleted".into(),
+                format!("{id} cannot be deleted"),
             ));
         }
         self.conn
@@ -2281,7 +2347,12 @@ mod tests {
         let environments = store
             .list_environments(Some("default-project"))
             .expect("list envs");
-        assert!(environments.iter().any(|item| item.id == "default-env"));
+        assert!(environments
+            .iter()
+            .any(|item| item.id == "default-env" && item.name == "Default"));
+        assert!(environments
+            .iter()
+            .any(|item| item.id == "local-env" && item.name == "本地环境"));
         let now = Utc::now();
         let script = ScriptRecord {
             id: "script-test".into(),
@@ -2310,7 +2381,21 @@ mod tests {
     #[test]
     fn save_and_reopen_http_request() {
         let store = LocalStore::open_in_memory().expect("open");
-        let req = RequestEnvelope::http_get("sample", "https://example.com/api");
+        let mut req = RequestEnvelope::http_get("sample", "https://example.com/api");
+        req.auth_ref = Some(core_domain::AuthRef {
+            kind: "bearer".into(),
+            secret_ref: None,
+            token: Some("saved-token".into()),
+            username: None,
+            header_name: None,
+            token_url: None,
+            scope: None,
+            audience: None,
+            authorization_url: None,
+            redirect_uri: None,
+            authorization_code_ref: None,
+            code_verifier_ref: None,
+        });
         let saved = store
             .save_request(&req, "default-project", "default-collection")
             .expect("save");
@@ -2319,6 +2404,14 @@ mod tests {
         let loaded = store.get_request(&req.id).expect("get").expect("present");
         assert_eq!(loaded.envelope.target, req.target);
         assert_eq!(loaded.envelope.name, "sample");
+        assert_eq!(
+            loaded
+                .envelope
+                .auth_ref
+                .as_ref()
+                .and_then(|auth| auth.token.as_deref()),
+            Some("saved-token")
+        );
 
         let latest = store.latest_request().expect("latest").expect("present");
         assert_eq!(latest.id, saved.id);
@@ -2329,12 +2422,22 @@ mod tests {
         let store = LocalStore::open_in_memory().expect("open");
         let mut env = store.default_environment().expect("env");
         env.variables.insert("host".into(), "example.com".into());
+        env.global_parameters.push(core_domain::GlobalParameter {
+            location: core_domain::GlobalParameterLocation::Header,
+            name: "X-Client".into(),
+            parameter_type: "string".into(),
+            value: "ProtoVoy".into(),
+            enabled: true,
+            required: false,
+            description: "client marker".into(),
+        });
         env.secret_refs.push("apiToken".into());
         env.updated_at = Utc::now();
         store.save_environment(&env).expect("save env");
 
         let reloaded = store.default_environment().expect("reload");
         assert_eq!(reloaded.variables.get("host").unwrap(), "example.com");
+        assert_eq!(reloaded.global_parameters, env.global_parameters);
         assert_eq!(reloaded.secret_refs, vec!["apiToken".to_string()]);
 
         let req = RequestEnvelope::http_get("hist", "https://example.com");
@@ -2603,6 +2706,17 @@ mod tests {
         assert!(modules[0].is_default);
 
         let custom = store.create_module(&project.id, "Fulfillment").unwrap();
+        store.rename_module(&custom.id, "Shipping").unwrap();
+        assert_eq!(
+            store
+                .list_modules(&project.id)
+                .unwrap()
+                .into_iter()
+                .find(|module| module.id == custom.id)
+                .unwrap()
+                .name,
+            "Shipping"
+        );
         let root = store
             .create_collection_in_module(&project.id, Some(&custom.id), None, "API")
             .unwrap();

@@ -7,6 +7,35 @@ use uuid::Uuid;
 
 use crate::Assertion;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GlobalParameterLocation {
+    Header,
+    Cookie,
+    Query,
+    Body,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GlobalParameter {
+    pub location: GlobalParameterLocation,
+    pub name: String,
+    #[serde(default = "default_parameter_type")]
+    pub parameter_type: String,
+    pub value: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub description: String,
+}
+
+fn default_parameter_type() -> String {
+    "string".into()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RequestId(pub Uuid);
@@ -93,9 +122,9 @@ impl RequestEnvelope {
         }
     }
 
-    /// Returns a copy that is safe to write to the local database or history.
-    /// Literal credentials remain available on the in-memory request used for
-    /// execution, but are never part of a persisted envelope.
+    /// Returns a redacted copy for execution history and external persistence.
+    /// Local saved requests intentionally retain direct auth so they can be
+    /// reopened and executed with the same configuration.
     pub fn sanitized_for_persistence(&self) -> Self {
         let mut sanitized = self.clone();
         let is_case = sanitized
@@ -287,6 +316,9 @@ pub struct UdpPayload {
 fn default_text_encoding() -> String {
     "text".into()
 }
+fn default_true() -> bool {
+    true
+}
 fn default_send_count() -> u32 {
     1
 }
@@ -389,8 +421,8 @@ pub struct AuthRef {
     /// Secret store ref for bearer token, basic password, or API key value.
     #[serde(default)]
     pub secret_ref: Option<String>,
-    /// Literal bearer token supplied only to the execution transport.
-    #[serde(default, skip_serializing)]
+    /// Literal bearer token stored with a local request when direct-token auth is used.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
     /// Basic auth username (may contain `{{var}}` templates).
     #[serde(default)]

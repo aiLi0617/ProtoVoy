@@ -21,8 +21,9 @@ use driver_sse::SseDriver;
 use driver_tcp_udp::{TcpDriver, UdpDriver};
 use driver_websocket::WebSocketDriver;
 use execution_engine::{
-    run_ai_assistant as execute_ai_assistant, AiAssistRequest, AiAssistResponse, ExecutionEngine,
-    VariableScope,
+    orchestrate_collection, run_ai_assistant as execute_ai_assistant, AiAssistRequest,
+    AiAssistResponse, CancellationToken, CollectionCaseOutcome, CollectionRunCase,
+    CollectionRunItem, ExecutionEngine, VariableScope,
 };
 use local_store::{
     ApiDefinitionRecord, CollectionRecord, EnvironmentRecord, ExecutionFilter, ExecutionRecord,
@@ -46,6 +47,24 @@ struct AppState {
     secrets: SecretStore,
     plugins: Arc<PluginManager>,
     capture: CaptureProxy,
+    collection_runs: Mutex<HashMap<String, CollectionRunSlot>>,
+}
+
+#[derive(Clone)]
+struct CollectionRunSlot {
+    cancellation: CancellationToken,
+    completed: usize,
+    total: usize,
+    state: &'static str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CollectionRunProgress {
+    run_id: String,
+    completed: usize,
+    total: usize,
+    state: &'static str,
 }
 
 #[derive(Deserialize)]
@@ -68,19 +87,6 @@ struct CookieItem {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-struct CollectionRunCase {
-    request_id: String,
-    name: String,
-    protocol_id: String,
-    passed: bool,
-    status: Option<u16>,
-    duration_ms: u64,
-    error: Option<String>,
-    failed_assertions: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct VersionInfo {
     desktop_version: &'static str,
     protocol_api_version: &'static str,
@@ -97,6 +103,8 @@ struct ExecuteResponse {
     response_body: Option<String>,
     assertions: Vec<core_domain::AssertionResultEvent>,
     response_meta: Option<ResponseMeta>,
+    #[serde(skip_serializing)]
+    extracted_variables: HashMap<String, String>,
     protocol_api_version: &'static str,
     desktop_version: &'static str,
 }
@@ -271,6 +279,20 @@ type AssertionDto = Assertion;
 struct SaveEnvironmentRequest {
     variables: HashMap<String, String>,
     #[serde(default)]
+    global_parameters: Vec<core_domain::GlobalParameter>,
+    #[serde(default)]
+    secret_refs: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct EnvironmentMutationRequest {
+    project_id: String,
+    name: String,
+    variables: HashMap<String, String>,
+    #[serde(default)]
+    global_parameters: Vec<core_domain::GlobalParameter>,
+    #[serde(default)]
     secret_refs: Vec<String>,
 }
 
@@ -300,6 +322,47 @@ fn version_info(state: State<'_, AppState>) -> VersionInfo {
     }
 }
 
+async fn load_environment_scope(
+    state: &AppState,
+    environment_id: &str,
+) -> Result<VariableScope, String> {
+    let (global, selected) = {
+        let store = state.store.lock().await;
+        let global = store
+            .get_environment("default-env")
+            .map_err(|error| error.to_string())?;
+        let selected = if environment_id == "default-env" {
+            None
+        } else {
+            store
+                .get_environment(environment_id)
+                .map_err(|error| error.to_string())?
+        };
+        (global, selected)
+    };
+    let mut scope = VariableScope::default();
+    if let Some(environment) = global {
+        scope.global = environment.variables;
+        scope.global_parameters = environment.global_parameters;
+        for name in environment.secret_refs {
+            if let Ok(value) = state.secrets.resolve(&name) {
+                scope.secrets.insert(name.clone(), value.clone());
+                scope.global.insert(name, value);
+            }
+        }
+    }
+    if let Some(environment) = selected {
+        scope.environment = environment.variables;
+        for name in environment.secret_refs {
+            if let Ok(value) = state.secrets.resolve(&name) {
+                scope.secrets.insert(name.clone(), value.clone());
+                scope.environment.insert(name, value);
+            }
+        }
+    }
+    Ok(scope)
+}
+
 #[tauri::command]
 async fn execute_request(
     request: HttpExecuteRequest,
@@ -309,19 +372,7 @@ async fn execute_request(
     let mut envelope = build_envelope(&request);
     let env_id = request.environment_id.as_deref().unwrap_or("default-env");
 
-    let mut scope = VariableScope::default();
-    {
-        let store = state.store.lock().await;
-        if let Some(env) = store.get_environment(env_id).map_err(|e| e.to_string())? {
-            scope.environment = env.variables;
-            for secret_name in env.secret_refs {
-                if let Ok(value) = state.secrets.resolve(&secret_name) {
-                    scope.secrets.insert(secret_name.clone(), value.clone());
-                    scope.environment.insert(secret_name, value);
-                }
-            }
-        }
-    }
+    let mut scope = load_environment_scope(&state, env_id).await?;
 
     // Resolve auth secret into scope.secrets (not into request variables).
     if let Some(auth) = &request.auth {
@@ -338,7 +389,7 @@ async fn execute_request(
     envelope.environment_ref = Some(env_id.to_string());
     envelope.auth_ref = request.auth.map(Into::into);
 
-    execute_envelope(envelope, scope, &app, &state).await
+    execute_envelope(envelope, scope, &app, &state, true).await
 }
 
 async fn execute_envelope(
@@ -346,6 +397,7 @@ async fn execute_envelope(
     scope: VariableScope,
     app: &AppHandle,
     state: &AppState,
+    persist_extracted_variables: bool,
 ) -> Result<ExecuteResponse, String> {
     let engine = state.engine.read().await;
     let (id, mut rx, handle) = engine
@@ -445,17 +497,19 @@ async fn execute_envelope(
         response_blob_id,
     };
     store.record_execution(&record).map_err(|e| e.to_string())?;
-    if let Some(variables) = extracted_variables {
-        let environment_id = envelope.environment_ref.as_deref().unwrap_or("default-env");
-        if let Some(mut environment) = store
-            .get_environment(environment_id)
-            .map_err(|e| e.to_string())?
-        {
-            environment.variables.extend(variables);
-            environment.updated_at = chrono::Utc::now();
-            store
-                .save_environment(&environment)
-                .map_err(|e| e.to_string())?;
+    if persist_extracted_variables {
+        if let Some(variables) = extracted_variables.as_ref() {
+            let environment_id = envelope.environment_ref.as_deref().unwrap_or("default-env");
+            if let Some(mut environment) = store
+                .get_environment(environment_id)
+                .map_err(|e| e.to_string())?
+            {
+                environment.variables.extend(variables.clone());
+                environment.updated_at = chrono::Utc::now();
+                store
+                    .save_environment(&environment)
+                    .map_err(|e| e.to_string())?;
+            }
         }
     }
 
@@ -467,6 +521,7 @@ async fn execute_envelope(
         response_body,
         assertions,
         response_meta,
+        extracted_variables: extracted_variables.unwrap_or_default(),
         protocol_api_version: PROTOCOL_API_VERSION,
         desktop_version: env!("CARGO_PKG_VERSION"),
     })
@@ -489,24 +544,9 @@ async fn execute_sse(
     envelope.timeout_ms = 0;
     envelope.variables = request.variables.clone();
 
-    let mut scope = VariableScope::default();
-    if let Some(env) = state
-        .store
-        .lock()
-        .await
-        .get_environment("default-env")
-        .map_err(|e| e.to_string())?
-    {
-        scope.environment = env.variables;
-        for secret_name in env.secret_refs {
-            if let Ok(value) = state.secrets.resolve(&secret_name) {
-                scope.secrets.insert(secret_name.clone(), value.clone());
-                scope.environment.insert(secret_name, value);
-            }
-        }
-    }
+    let mut scope = load_environment_scope(&state, "default-env").await?;
     scope.request = request.variables;
-    execute_envelope(envelope, scope, &app, &state).await
+    execute_envelope(envelope, scope, &app, &state, true).await
 }
 
 #[tauri::command]
@@ -544,7 +584,8 @@ async fn execute_socket(
         }
         _ => return Err("protocol must be tcp or udp".into()),
     }
-    execute_envelope(envelope, VariableScope::default(), &app, &state).await
+    let scope = load_environment_scope(&state, "default-env").await?;
+    execute_envelope(envelope, scope, &app, &state, true).await
 }
 
 #[tauri::command]
@@ -554,22 +595,7 @@ async fn execute_protocol(
     state: State<'_, AppState>,
 ) -> Result<ExecuteResponse, String> {
     let env_id = request.environment_ref.as_deref().unwrap_or("default-env");
-    let mut scope = VariableScope::default();
-    if let Some(env) = state
-        .store
-        .lock()
-        .await
-        .get_environment(env_id)
-        .map_err(|e| e.to_string())?
-    {
-        scope.environment = env.variables;
-        for secret_name in env.secret_refs {
-            if let Ok(value) = state.secrets.resolve(&secret_name) {
-                scope.secrets.insert(secret_name.clone(), value.clone());
-                scope.environment.insert(secret_name, value);
-            }
-        }
-    }
+    let mut scope = load_environment_scope(&state, env_id).await?;
     if let Some(secret_name) = request
         .auth_ref
         .as_ref()
@@ -580,7 +606,7 @@ async fn execute_protocol(
         }
     }
     scope.request = request.variables.clone();
-    execute_envelope(request, scope, &app, &state).await
+    execute_envelope(request, scope, &app, &state, true).await
 }
 
 /// Backward-compatible GET smoke command.
@@ -647,6 +673,7 @@ async fn save_request(
     let mut envelope = build_envelope(&request);
     envelope.variables = request.variables;
     envelope.assertions = request.assertions;
+    envelope.environment_ref = request.environment_id;
     envelope.auth_ref = request.auth.map(Into::into);
     state
         .store
@@ -862,6 +889,19 @@ async fn get_environment(state: State<'_, AppState>) -> Result<EnvironmentRecord
 }
 
 #[tauri::command]
+async fn list_environments(
+    project_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<EnvironmentRecord>, String> {
+    state
+        .store
+        .lock()
+        .await
+        .list_environments(project_id.as_deref())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn save_environment(
     request: SaveEnvironmentRequest,
     state: State<'_, AppState>,
@@ -873,6 +913,7 @@ async fn save_environment(
         .default_environment()
         .map_err(|e| e.to_string())?;
     env.variables = request.variables;
+    env.global_parameters = request.global_parameters;
     env.secret_refs = request.secret_refs;
     env.updated_at = chrono::Utc::now();
     state
@@ -885,11 +926,88 @@ async fn save_environment(
 }
 
 #[tauri::command]
+async fn create_environment(
+    request: EnvironmentMutationRequest,
+    state: State<'_, AppState>,
+) -> Result<EnvironmentRecord, String> {
+    let env = EnvironmentRecord {
+        id: format!("env-{}", uuid::Uuid::new_v4()),
+        project_id: request.project_id,
+        name: request.name,
+        variables: request.variables,
+        global_parameters: request.global_parameters,
+        secret_refs: request.secret_refs,
+        updated_at: chrono::Utc::now(),
+    };
+    state
+        .store
+        .lock()
+        .await
+        .save_environment(&env)
+        .map_err(|error| error.to_string())?;
+    Ok(env)
+}
+
+#[tauri::command]
+async fn update_environment(
+    id: String,
+    request: EnvironmentMutationRequest,
+    state: State<'_, AppState>,
+) -> Result<EnvironmentRecord, String> {
+    let mut env = state
+        .store
+        .lock()
+        .await
+        .get_environment(&id)
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("environment not found: {id}"))?;
+    env.project_id = request.project_id;
+    env.name = request.name;
+    env.variables = request.variables;
+    env.global_parameters = request.global_parameters;
+    env.secret_refs = request.secret_refs;
+    env.updated_at = chrono::Utc::now();
+    state
+        .store
+        .lock()
+        .await
+        .save_environment(&env)
+        .map_err(|error| error.to_string())?;
+    Ok(env)
+}
+
+#[tauri::command]
+async fn delete_environment(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .store
+        .lock()
+        .await
+        .delete_environment(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn put_secret(request: PutSecretRequest, state: State<'_, AppState>) -> Result<(), String> {
     state
         .secrets
         .put_ref(request.name, request.value)
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn secret_exists(name: String, state: State<'_, AppState>) -> Result<bool, String> {
+    state
+        .secrets
+        .exists(&name)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn delete_secret(name: String, state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .secrets
+        .delete(&name)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -937,11 +1055,6 @@ async fn capture_exchanges(state: State<'_, AppState>) -> Result<Vec<CapturedExc
 async fn clear_capture(state: State<'_, AppState>) -> Result<(), String> {
     state.capture.clear().await;
     Ok(())
-}
-
-#[tauri::command]
-async fn secret_exists(name: String, state: State<'_, AppState>) -> Result<bool, String> {
-    state.secrets.exists(&name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1063,6 +1176,16 @@ async fn create_module(
         .lock()
         .await
         .create_module(&project_id, &name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn rename_module(id: String, name: String, state: State<'_, AppState>) -> Result<(), String> {
+    state
+        .store
+        .lock()
+        .await
+        .rename_module(&id, &name)
         .map_err(|e| e.to_string())
 }
 
@@ -1242,6 +1365,8 @@ async fn run_collection(
     app: AppHandle,
     collection_id: String,
     fail_fast: bool,
+    environment_id: Option<String>,
+    run_id: String,
 ) -> Result<Vec<CollectionRunCase>, String> {
     let requests = state
         .store
@@ -1249,69 +1374,102 @@ async fn run_collection(
         .await
         .list_collection_requests_for_run(&collection_id)
         .map_err(|error| error.to_string())?;
-    let mut cases = Vec::new();
+    let mut items = Vec::with_capacity(requests.len());
     for stored in requests {
-        let environment_id = stored.envelope.environment_ref.as_deref().unwrap_or("default-env");
-        let mut scope = VariableScope::default();
-        if let Some(env) = state
-            .store
-            .lock()
-            .await
-            .get_environment(environment_id)
-            .map_err(|error| error.to_string())?
-        {
-            scope.environment = env.variables;
-            for secret_name in env.secret_refs {
-                if let Ok(value) = state.secrets.resolve(&secret_name) {
-                    scope.secrets.insert(secret_name, value);
-                }
-            }
-        }
-        let request_id = stored.id.clone();
-        let name = stored.name.clone();
-        let protocol_id = stored.protocol_id.clone();
-        match execute_envelope(stored.envelope, scope, &app, &state).await {
-            Ok(result) => {
-                let failed_assertions = result
-                    .assertions
-                    .iter()
-                    .filter(|assertion| !assertion.passed)
-                    .map(|assertion| assertion.name.clone())
-                    .collect::<Vec<_>>();
-                let passed = result.summary.state == ExecutionState::Completed
-                    && failed_assertions.is_empty();
-                cases.push(CollectionRunCase {
-                    request_id,
-                    name,
-                    protocol_id,
-                    passed,
-                    status: result.summary.status,
-                    duration_ms: result.summary.duration_ms,
-                    error: None,
-                    failed_assertions,
-                });
-                if fail_fast && !passed {
-                    break;
-                }
-            }
-            Err(error) => {
-                cases.push(CollectionRunCase {
-                    request_id,
-                    name,
-                    protocol_id,
-                    passed: false,
-                    status: None,
-                    duration_ms: 0,
-                    error: Some(error),
-                    failed_assertions: vec![],
-                });
-                if fail_fast {
-                    break;
-                }
-            }
-        }
+        let environment_id = environment_id
+            .as_deref()
+            .or(stored.envelope.environment_ref.as_deref())
+            .unwrap_or("default-env");
+        let scope = load_environment_scope(&state, environment_id).await?;
+        items.push(CollectionRunItem {
+            request_id: stored.id,
+            request: stored.envelope,
+            scope,
+        });
     }
-    Ok(cases)
+    let cancellation = CancellationToken::new();
+    {
+        let mut runs = state.collection_runs.lock().await;
+        if runs.contains_key(&run_id) {
+            return Err("collection run already exists".into());
+        }
+        runs.insert(
+            run_id.clone(),
+            CollectionRunSlot {
+                cancellation: cancellation.clone(),
+                completed: 0,
+                total: items.len(),
+                state: "running",
+            },
+        );
+    }
+    let app_ref = &app;
+    let state_ref = &*state;
+    let progress_run_id = run_id.clone();
+    let result = orchestrate_collection(items, fail_fast, cancellation, |envelope, scope| {
+        let progress_run_id = progress_run_id.clone();
+        async move {
+            let outcome = match execute_envelope(envelope, scope, app_ref, state_ref, false).await {
+                Ok(result) => {
+                    let failed_assertions = result
+                        .assertions
+                        .iter()
+                        .filter(|assertion| !assertion.passed)
+                        .map(|assertion| assertion.name.clone())
+                        .collect::<Vec<_>>();
+                    CollectionCaseOutcome {
+                        passed: result.summary.state == ExecutionState::Completed
+                            && failed_assertions.is_empty(),
+                        status: result.summary.status,
+                        duration_ms: result.summary.duration_ms,
+                        error: None,
+                        failed_assertions,
+                        extracted_variables: result.extracted_variables,
+                    }
+                }
+                Err(error) => CollectionCaseOutcome {
+                    error: Some(error),
+                    ..CollectionCaseOutcome::default()
+                },
+            };
+            if let Some(slot) = state_ref
+                .collection_runs
+                .lock()
+                .await
+                .get_mut(&progress_run_id)
+            {
+                slot.completed += 1;
+            }
+            outcome
+        }
+    })
+    .await;
+    state.collection_runs.lock().await.remove(&run_id);
+    Ok(result.cases)
+}
+
+#[tauri::command]
+async fn get_collection_run_progress(
+    run_id: String,
+    state: State<'_, AppState>,
+) -> Result<CollectionRunProgress, String> {
+    let runs = state.collection_runs.lock().await;
+    let slot = runs.get(&run_id).ok_or("collection run not found")?;
+    Ok(CollectionRunProgress {
+        run_id,
+        completed: slot.completed,
+        total: slot.total,
+        state: slot.state,
+    })
+}
+
+#[tauri::command]
+async fn cancel_collection_run(run_id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut runs = state.collection_runs.lock().await;
+    let slot = runs.get_mut(&run_id).ok_or("collection run not found")?;
+    slot.state = "cancelling";
+    slot.cancellation.cancel();
+    Ok(())
 }
 
 #[tauri::command]
@@ -1472,6 +1630,7 @@ pub fn run() {
                 secrets: SecretStore::with_keychain(),
                 plugins: Arc::new(plugins),
                 capture: CaptureProxy::new(),
+                collection_runs: Mutex::new(HashMap::new()),
             });
             Ok(())
         })
@@ -1495,15 +1654,20 @@ pub fn run() {
             bind_request_definition,
             unbind_request_definition,
             get_environment,
+            list_environments,
             save_environment,
+            create_environment,
+            update_environment,
+            delete_environment,
             put_secret,
+            secret_exists,
+            delete_secret,
             run_ai_assistant,
             capture_status,
             start_capture,
             stop_capture,
             capture_exchanges,
             clear_capture,
-            secret_exists,
             get_workspace_tree,
             create_workspace,
             rename_workspace,
@@ -1512,6 +1676,7 @@ pub fn run() {
             delete_workspace,
             create_project,
             create_module,
+            rename_module,
             rename_project,
             delete_project,
             create_collection,
@@ -1526,6 +1691,8 @@ pub fn run() {
             set_cookie,
             delete_cookie,
             run_collection,
+            get_collection_run_progress,
+            cancel_collection_run,
             install_plugin,
             set_plugin_enabled,
             uninstall_plugin,

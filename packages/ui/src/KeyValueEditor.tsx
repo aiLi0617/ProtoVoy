@@ -1,4 +1,4 @@
-import type { CSSProperties, Dispatch, SetStateAction } from "react";
+import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import { Icon } from "./Icons";
 
 export type RowValueType = "string" | "integer" | "number" | "boolean" | "array" | "object" | "null";
@@ -60,20 +60,29 @@ export function queryRowsFromUrl(url: string): HeaderRow[] {
   return [...Array.from(new URLSearchParams(query).entries()).map(([key, value]) => createQueryRow(key, value)), createQueryRow()];
 }
 
+function preserveVariableTemplates(value: string): string {
+  return value.replaceAll("%7B%7B", "{{").replaceAll("%7D%7D", "}}");
+}
+
+export function urlEncodedRows(rows: HeaderRow[]): string {
+  const encoded = new URLSearchParams(rows.filter((row) => row.enabled && row.key.trim()).map((row) => [row.key, row.value])).toString();
+  return preserveVariableTemplates(encoded);
+}
+
 export function urlWithQueryRows(url: string, rows: HeaderRow[]): string {
   const hashIndex = url.indexOf("#"); const hash = hashIndex >= 0 ? url.slice(hashIndex) : "";
   const base = (hashIndex >= 0 ? url.slice(0, hashIndex) : url).split("?", 1)[0];
-  const query = new URLSearchParams(rows.filter((row) => row.enabled && row.key.trim()).map((row) => [row.key, row.value])).toString();
+  const query = urlEncodedRows(rows);
   return `${base}${query ? `?${query}` : ""}${hash}`;
 }
 
 export interface KeyValueRowsProps {
   rows: HeaderRow[]; setRows: Dispatch<SetStateAction<HeaderRow[]>>; kind: string;
   nameLabel: string; valueLabel: string; addPlaceholder: string; loading?: boolean;
-  onRowsChange?: (rows: HeaderRow[]) => void; inconsistentNames?: string[];
+  onRowsChange?: (rows: HeaderRow[]) => void; inconsistentNames?: string[]; beforeRows?: ReactNode;
 }
 
-export function KeyValueRows({ rows, setRows, kind, nameLabel, valueLabel, addPlaceholder, loading = false, onRowsChange, inconsistentNames = [] }: KeyValueRowsProps) {
+export function KeyValueRows({ rows, setRows, kind, nameLabel, valueLabel, addPlaceholder, loading = false, onRowsChange, inconsistentNames = [], beforeRows }: KeyValueRowsProps) {
   const inconsistent = new Set(inconsistentNames.map((name) => name.toLowerCase()));
   const update = (producer: (current: HeaderRow[]) => HeaderRow[]) => { if (loading) return; setRows((current) => { const next = producer(current); onRowsChange?.(next); return next; }); };
   const activateType = (row: HeaderRow, index: number) => { if (!row.typeSelected) update((current) => appendEmptyRow(current.map((item) => item.id === row.id ? editRow(item, { typeSelected: true }) : item), index)); };
@@ -81,6 +90,7 @@ export function KeyValueRows({ rows, setRows, kind, nameLabel, valueLabel, addPl
   const remove = (row: HeaderRow) => update((current) => { const next = current.filter((item) => item.id !== row.id); return next.length && !keyValueRowHasContent(next[next.length - 1]) ? next : [...next, createQueryRow()]; });
   return <div className="http-kv-editor" aria-label={kind}>
     <div className="http-param-header"><span/><span>{nameLabel}</span><span>{valueLabel}</span><span className="http-type-header"><span>类型</span><button type="button" title="是否全部必需" aria-label="切换全部参数是否必填" disabled={loading} onClick={() => update((current) => { const required = !current.filter(keyValueRowHasContent).every((item) => item.required); return current.map((item) => keyValueRowHasContent(item) ? { ...item, required } : item); })}>*</button></span><span/><span>说明</span><span/></div>
+    {beforeRows}
     {rows.map((row, index) => {
       const rowHasContent = keyValueRowHasContent(row); const isEntry = index < rows.length - 1 || rowHasContent;
       const missingName = !row.key.trim() && (row.enabled || rowHasContent || index < rows.length - 1);
@@ -93,7 +103,7 @@ export function KeyValueRows({ rows, setRows, kind, nameLabel, valueLabel, addPl
         <div className="http-param-type-cell"><select className="http-param-type" aria-label={`${kind} ${index + 1} 类型`} style={INPUT_STYLE} value={row.valueType} onPointerDown={() => activateType(row, index)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") activateType(row, index); }} onChange={(event) => update((current) => appendEmptyRow(current.map((item) => item.id === row.id ? editRow(item, { valueType: event.target.value as RowValueType, typeSelected: true }) : item), index))} disabled={loading}>{ROW_VALUE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></div>
         <span className="http-required-row"><button type="button" className={row.required ? "is-required" : ""} aria-pressed={row.required} aria-label={`${kind} ${index + 1} ${row.required ? "取消必填" : "设为必填"}`} title={row.required ? "取消必填" : "设为必填"} disabled={loading} onClick={() => update((current) => appendEmptyRow(current.map((item) => item.id === row.id ? editRow(item, { required: !item.required }) : item), index))}>*</button></span>
         <input aria-label={`${kind} ${index + 1} 说明`} style={INPUT_STYLE} value={row.description} onChange={(event) => update((current) => appendEmptyRow(current.map((item) => item.id === row.id ? editRow(item, { description: event.target.value }) : item), index))} disabled={loading}/>
-        {index < rows.length - 1 || rowHasContent ? <button type="button" className="http-kv-delete" aria-label={`删除 ${kind} ${index + 1}`} title={`删除此 ${kind}`} onClick={() => remove(row)} disabled={loading}><Icon name="trash"/></button> : <span className="http-kv-delete-placeholder" aria-hidden="true"/>}
+        {index < rows.length - 1 || rowHasContent ? <button type="button" className="http-kv-delete" aria-label={`删除 ${kind} ${index + 1}`} title={`删除此 ${kind}`} onClick={() => remove(row)} disabled={loading}><Icon name="trash"/></button> : <span className="http-kv-delete-placeholder" style={{ width: 30, height: 30 }} aria-hidden="true"/>}
       </div>;
     })}
   </div>;

@@ -13,6 +13,15 @@ on:
       - "services/collaboration-server/**"
       - "e2e/**"
       - "scripts/prepare-sidecar.mjs"
+      - "scripts/e2e-server.mjs"
+      - "scripts/e2e-smoke-tags.mjs"
+      - "scripts/run-e2e.mjs"
+      - "scripts/run-tsx-tests.mjs"
+      - "scripts/register-test-css.mjs"
+      - "scripts/test-changed-e2e.mjs"
+      - "scripts/test-changed-ui.mjs"
+      - "scripts/validate-changed.mjs"
+      - "scripts/validation-cache.mjs"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
@@ -21,6 +30,8 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "playwright.config.ts"
+      - "playwright.managed.config.ts"
+      - "playwright.runtime.config.ts"
       - ".npmrc"
       - ".github/workflows/ci.yml"
   pull_request:
@@ -31,6 +42,15 @@ on:
       - "services/collaboration-server/**"
       - "e2e/**"
       - "scripts/prepare-sidecar.mjs"
+      - "scripts/e2e-server.mjs"
+      - "scripts/e2e-smoke-tags.mjs"
+      - "scripts/run-e2e.mjs"
+      - "scripts/run-tsx-tests.mjs"
+      - "scripts/register-test-css.mjs"
+      - "scripts/test-changed-e2e.mjs"
+      - "scripts/test-changed-ui.mjs"
+      - "scripts/validate-changed.mjs"
+      - "scripts/validation-cache.mjs"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
@@ -39,6 +59,8 @@ on:
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "playwright.config.ts"
+      - "playwright.managed.config.ts"
+      - "playwright.runtime.config.ts"
       - ".npmrc"
       - ".github/workflows/ci.yml"
   workflow_dispatch:
@@ -58,6 +80,7 @@ jobs:
       rust: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.rust }}
       e2e: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.e2e }}
       desktop: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.desktop }}
+      desktop_pr: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.desktop_pr }}
       java: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.java }}
       security: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.security }}
       workflow: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.workflow }}
@@ -78,6 +101,11 @@ jobs:
               - 'apps/web/**'
               - 'apps/desktop/**'
               - '!apps/desktop/src-tauri/**'
+              - 'scripts/validate-changed.mjs'
+              - 'scripts/validation-cache.mjs'
+              - 'scripts/run-tsx-tests.mjs'
+              - 'scripts/register-test-css.mjs'
+              - 'scripts/test-changed-ui.mjs'
             rust:
               - 'Cargo.toml'
               - 'Cargo.lock'
@@ -89,11 +117,20 @@ jobs:
               - 'apps/protocol-gateway/**'
               - 'apps/desktop/src-tauri/**'
             e2e:
+              - 'package.json'
+              - 'pnpm-lock.yaml'
               - 'e2e/**'
               - 'playwright.config.ts'
+              - 'playwright.runtime.config.ts'
               - 'apps/web/**'
               - 'packages/ui/**'
               - 'packages/request-model/**'
+              - 'scripts/test-changed-e2e.mjs'
+              - 'scripts/validation-cache.mjs'
+              - 'scripts/e2e-server.mjs'
+              - 'scripts/e2e-smoke-tags.mjs'
+              - 'scripts/run-e2e.mjs'
+              - 'playwright.managed.config.ts'
             desktop:
               - 'apps/desktop/**'
               - 'apps/local-agent/**'
@@ -106,6 +143,10 @@ jobs:
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'pnpm-workspace.yaml'
+            desktop_pr:
+              - 'apps/desktop/**'
+              - 'apps/local-agent/**'
+              - 'scripts/prepare-sidecar.mjs'
             java:
               - 'services/collaboration-server/**'
             security:
@@ -113,7 +154,6 @@ jobs:
               - 'Cargo.lock'
               - 'rust-toolchain.toml'
               - '.cargo/**'
-              - 'crates/**'
             workflow:
               - '.github/workflows/ci.yml'
 
@@ -123,6 +163,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
         with:
           version: 10.27.0
@@ -131,8 +173,19 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test
+      - name: Restore content validation cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/protovoy
+          key: ${{ runner.os }}-node22-js-validation-v3-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'apps/web/**', 'apps/desktop/**', 'packages/**', 'scripts/validate-changed.mjs', 'scripts/test-changed-ui.mjs', 'scripts/run-tsx-tests.mjs', 'scripts/register-test-css.mjs', 'scripts/validation-cache.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-js-validation-v3-
+      - name: Validate affected workspaces
+        if: github.event_name == 'pull_request' && needs.changes.outputs.workflow != 'true'
+        run: pnpm validate:changed --js --base "${{ github.event.pull_request.base.sha }}"
+      - name: Run full JavaScript and TypeScript validation
+        if: github.event_name != 'pull_request' || needs.changes.outputs.workflow == 'true'
+        run: pnpm typecheck && pnpm test
 
   test-e2e:
     needs: changes
@@ -140,6 +193,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
         with:
           version: 10.27.0
@@ -148,10 +203,28 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Install Chromium for browser smoke tests
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Run browser smoke tests
-        run: pnpm test:e2e
+      - name: Restore browser validation cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/protovoy
+          key: ${{ runner.os }}-node22-e2e-validation-v3-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'apps/web/**', 'packages/ui/**', 'packages/request-model/**', 'e2e/**', 'playwright*.ts', 'scripts/e2e-server.mjs', 'scripts/e2e-smoke-tags.mjs', 'scripts/run-e2e.mjs', 'scripts/test-changed-e2e.mjs', 'scripts/validation-cache.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-e2e-validation-v3-
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+      - name: Install Chromium system dependencies
+        run: pnpm exec playwright install-deps chromium
+      - name: Install Chromium
+        run: pnpm exec playwright install chromium
+      - name: Run affected browser tests
+        if: github.event_name == 'pull_request' && needs.changes.outputs.workflow != 'true'
+        run: pnpm test:e2e:changed --base "${{ github.event.pull_request.base.sha }}" --workers=2
+      - name: Run full browser tests
+        if: github.event_name != 'pull_request' || needs.changes.outputs.workflow == 'true'
+        run: pnpm test:e2e --workers=2
 
   test-rust:
     needs: changes
@@ -159,25 +232,50 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Detect whether affected Rust crates include the desktop shell
+        id: rust-scope
+        if: github.event_name == 'pull_request' && needs.changes.outputs.workflow != 'true'
+        shell: bash
+        run: |
+          if node scripts/validate-changed.mjs --rust --base "${{ github.event.pull_request.base.sha }}" --dry-run | grep -Eq -- '--workspace|--package protovoy-desktop'; then
+            echo 'desktop=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'desktop=false' >> "$GITHUB_OUTPUT"
+          fi
       - name: Install Linux desktop libraries
+        if: github.event_name != 'pull_request' || needs.changes.outputs.workflow == 'true' || steps.rust-scope.outputs.desktop == 'true'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: Ensure Tauri frontendDist exists for workspace Cargo
+        if: github.event_name != 'pull_request' || needs.changes.outputs.workflow == 'true' || steps.rust-scope.outputs.desktop == 'true'
         run: mkdir -p apps/desktop/dist && test -f apps/desktop/dist/index.html || printf '%s\n' '<!doctype html><title>ProtoVoy</title>' > apps/desktop/dist/index.html
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace --locked
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Restore Rust validation result cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.cache/protovoy
+          key: ${{ runner.os }}-rust-validation-v3-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/**', 'crates/**', 'apps/*/Cargo.toml', 'apps/*/src-tauri/**', 'scripts/validate-changed.mjs', 'scripts/validation-cache.mjs') }}
+      - name: Validate affected Rust workspaces
+        if: github.event_name == 'pull_request' && needs.changes.outputs.workflow != 'true'
+        run: node scripts/validate-changed.mjs --rust --base "${{ github.event.pull_request.base.sha }}"
+      - name: Run full Rust validation
+        if: github.event_name != 'pull_request' || needs.changes.outputs.workflow == 'true'
+        run: cargo test --workspace --locked && cargo clippy --workspace --all-targets --locked -- -D warnings
 
   desktop-check:
     needs: changes
-    if: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.workflow == 'true'
+    if: >-
+      needs.changes.outputs.workflow == 'true' ||
+      (github.event_name == 'pull_request' && needs.changes.outputs.desktop_pr == 'true') ||
+      (github.event_name != 'pull_request' && needs.changes.outputs.desktop == 'true')
     strategy:
       fail-fast: false
+      # Pull requests get a fast Linux compile check. Main and manually
+      # dispatched runs retain the full cross-platform matrix.
       matrix:
-        include:
-          - os: ubuntu-24.04
-          - os: macos-14
-          - os: windows-2025
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-24.04"]' || '["ubuntu-24.04","macos-14","windows-2025"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7

@@ -1,4 +1,4 @@
-﻿use axum::{
+use axum::{
     extract::{Path as AxumPath, Request, State},
     http::{header, HeaderMap, StatusCode},
     middleware::{self, Next},
@@ -20,7 +20,10 @@ use driver_sql::SqlDriver;
 use driver_sse::SseDriver;
 use driver_tcp_udp::{TcpDriver, UdpDriver};
 use driver_websocket::WebSocketDriver;
-use execution_engine::ExecutionEngine;
+use execution_engine::{
+    run_collection_to_completion, CollectionRunCase, CollectionRunItem, ExecutionEngine,
+    VariableScope,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -112,6 +115,45 @@ struct CiRunResponse {
     exit_code: i32,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CiCollectionRunRequest {
+    requests: Vec<RequestEnvelope>,
+    #[serde(default)]
+    fail_fast: bool,
+    #[serde(default)]
+    variables: HashMap<String, String>,
+    #[serde(default)]
+    data: Vec<HashMap<String, String>>,
+    #[serde(default)]
+    report_format: CollectionReportFormat,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum CollectionReportFormat {
+    #[default]
+    Json,
+    Junit,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CiCollectionRunCase {
+    iteration: usize,
+    #[serde(flatten)]
+    case: CollectionRunCase,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CiCollectionRunResponse {
+    cases: Vec<CiCollectionRunCase>,
+    exit_code: i32,
+    report_format: CollectionReportFormat,
+    report: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -139,8 +181,7 @@ fn build_state() -> Result<AppState, Box<dyn std::error::Error>> {
         return Err("PROTOVOY_GATEWAY_API_KEY must contain at least 24 characters".into());
     }
     let data_dir = PathBuf::from(
-        std::env::var("PROTOVOY_GATEWAY_DATA_DIR")
-            .unwrap_or_else(|_| ".protovoy-gateway".into()),
+        std::env::var("PROTOVOY_GATEWAY_DATA_DIR").unwrap_or_else(|_| ".protovoy-gateway".into()),
     );
     fs::create_dir_all(&data_dir)?;
     let jobs_path = data_dir.join("jobs.json");
@@ -184,6 +225,7 @@ fn app(state: AppState) -> Router {
         .route("/v1/capabilities", get(capabilities))
         .route("/v1/executions", get(list_executions).post(remote_execute))
         .route("/v1/runner/execute", post(ci_execute))
+        .route("/v1/runner/collection", post(ci_collection_execute))
         .route("/v1/jobs", get(list_jobs).post(create_job))
         .route("/v1/jobs/{id}", delete(delete_job))
         .layer(middleware::from_fn_with_state(state.clone(), authenticate));
@@ -254,6 +296,129 @@ async fn ci_execute(
             exit_code,
         }),
     )
+}
+
+async fn ci_collection_execute(
+    State(state): State<AppState>,
+    Json(body): Json<CiCollectionRunRequest>,
+) -> impl IntoResponse {
+    let _permit = match state.permits.acquire().await {
+        Ok(permit) => permit,
+        Err(error) => {
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(CiCollectionRunResponse {
+                    cases: vec![],
+                    exit_code: 1,
+                    report_format: body.report_format,
+                    report: error.to_string(),
+                }),
+            );
+        }
+    };
+    let engine = state.engine.read().await;
+    let response = execute_ci_collection(&engine, body).await;
+    (StatusCode::OK, Json(response))
+}
+
+async fn execute_ci_collection(
+    engine: &ExecutionEngine,
+    body: CiCollectionRunRequest,
+) -> CiCollectionRunResponse {
+    let rows = if body.data.is_empty() {
+        vec![HashMap::new()]
+    } else {
+        body.data
+    };
+    let mut cases = Vec::new();
+    for (index, row) in rows.into_iter().enumerate() {
+        let mut variables = body.variables.clone();
+        variables.extend(row);
+        let items = body
+            .requests
+            .iter()
+            .cloned()
+            .map(|request| CollectionRunItem {
+                request_id: request.id.0.to_string(),
+                scope: VariableScope {
+                    environment: variables.clone(),
+                    ..VariableScope::default()
+                },
+                request,
+            })
+            .collect();
+        let result = run_collection_to_completion(engine, items, body.fail_fast).await;
+        let failed = result.cases.iter().any(|case| !case.passed);
+        cases.extend(result.cases.into_iter().map(|case| CiCollectionRunCase {
+            iteration: index + 1,
+            case,
+        }));
+        if body.fail_fast && failed {
+            break;
+        }
+    }
+    let exit_code = i32::from(cases.iter().any(|case| !case.case.passed));
+    let report = render_collection_report(&cases, body.report_format);
+    CiCollectionRunResponse {
+        cases,
+        exit_code,
+        report_format: body.report_format,
+        report,
+    }
+}
+
+fn render_collection_report(
+    cases: &[CiCollectionRunCase],
+    format: CollectionReportFormat,
+) -> String {
+    match format {
+        CollectionReportFormat::Json => serde_json::to_string_pretty(cases).unwrap_or_default(),
+        CollectionReportFormat::Junit => {
+            let failures = cases.iter().filter(|case| !case.case.passed).count();
+            let tests = cases
+                .iter()
+                .map(|item| {
+                    let case = &item.case;
+                    let failure_message = case.error.clone().or_else(|| {
+                        (!case.failed_assertions.is_empty()).then(|| {
+                            format!(
+                                "assertions failed: {}",
+                                case.failed_assertions.join(", ")
+                            )
+                        })
+                    });
+                    let failure = failure_message
+                        .as_deref()
+                        .map(|message| {
+                            format!("<failure message=\"{}\"/>", xml_escape(message))
+                        })
+                        .unwrap_or_default();
+                    format!(
+                        "<testcase name=\"[iteration {}] {}\" classname=\"{}\" time=\"{:.3}\">{}</testcase>",
+                        item.iteration,
+                        xml_escape(&case.name),
+                        xml_escape(&case.protocol_id),
+                        case.duration_ms as f64 / 1000.0,
+                        failure
+                    )
+                })
+                .collect::<String>();
+            format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?><testsuite name=\"ProtoVoy\" tests=\"{}\" failures=\"{}\">{}</testsuite>",
+                cases.len(),
+                failures,
+                tests
+            )
+        }
+    }
+}
+
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 fn execution_response(execution: GatewayExecution) -> (StatusCode, Json<GatewayExecution>) {
     let status = if execution.success {
@@ -446,23 +611,41 @@ fn load_jobs(path: &Path) -> Result<HashMap<Uuid, ScheduledJob>, Box<dyn std::er
         Err(error) => return Err(error.into()),
     };
     let jobs: Vec<ScheduledJob> = serde_json::from_slice(&bytes)?;
-    if jobs.iter().any(|job| scheduled_request_contains_credentials(&job.request)) {
+    if jobs
+        .iter()
+        .any(|job| scheduled_request_contains_credentials(&job.request))
+    {
         return Err("jobs.json contains scheduled requests with inline credentials; remove them and rotate exposed credentials before restarting".into());
     }
     Ok(jobs.into_iter().map(|job| (job.id, job)).collect())
 }
 
 fn sensitive_name(name: &str) -> bool {
-    let normalized: String = name.chars().filter(|ch| ch.is_ascii_alphanumeric()).flat_map(char::to_lowercase).collect();
-    ["authorization", "cookie", "token", "secret", "password", "passwd", "apikey", "credential"]
-        .iter()
-        .any(|part| normalized.contains(part))
+    let normalized: String = name
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect();
+    [
+        "authorization",
+        "cookie",
+        "token",
+        "secret",
+        "password",
+        "passwd",
+        "apikey",
+        "credential",
+    ]
+    .iter()
+    .any(|part| normalized.contains(part))
 }
 
 fn has_sensitive_fields(value: &Value) -> bool {
     match value {
         Value::Object(fields) => fields.iter().any(|(key, value)| {
-            (sensitive_name(key) && !matches!(key.as_str(), "secretRef" | "secretRefs") && !value.is_null())
+            (sensitive_name(key)
+                && !matches!(key.as_str(), "secretRef" | "secretRefs")
+                && !value.is_null())
                 || has_sensitive_fields(value)
         }),
         Value::Array(items) => {
@@ -477,12 +660,20 @@ fn has_sensitive_fields(value: &Value) -> bool {
 
 fn scheduled_request_contains_credentials(request: &RequestEnvelope) -> bool {
     let original = serde_json::to_value(request).expect("RequestEnvelope serializes");
-    let sanitized = serde_json::to_value(request.sanitized_for_persistence()).expect("RequestEnvelope serializes");
+    let sanitized = serde_json::to_value(request.sanitized_for_persistence())
+        .expect("RequestEnvelope serializes");
     if original != sanitized {
         return true;
     }
-    let target_query = request.target.split_once('?').map(|(_, query)| query.split('#').next().unwrap_or(""));
-    if target_query.is_some_and(|query| query.split('&').any(|pair| sensitive_name(pair.split('=').next().unwrap_or("")))) {
+    let target_query = request
+        .target
+        .split_once('?')
+        .map(|(_, query)| query.split('#').next().unwrap_or(""));
+    if target_query.is_some_and(|query| {
+        query
+            .split('&')
+            .any(|pair| sensitive_name(pair.split('=').next().unwrap_or("")))
+    }) {
         return true;
     }
     let payload = original.get("payload").unwrap_or(&Value::Null);
@@ -545,7 +736,9 @@ mod tests {
         assert!(scheduled_request_contains_credentials(&request));
         request.target = "https://example.com".into();
         if let core_domain::ProtocolPayload::Http(payload) = &mut request.payload {
-            payload.headers.push(("Authorization".into(), "Bearer literal".into()));
+            payload
+                .headers
+                .push(("Authorization".into(), "Bearer literal".into()));
         }
         assert!(scheduled_request_contains_credentials(&request));
         if let core_domain::ProtocolPayload::Http(payload) = &mut request.payload {
@@ -564,9 +757,14 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("jobs.json");
         let job = ScheduledJob {
-            id: Uuid::new_v4(), name: "unsafe".into(), enabled: true, interval_seconds: 60,
-            next_run_at: Utc::now(), request: execution_engine::sample_http_get("https://example.com?token=literal"),
-            created_at: Utc::now(), last_execution_id: None,
+            id: Uuid::new_v4(),
+            name: "unsafe".into(),
+            enabled: true,
+            interval_seconds: 60,
+            next_run_at: Utc::now(),
+            request: execution_engine::sample_http_get("https://example.com?token=literal"),
+            created_at: Utc::now(),
+            last_execution_id: None,
         };
         persist_jobs(&path, &HashMap::from([(job.id, job)])).unwrap();
         assert!(load_jobs(&path).is_err());
@@ -597,6 +795,77 @@ mod tests {
         ] {
             assert!(ids.contains(&expected.to_string()), "missing {expected}")
         }
+    }
+
+    #[test]
+    fn collection_runner_request_accepts_ordered_envelopes_and_variables() {
+        let first = execution_engine::sample_http_get("https://{{host}}/first");
+        let second = execution_engine::sample_http_get("https://{{host}}/second");
+        let body = serde_json::json!({
+            "requests": [first, second],
+            "failFast": true,
+            "variables": { "host": "example.com" }
+        });
+
+        let request: CiCollectionRunRequest = serde_json::from_value(body).expect("request");
+
+        assert_eq!(request.requests.len(), 2);
+        assert!(request.fail_fast);
+        assert_eq!(
+            request.variables.get("host").map(String::as_str),
+            Some("example.com")
+        );
+        assert!(request.data.is_empty());
+        assert_eq!(request.report_format, CollectionReportFormat::Json);
+    }
+
+    #[test]
+    fn collection_runner_request_accepts_data_rows_and_junit() {
+        let request: CiCollectionRunRequest = serde_json::from_value(serde_json::json!({
+            "requests": [],
+            "variables": { "host": "example.com" },
+            "data": [{ "user": "alice" }, { "user": "bob" }],
+            "reportFormat": "junit"
+        }))
+        .expect("request");
+
+        assert_eq!(request.data.len(), 2);
+        assert_eq!(request.report_format, CollectionReportFormat::Junit);
+    }
+
+    #[tokio::test]
+    async fn collection_runner_reports_each_data_iteration_and_fail_fast() {
+        let body = CiCollectionRunRequest {
+            requests: vec![execution_engine::sample_http_get(
+                "https://{{host}}/{{user}}",
+            )],
+            fail_fast: false,
+            variables: HashMap::from([("host".into(), "example.com".into())]),
+            data: vec![
+                HashMap::from([("user".into(), "alice".into())]),
+                HashMap::from([("user".into(), "bob".into())]),
+            ],
+            report_format: CollectionReportFormat::Junit,
+        };
+        let response = execute_ci_collection(&ExecutionEngine::new(), body).await;
+
+        assert_eq!(response.cases.len(), 2);
+        assert_eq!(response.cases[0].iteration, 1);
+        assert_eq!(response.cases[1].iteration, 2);
+        assert_eq!(response.exit_code, 1);
+        assert!(response.report.contains("tests=\"2\""));
+        assert!(response.report.contains("[iteration 2]"));
+
+        let fail_fast = CiCollectionRunRequest {
+            requests: vec![execution_engine::sample_http_get("https://example.com")],
+            fail_fast: true,
+            variables: HashMap::new(),
+            data: vec![HashMap::new(), HashMap::new()],
+            report_format: CollectionReportFormat::Json,
+        };
+        let response = execute_ci_collection(&ExecutionEngine::new(), fail_fast).await;
+        assert_eq!(response.cases.len(), 1);
+        assert_eq!(response.cases[0].iteration, 1);
     }
 
     #[test]

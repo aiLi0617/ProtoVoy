@@ -21,6 +21,7 @@ import {
   setGatewayUrl,
 } from "./userPreferences";
 import { ModalFrame } from "./ModalFrame";
+import { shortcutModifier } from "./platform";
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -34,6 +35,7 @@ export function SettingsDialog({ open, onClose, channelLabel }: SettingsDialogPr
   const setThemeMode = useAppStore((state) => state.setThemeMode);
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const modifier = shortcutModifier();
 
   const [collaborationUrl, setCollaborationUrlState] = useState(getCollaborationUrl);
   const [agentUrl, setAgentUrlState] = useState(getAgentUrl);
@@ -245,7 +247,7 @@ export function SettingsDialog({ open, onClose, channelLabel }: SettingsDialogPr
           <section className="settings-section category-shortcuts">
             <h3>快捷键</h3>
             <p className="settings-hint">快捷键集中展示在这里，后续版本将在此提供自定义配置。</p>
-            <dl className="shortcut-list"><div><dt>发送请求</dt><dd><kbd>Ctrl/⌘</kbd> + <kbd>Enter</kbd></dd></div><div><dt>命令面板</dt><dd><kbd>Ctrl/⌘</kbd> + <kbd>K</kbd></dd></div><div><dt>打开设置</dt><dd><kbd>Ctrl/⌘</kbd> + <kbd>,</kbd></dd></div><div><dt>关闭弹窗或面板</dt><dd><kbd>Esc</kbd></dd></div></dl>
+            <dl className="shortcut-list"><div><dt>发送请求</dt><dd><kbd>{modifier}</kbd> + <kbd>Enter</kbd></dd></div><div><dt>命令面板</dt><dd><kbd>{modifier}</kbd> + <kbd>K</kbd></dd></div><div><dt>打开设置</dt><dd><kbd>{modifier}</kbd> + <kbd>,</kbd></dd></div><div><dt>关闭弹窗或面板</dt><dd><kbd>Esc</kbd></dd></div></dl>
           </section>
           <section className="settings-section category-about">
             <h3>关于 ProtoVoy</h3><p className="settings-hint">ProtoVoy · Explore Every Protocol.</p><p className="settings-hint">本地优先的多协议 API 调试与协作工具。</p>

@@ -1,6 +1,18 @@
 import { amqpRequestEnvelope, kafkaRequestEnvelope, mqttRequestEnvelope, redisRequestEnvelope, sqlRequestEnvelope } from "@protovoy/ui";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+
+type GlobalParameter = { location: "header" | "cookie" | "query" | "body"; name: string; parameterType?: "string" | "number" | "integer" | "boolean" | "array" | "object"; value: string; enabled: boolean; required?: boolean; description: string };
+
+interface EnvironmentResource {
+  id: string;
+  projectId: string;
+  name: string;
+  variables: Record<string, string>;
+  globalParameters?: GlobalParameter[];
+  secretRefs: string[];
+  updatedAt: string;
+}
 import {
   AppShell,
   HttpWorkbench,
@@ -27,6 +39,7 @@ import {
   GatewayWorkbench,
   type CaptureStatus,
   type CollectionRunCase,
+  type CollectionRunProgress,
   type CapturedExchange,
   type AiAssistRequest,
   type AiAssistResponse,
@@ -167,6 +180,7 @@ function toInvokeRequest(request: HttpWorkbenchRequest) {
     proxy: request.proxy ?? null,
     tlsVerify: request.tlsVerify,
     tlsClientCertRef: request.tlsClientCertRef ?? null,
+    environmentId: request.environmentRef ?? null,
     preScripts: request.preScripts ?? [],
     postScripts: request.postScripts ?? [],
   };
@@ -310,9 +324,15 @@ export function App() {
       requestHistory={{ onList: listRequestHistory, onReplay: replayRequestHistory, requestEditor: { onSend: executeHistoryRequest, onSendEnvelope: executeHistoryEnvelope, onCancel: async (executionId) => { await invoke<boolean>("cancel_execution", { id: executionId }); }, onSaveInterface: async (request, collectionId) => { await invoke("save_request", { request: toInvokeRequest(request), projectId: selectedProjectId, collectionId }); await refreshTree(); }, onSaveEnvelopeInterface: async (request, collectionId) => { await invoke("save_envelope", { request, projectId: selectedProjectId, collectionId }); await refreshTree(); }, onSaveDebugCase: async (request, parent) => { await invoke("save_request", { request: toInvokeRequest(request), projectId: parent.projectId, collectionId: parent.collectionId }); await refreshTree(); }, onSaveEnvelopeDebugCase: async (request, parent) => { await invoke("save_envelope", { request, projectId: parent.projectId, collectionId: parent.collectionId }); await refreshTree(); }, onOpenInterface: async (id) => { const record = tree?.requests.find((request) => request.id === id); if (record) { setSelectedProjectId(record.projectId); setSelectedCollectionId(record.collectionId); setSelectedRequestId(id); } const stored = await invoke<StoredRequest | null>("get_request", { id }); if (stored) window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: stored.envelope })); }, interfaces: (tree?.requests ?? []).filter((request) => !request.envelope?.variables?.__protovoyCaseOf).map((request) => ({ id: request.id, name: request.name, projectId: request.projectId, collectionId: request.collectionId, method: request.method, protocolId: request.protocolId, target: request.target })), saveCollections: (tree?.collections ?? []).filter((collection) => collection.projectId === selectedProjectId), saveModules: tree?.modules ?? [], defaultSaveCollectionId: selectedCollectionId } }}
       connectionStatus={null}
       environment={{
-        onLoad: async () => invoke<{ variables: Record<string, string>; secretRefs?: string[] }>("get_environment", { id: "default-env" }),
-        onSave: async (variables, secretRefs) => { await invoke("save_environment", { environment: { id: "default-env", variables, secretRefs } }); },
+        onLoad: async () => invoke<{ variables: Record<string, string>; globalParameters?: GlobalParameter[]; secretRefs?: string[] }>("get_environment", { id: "default-env" }),
+        onSave: async (variables, secretRefs, globalParameters) => { await invoke("save_environment", { request: { variables, secretRefs, globalParameters } }); },
+        onListEnvironments: async () => invoke<EnvironmentResource[]>("list_environments", { projectId: null }),
+        onCreateEnvironment: async (environment) => invoke<EnvironmentResource>("create_environment", { request: { projectId: environment.projectId ?? "default-project", name: environment.name ?? "未命名环境", variables: environment.variables ?? {}, globalParameters: [], secretRefs: environment.secretRefs ?? [] } }),
+        onUpdateEnvironment: async (environment) => invoke<EnvironmentResource>("update_environment", { id: environment.id, request: { projectId: environment.projectId, name: environment.name, variables: environment.variables, globalParameters: [], secretRefs: environment.secretRefs } }),
+        onDeleteEnvironment: async (id) => { await invoke("delete_environment", { id }); },
         onPutSecret: async (name, value) => { await invoke("put_secret", { request: { name, value } }); },
+        onSecretExists: async (name) => invoke<boolean>("secret_exists", { name }),
+        onDeleteSecret: async (name) => { await invoke("delete_secret", { name }); },
       }}
       collaboration={{
         team: <TeamWorkbench onExportSnapshot={async () => { const snapshotTree = await invoke<WorkspaceTree>("get_workspace_tree"); return exportTeamSnapshot(snapshotTree, async (id) => (await invoke<StoredRequest | null>("get_request", { id }))?.envelope ?? null); }} onRestoreSnapshot={async (snapshot) => { await restoreTeamSnapshot(snapshot, { getTree: async () => invoke<WorkspaceTree>("get_workspace_tree"), createWorkspace: async (name) => invoke("create_workspace", { name, rootPath: null }), createProject: async (workspaceId, name) => invoke("create_project", { workspaceId, name }), createCollection: async (projectId, parentId, name) => invoke("create_collection", { projectId, parentId, name }), saveEnvelope: async (request, projectId, collectionId) => { await invoke("save_envelope", { request, projectId, collectionId }); } }); await refreshTree(); }} />,
@@ -329,6 +349,7 @@ export function App() {
       onDeleteWorkspace={async (id) => { await invoke("delete_workspace", { id }); await refreshTree(); }}
       onCreateProject={async (workspaceId, name) => { await invoke("create_project", { workspaceId, name }); await refreshTree(); }}
       onCreateModule={async (projectId, name) => { await invoke("create_module", { projectId, name }); await refreshTree(); }}
+      onRenameModule={async (id, name) => { await invoke("rename_module", { id, name }); await refreshTree(); }}
       onRenameProject={async (id, name) => { await invoke("rename_project", { id, name }); await refreshTree(); }}
       onDeleteProject={async (id) => { await invoke("delete_project", { id }); await refreshTree(); }}
       onCreateCollection={async (projectId, parentId, name, moduleId) => { await invoke("create_collection", { projectId, parentId, name, moduleId }); await refreshTree(); }}
@@ -344,6 +365,7 @@ export function App() {
     />}>
       <WorkbenchDeck saveCollections={tree?.collections ?? []} saveModules={tree?.modules ?? []} onCreateSaveCollection={async (projectId, parentId, name, moduleId) => { const created = await invoke<WorkspaceTree["collections"][number]>("create_collection", { projectId, parentId, name, moduleId }); await refreshTree(); return created; }} definitionClient={{ list: (projectId) => invoke("list_api_definitions", { projectId }), save: (input) => invoke("save_api_definition", { request: input }), binding: (requestId) => invoke("get_request_definition_binding", { requestId }), bind: (requestId, definitionId, operationRef) => invoke("bind_request_definition", { requestId, definitionId, operationRef }), unbind: (requestId) => invoke("unbind_request_definition", { requestId }) }} tabs={buildWorkbenchTabs()} projects={(tree?.projects ?? []).map((project) => { const requests = tree?.requests.filter((request) => request.projectId === project.id) ?? []; return { id: project.id, name: project.name, resourceCount: requests.length, protocols: Array.from(new Set(requests.map((request) => request.protocolId ?? request.method ?? "http"))) }; })} selectedProjectId={selectedProjectId} onSelectProject={(projectId) => { setSelectedProjectId(projectId); setSelectedCollectionId(tree?.collections.find((item) => item.projectId === projectId)?.id ?? ""); setSelectedRequestId(null); }} onCreateProject={async (name) => { const created = await invoke<WorkspaceTree["projects"][number]>("create_project", { workspaceId: tree?.workspaces[0]?.id ?? "default-workspace", name }); setSelectedProjectId(created.id); setSelectedCollectionId(""); await refreshTree(); }} onRenameProject={async (id, name) => { await invoke("rename_project", { id, name }); await refreshTree(); }} onCloneProject={cloneProject} onDeleteProject={async (id) => { await invoke("delete_project", { id }); if (selectedProjectId === id) { const fallback = tree?.projects.find((project) => project.id !== id); setSelectedProjectId(fallback?.id ?? ""); setSelectedCollectionId(fallback ? tree?.collections.find((item) => item.projectId === fallback.id)?.id ?? "" : ""); setSelectedRequestId(null); } await refreshTree(); }} saveTargetLabel={saveTargetLabel}>
       <HttpWorkbench
+        onLoadGlobalParameters={async () => (await invoke<EnvironmentResource>("get_environment", { id: "default-env" })).globalParameters ?? []}
         onSend={async (request, hooks) => {
           const version = await invoke<{
             desktopVersion: string;
@@ -506,7 +528,7 @@ export function App() {
         onStart={(bind, allowRemote) => agentJson<MockServerStatus>("/v1/mock-server/start", { method: "POST", body: JSON.stringify({ bind, allowRemote }) })}
         onStop={() => agentJson<MockServerStatus>("/v1/mock-server/stop", { method: "POST" })}
       />
-      <CollectionRunner collectionId={selectedCollectionId} onRun={(collectionId, failFast) => invoke<CollectionRunCase[]>("run_collection", { collectionId, failFast })} />
+      <CollectionRunner collectionId={selectedCollectionId} environmentScope={selectedProjectId} onRun={(collectionId, failFast, environmentId, runId) => invoke<CollectionRunCase[]>("run_collection", { collectionId, failFast, environmentId, runId })} onGetProgress={(runId) => invoke<CollectionRunProgress>("get_collection_run_progress", { runId })} onCancel={(runId) => invoke<void>("cancel_collection_run", { runId })} onListEnvironments={() => invoke<Array<{ id: string; name: string }>>("list_environments", { projectId: selectedProjectId })} />
       <GatewayWorkbench />
       <CaptureWorkbench onStatus={()=>invoke<CaptureStatus>("capture_status")} onStart={(bind)=>invoke<CaptureStatus>("start_capture",{request:{bind,allowRemote:false}})} onStop={()=>invoke<CaptureStatus>("stop_capture")} onList={()=>invoke<CapturedExchange[]>("capture_exchanges")} onClear={()=>invoke("clear_capture")} />
       <PluginCenter

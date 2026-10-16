@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { RequestEnvelope } from "@protovoy/request-model";
 import { Icon } from "./Icons";
 import type { HttpRunResult, HttpSendHooks } from "./HttpWorkbench";
+import { Button, Textarea, TextInput } from "./Components";
 
 export interface ProtocolHistoryWorkbenchProps {
   request: RequestEnvelope;
@@ -59,17 +60,17 @@ export function ProtocolHistoryWorkbench({ request, initialResult, historyStarte
   return <section className="protocol-history-workbench">
     <header className="protocol-history-commandbar">
       <span className="protocol-history-badge">{request.protocolId.toUpperCase()}</span>
-      <input aria-label="请求名称" value={name} onChange={(event) => setName(event.target.value)}/>
-      <button type="button" className="ui-button primary" disabled={busy || !target.trim() || Boolean(parsedPayload.error)} onClick={() => void send()}><Icon name="send"/>{busy ? "发送中…" : "发送"}</button>
-      <button type="button" className="ui-button secondary" disabled={busy || Boolean(parsedPayload.error)} onClick={() => { const next = currentRequest(); if (next) void onSave(next, result); }}>{saveActionLabel}</button>
+      <TextInput aria-label="请求名称" value={name} onChange={(event) => setName(event.target.value)}/>
+      <Button variant="primary" icon="send" loading={busy} disabled={!target.trim() || Boolean(parsedPayload.error)} onClick={() => void send()}>发送</Button>
+      <Button disabled={busy || Boolean(parsedPayload.error)} onClick={() => { const next = currentRequest(); if (next) void onSave(next, result); }}>{saveActionLabel}</Button>
     </header>
     <div className="http-history-sent-at">
       {interfaceName && onOpenInterface ? <button type="button" className="http-history-interface-link" aria-label={`打开接口 ${interfaceName}`} onClick={onOpenInterface}><Icon name="folder"/><span>{interfaceName}</span></button> : null}
       <span className="http-history-time"><Icon name="activity"/><span>历史发送时间</span><time dateTime={historyStartedAt}>{formatHistoryTime(historyStartedAt)}</time></span>
     </div>
     <div className="protocol-history-editor">
-      <label><span>请求目标</span><input aria-label="请求目标" value={target} onChange={(event) => setTarget(event.target.value)}/></label>
-      <label className="protocol-history-payload"><span>协议载荷 <small>RequestEnvelope.payload</small></span><textarea aria-label="协议载荷" spellCheck={false} value={payloadText} onChange={(event) => setPayloadText(event.target.value)}/></label>
+      <label><span>请求目标</span><TextInput aria-label="请求目标" value={target} onChange={(event) => setTarget(event.target.value)}/></label>
+      <label className="protocol-history-payload"><span>协议载荷 <small>RequestEnvelope.payload</small></span><Textarea aria-label="协议载荷" spellCheck={false} value={payloadText} onChange={(event) => setPayloadText(event.target.value)}/></label>
       {parsedPayload.error || error ? <div className="protocol-history-error" role="alert">{parsedPayload.error || error}</div> : null}
     </div>
     <section className="protocol-history-response">

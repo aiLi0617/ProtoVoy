@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ExecutionEvent, ResponseMeta } from "@protovoy/request-model";
 import { useWorkbenchHydration } from "./useWorkbenchHydration";
 import type { HttpRunResult, HttpSendHooks } from "./HttpWorkbench";
@@ -12,6 +13,8 @@ import { Icon } from "./Icons";
 import { MessageDetailActions, MessageInspector, MessageSummary, MessageToolbar } from "./MessageInspector";
 import { RovingTabList } from "./RovingTabList";
 import { useMessageDetailResize } from "./useMessageDetailResize";
+import { useInterfaceNameTarget } from "./InterfaceNameTarget";
+import { Button, TextInput } from "./Components";
 
 export interface GrpcWorkbenchRequest { name: string; target: string; service: string; method: string; messageBase64: string; messageJson?: string | null; descriptorSetBase64?: string | null; mode: "unary" | "server_streaming" | "client_streaming" | "bidi_streaming"; metadata: Array<[string, string]>; timeoutMs: number }
 export interface GrpcWorkbenchProps { onSend: (request: GrpcWorkbenchRequest, hooks?: HttpSendHooks) => Promise<HttpRunResult>; onCancel: (executionId: string) => Promise<void>; onSave?: (request: GrpcWorkbenchRequest) => Promise<void>; externalRequest?: GrpcWorkbenchRequest | null; onTitleChange?: (title: string) => void }
@@ -22,7 +25,9 @@ type GrpcResponseMessage = { id: string; index: number; time: string; preview: s
 function metadataRows(entries: Array<[string, string]>): HeaderRow[] { return [...entries.map(([key, value]) => createQueryRow(key, value)), createQueryRow()]; }
 
 export function GrpcWorkbench({ onSend, onCancel, onSave, externalRequest, onTitleChange }: GrpcWorkbenchProps) {
+  const nameTarget = useInterfaceNameTarget();
   const { t } = useI18n();
+  const [name, setName] = useState("package.Service/Method");
   const [target, setTarget] = useState("http://127.0.0.1:50051");
   const [service, setService] = useState("package.Service");
   const [method, setMethod] = useState("Method");
@@ -48,14 +53,14 @@ export function GrpcWorkbench({ onSend, onCancel, onSave, externalRequest, onTit
   const detailEditorRef = useRef<CodeEditorHandle | null>(null);
   const { stacked: responseDetailsStacked } = useMessageDetailResize("protovoy-grpc-message-list-ratio", Boolean(selectedMessageId), ".grpc-response .websocket-message-browser.has-detail");
 
-  function applyRequest(value: GrpcWorkbenchRequest) { setTarget(value.target); setService(value.service); setMethod(value.method); setMode(value.mode); const json = value.messageJson; setMessageMode(json != null ? "json" : "base64"); setMessage(json ?? value.messageBase64); setDescriptorSetBase64(value.descriptorSetBase64 ?? ""); setDescriptorName(value.descriptorSetBase64 ? "DescriptorSet" : ""); setMetadata(metadataRows(value.metadata)); setTimeoutMs(value.timeoutMs); }
+  function applyRequest(value: GrpcWorkbenchRequest) { setName(value.name ?? ""); setTarget(value.target); setService(value.service); setMethod(value.method); setMode(value.mode); const json = value.messageJson; setMessageMode(json != null ? "json" : "base64"); setMessage(json ?? value.messageBase64); setDescriptorSetBase64(value.descriptorSetBase64 ?? ""); setDescriptorName(value.descriptorSetBase64 ? "DescriptorSet" : ""); setMetadata(metadataRows(value.metadata)); setTimeoutMs(value.timeoutMs); }
   useEffect(() => { if (externalRequest) applyRequest(externalRequest); else { const draft = readWorkbenchDraft<GrpcWorkbenchRequest>("grpc"); if (draft) applyRequest(draft); } }, [externalRequest]);
   useWorkbenchHydration("grpc", (detail) => { const envelope = detail as { name: string; target: string; timeoutMs: number; payload?: Partial<GrpcWorkbenchRequest> & { type?: string } }; const payload = envelope.payload; if (payload?.type !== "grpc") return; applyRequest({ name: envelope.name, target: envelope.target, service: payload.service ?? "", method: payload.method ?? "", messageBase64: payload.messageBase64 ?? "", messageJson: payload.messageJson, descriptorSetBase64: payload.descriptorSetBase64, mode: payload.mode ?? "unary", metadata: payload.metadata ?? [], timeoutMs: envelope.timeoutMs }); });
 
-  useEffect(() => { onTitleChange?.(service.trim() && method.trim() ? `${service}/${method}` : "gRPC"); }, [method, onTitleChange, service]);
+  useEffect(() => { onTitleChange?.(name.trim() || "gRPC"); }, [name, onTitleChange]);
 
   async function loadDescriptor(file: File | null) { if (!file) return; const bytes = new Uint8Array(await file.arrayBuffer()); let binary = ""; for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)); setDescriptorSetBase64(btoa(binary)); setDescriptorName(file.name); }
-  const request = (): GrpcWorkbenchRequest => ({ name: `${service}/${method}`, target, service, method, messageBase64: messageMode === "base64" ? message : "", messageJson: messageMode === "json" ? message : null, descriptorSetBase64: descriptorSetBase64 || null, mode, metadata: metadata.filter((row) => row.enabled && row.key.trim()).map((row) => [row.key.trim(), row.value]), timeoutMs });
+  const request = (): GrpcWorkbenchRequest => ({ name: name.trim() || `${service}/${method}`, target, service, method, messageBase64: messageMode === "base64" ? message : "", messageJson: messageMode === "json" ? message : null, descriptorSetBase64: descriptorSetBase64 || null, mode, metadata: metadata.filter((row) => row.enabled && row.key.trim()).map((row) => [row.key.trim(), row.value]), timeoutMs });
   useAutosaveDraft("grpc", request);
   function handleResponseEvent(event: ExecutionEvent) {
     if (event.type === "response_meta") setResponseMeta(event);
@@ -91,8 +96,9 @@ export function GrpcWorkbench({ onSend, onCancel, onSave, externalRequest, onTit
 
   const status = <span className={`grpc-status${busy ? " is-running" : hasResponse ? " is-complete" : ""}`}>{busy ? "调用中" : hasResponse ? "已完成" : "未调用"}</span>;
   const tabs: Array<[RequestTab, string]> = [["message", "Message"], ["metadata", "Metadata"], ["settings", "设置"]];
-  return <div className="grpc-workbench-layout">
-    <div className="grpc-commandbar"><input aria-label="gRPC 服务地址" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="http://host:50051" /><button className="grpc-primary" disabled={busy || !target.trim() || !service.trim() || !method.trim()} onClick={() => void send()}><Icon name="send" />{t("workbench.invoke")}</button>{onSave && <button className="grpc-secondary" disabled={busy} onClick={() => void onSave(request())}><Icon name="archive" />{t("action.save")}</button>}{runningId && <button className="grpc-danger" onClick={() => void onCancel(runningId)}>{t("action.cancel")}</button>}</div>
+  const nameInput = <TextInput className="websocket-name" aria-label="接口名称" value={name} onChange={(event) => setName(event.target.value)} placeholder="接口名称" />;
+  return <>{nameTarget ? createPortal(nameInput, nameTarget) : null}<div className="grpc-workbench-layout">
+    <div className="grpc-commandbar">{nameTarget ? null : nameInput}<TextInput aria-label="gRPC 服务地址" value={target} onChange={(event) => setTarget(event.target.value)} placeholder="http://host:50051" /><Button variant="primary" icon="send" loading={busy} disabled={!target.trim() || !service.trim() || !method.trim()} onClick={() => void send()}>{t("workbench.invoke")}</Button>{onSave && <Button icon="archive" disabled={busy} onClick={() => void onSave(request())}>{t("action.save")}</Button>}{runningId && <Button variant="danger" onClick={() => void onCancel(runningId)}>{t("action.cancel")}</Button>}</div>
     <div className="grpc-workbench-split"><SplitPane id="grpc-workbench" direction="vertical" minPrimary={160} minSecondary={160} primaryLabel="gRPC 请求配置" secondaryLabel="响应检查器" secondaryActions={status} primary={<section className={`grpc-request-pane tab-${requestTab}`}>
       <div className="grpc-methodbar"><select aria-label="gRPC 调用模式" value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="unary">Unary</option><option value="server_streaming">Server Streaming</option><option value="client_streaming">Client Streaming</option><option value="bidi_streaming">Bidirectional Streaming</option></select><input aria-label="gRPC Service" value={service} onChange={(event) => setService(event.target.value)} placeholder="package.Service" /><span>/</span><input aria-label="gRPC Method" value={method} onChange={(event) => setMethod(event.target.value)} placeholder="Method" /></div>
       <RovingTabList className="grpc-request-tabs" ariaLabel="gRPC 请求配置">{tabs.map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={requestTab === id} tabIndex={requestTab === id ? 0 : -1} className={requestTab === id ? "is-active" : ""} onClick={() => setRequestTab(id)}>{label}</button>)}</RovingTabList>
@@ -108,5 +114,5 @@ export function GrpcWorkbench({ onSend, onCancel, onSave, externalRequest, onTit
         {responseTab === "request" && <div className="websocket-actual-request"><section><strong>调用地址</strong><code>{actualRequest.target}</code></section><section><strong>方法</strong><code>{actualRequest.service}/{actualRequest.method}</code></section><section><strong>调用模式</strong><code>{actualRequest.mode}</code></section><section><strong>请求 Metadata</strong><pre>{actualRequest.metadata.length ? actualRequest.metadata.map(([key, value]) => `${key}: ${value}`).join("\n") : "（空）"}</pre></section></div>}
       </div>
     </>}</section>} /></div>
-  </div>;
+  </div></>;
 }

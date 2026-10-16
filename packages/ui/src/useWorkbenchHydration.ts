@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { consumeHydrate } from "./openRequestPipeline";
 
 /**
@@ -13,7 +13,7 @@ export function useWorkbenchHydration(
   const handlerRef = useRef(onDetail);
   handlerRef.current = onDetail;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const deliver = (detail: unknown) => {
       if (detail == null) return;
       handlerRef.current(detail);

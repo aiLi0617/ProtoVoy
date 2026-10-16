@@ -38,8 +38,9 @@ use driver_sse::SseDriver;
 use driver_tcp_udp::{TcpDriver, UdpDriver};
 use driver_websocket::WebSocketDriver;
 use execution_engine::{
-    run_ai_assistant, sample_http_get, AiAssistRequest, AiAssistResponse, DriverDescriptor,
-    ExecutionEngine, VariableScope,
+    orchestrate_collection, run_ai_assistant, sample_http_get, AiAssistRequest, AiAssistResponse,
+    CancellationToken, CollectionCaseOutcome, CollectionRunCase, CollectionRunItem,
+    DriverDescriptor, ExecutionEngine, VariableScope,
 };
 use futures::stream::{self, Stream};
 use futures::{SinkExt, StreamExt};
@@ -81,6 +82,7 @@ struct AppState {
     secrets: Arc<SecretStore>,
     store: Arc<Mutex<LocalStore>>,
     executions: Arc<Mutex<HashMap<Uuid, ExecutionSlot>>>,
+    collection_runs: Arc<Mutex<HashMap<String, CollectionRunSlot>>>,
     mock_rules: Arc<Mutex<HashMap<Uuid, MockRuleState>>>,
     mock_rules_path: Arc<PathBuf>,
     mock_server: Arc<Mutex<MockServerProcess>>,
@@ -188,6 +190,23 @@ struct ExecutionSlot {
     events: mpsc::Receiver<ExecutionEvent>,
 }
 
+#[derive(Clone)]
+struct CollectionRunSlot {
+    cancellation: CancellationToken,
+    completed: usize,
+    total: usize,
+    state: &'static str,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CollectionRunProgress {
+    run_id: String,
+    completed: usize,
+    total: usize,
+    state: &'static str,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HealthResponse {
@@ -222,6 +241,16 @@ struct PutSecretBody {
     value: String,
 }
 
+#[derive(Deserialize)]
+struct SecretNameBody {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct SecretNameQuery {
+    name: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PutSecretResponse {
@@ -244,6 +273,8 @@ struct SaveEnvironmentBody {
     #[serde(default)]
     project_id: Option<String>,
     variables: HashMap<String, String>,
+    #[serde(default)]
+    global_parameters: Vec<core_domain::GlobalParameter>,
     #[serde(default)]
     secret_refs: Vec<String>,
 }
@@ -319,6 +350,15 @@ struct UpdateCollectionBody {
     name: String,
     parent_id: Option<String>,
     sort_order: i64,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct RunCollectionBody {
+    #[serde(default)]
+    fail_fast: bool,
+    environment_id: Option<String>,
+    run_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -497,6 +537,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         secrets: Arc::new(SecretStore::with_keychain()),
         store: Arc::new(Mutex::new(store)),
         executions: Arc::new(Mutex::new(HashMap::new())),
+        collection_runs: Arc::new(Mutex::new(HashMap::new())),
         mock_rules: Arc::new(Mutex::new(mock_rules)),
         mock_rules_path: Arc::new(mock_rules_path),
         mock_server: Arc::new(Mutex::new(MockServerProcess {
@@ -545,7 +586,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/executions", post(start_execution))
         .route("/v1/executions/{id}/events", get(execution_events))
         .route("/v1/executions/{id}/cancel", post(cancel_execution))
-        .route("/v1/secrets", put(put_secret))
+        .route("/v1/secrets", put(put_secret).delete(delete_secret))
+        .route("/v1/secrets/status", get(secret_exists))
         .route("/v1/ai/assist", post(ai_assist))
         .route("/v1/capture/status", get(capture_status))
         .route("/v1/capture/start", post(start_capture))
@@ -608,9 +650,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/v1/projects/{id}", patch(rename_project))
         .route("/v1/projects/{id}", delete(delete_project))
         .route("/v1/modules", post(create_module))
+        .route("/v1/modules/{id}", patch(rename_module))
         .route("/v1/collections", post(create_collection))
         .route("/v1/collections/{id}", patch(update_collection))
         .route("/v1/collections/{id}", delete(delete_collection))
+        .route("/v1/collections/{id}/runs", post(run_collection))
+        .route("/v1/collection-runs/{id}", get(collection_run_progress))
+        .route(
+            "/v1/collection-runs/{id}/cancel",
+            post(cancel_collection_run),
+        )
         .route("/v1/collections/{id}/tags", patch(update_collection_tags))
         .route(
             "/v1/mock-rules",
@@ -1380,6 +1429,47 @@ async fn capabilities(State(state): State<AppState>) -> Json<Vec<DriverDescripto
     Json(engine.list_drivers())
 }
 
+async fn load_environment_scope(
+    state: &AppState,
+    environment_id: &str,
+) -> Result<VariableScope, (StatusCode, String)> {
+    let (global, selected) = {
+        let store = state.store.lock().await;
+        let global = store
+            .get_environment("default-env")
+            .map_err(internal_store_error)?;
+        let selected = if environment_id == "default-env" {
+            None
+        } else {
+            store
+                .get_environment(environment_id)
+                .map_err(internal_store_error)?
+        };
+        (global, selected)
+    };
+    let mut scope = VariableScope::default();
+    if let Some(environment) = global {
+        scope.global = environment.variables;
+        scope.global_parameters = environment.global_parameters;
+        for name in environment.secret_refs {
+            if let Ok(value) = state.secrets.resolve(&name) {
+                scope.secrets.insert(name.clone(), value.clone());
+                scope.global.insert(name, value);
+            }
+        }
+    }
+    if let Some(environment) = selected {
+        scope.environment = environment.variables;
+        for name in environment.secret_refs {
+            if let Ok(value) = state.secrets.resolve(&name) {
+                scope.secrets.insert(name.clone(), value.clone());
+                scope.environment.insert(name, value);
+            }
+        }
+    }
+    Ok(scope)
+}
+
 async fn put_secret(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -1401,6 +1491,37 @@ async fn put_secret(
             SecretBackendKind::Keychain => "keychain",
         },
     }))
+}
+
+#[derive(Serialize)]
+struct SecretStatus {
+    exists: bool,
+}
+
+async fn secret_exists(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<SecretNameQuery>,
+) -> Result<Json<SecretStatus>, (StatusCode, String)> {
+    check_protocol_version(&headers)?;
+    state
+        .secrets
+        .exists(&query.name)
+        .map(|exists| Json(SecretStatus { exists }))
+        .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
+}
+
+async fn delete_secret(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<SecretNameBody>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    check_protocol_version(&headers)?;
+    state
+        .secrets
+        .delete(&body.name)
+        .map(|()| StatusCode::NO_CONTENT)
+        .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()))
 }
 
 async fn ai_assist(
@@ -1522,6 +1643,7 @@ async fn put_default_environment(
         .default_environment()
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     env.variables = body.variables;
+    env.global_parameters = body.global_parameters;
     env.secret_refs = body.secret_refs;
     env.updated_at = Utc::now();
     state
@@ -1559,6 +1681,7 @@ async fn create_environment(
         project_id: body.project_id.unwrap_or_else(|| "default-project".into()),
         name: body.name.unwrap_or_else(|| "New environment".into()),
         variables: body.variables,
+        global_parameters: body.global_parameters,
         secret_refs: body.secret_refs,
         updated_at: Utc::now(),
     };
@@ -1592,6 +1715,7 @@ async fn put_environment(
         env.project_id = project_id;
     }
     env.variables = body.variables;
+    env.global_parameters = body.global_parameters;
     env.secret_refs = body.secret_refs;
     env.updated_at = Utc::now();
     state
@@ -2322,6 +2446,22 @@ async fn create_module(
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
 }
 
+async fn rename_module(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<NamedBody>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    check_protocol_version(&headers)?;
+    state
+        .store
+        .lock()
+        .await
+        .rename_module(&id, &body.name)
+        .map(|_| StatusCode::NO_CONTENT)
+        .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
+}
+
 async fn create_workspace(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -2516,6 +2656,222 @@ async fn delete_collection(
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))
 }
 
+async fn run_collection(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<RunCollectionBody>,
+) -> Result<Json<Vec<CollectionRunCase>>, (StatusCode, String)> {
+    check_protocol_version(&headers)?;
+    let requests = state
+        .store
+        .lock()
+        .await
+        .list_collection_requests_for_run(&id)
+        .map_err(internal_store_error)?;
+    let mut items = Vec::with_capacity(requests.len());
+    for stored in requests {
+        let environment_id = body
+            .environment_id
+            .as_deref()
+            .or(stored.envelope.environment_ref.as_deref())
+            .unwrap_or("default-env");
+        let mut scope = load_environment_scope(&state, environment_id).await?;
+        if let Some(auth) = &stored.envelope.auth_ref {
+            if let Some(name) = auth.secret_ref.as_deref().filter(|name| !name.is_empty()) {
+                if let Ok(value) = state.secrets.resolve(name) {
+                    scope.secrets.insert(name.to_string(), value);
+                }
+            }
+        }
+        items.push(CollectionRunItem {
+            request_id: stored.id,
+            request: stored.envelope,
+            scope,
+        });
+    }
+
+    let run_id = body
+        .run_id
+        .clone()
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
+    let cancellation = CancellationToken::new();
+    {
+        let mut runs = state.collection_runs.lock().await;
+        if runs.contains_key(&run_id) {
+            return Err((StatusCode::CONFLICT, "collection run already exists".into()));
+        }
+        runs.insert(
+            run_id.clone(),
+            CollectionRunSlot {
+                cancellation: cancellation.clone(),
+                completed: 0,
+                total: items.len(),
+                state: "running",
+            },
+        );
+    }
+
+    let state_ref = &state;
+    let progress_runs = Arc::clone(&state.collection_runs);
+    let progress_run_id = run_id.clone();
+    let result = orchestrate_collection(items, body.fail_fast, cancellation, |request, scope| {
+        let progress_runs = Arc::clone(&progress_runs);
+        let progress_run_id = progress_run_id.clone();
+        async move {
+            let outcome = execute_collection_case(state_ref, request, scope).await;
+            if let Some(slot) = progress_runs.lock().await.get_mut(&progress_run_id) {
+                slot.completed += 1;
+            }
+            outcome
+        }
+    })
+    .await;
+    state.collection_runs.lock().await.remove(&run_id);
+    Ok(Json(result.cases))
+}
+
+async fn collection_run_progress(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<CollectionRunProgress>, (StatusCode, String)> {
+    check_protocol_version(&headers)?;
+    let runs = state.collection_runs.lock().await;
+    let slot = runs
+        .get(&id)
+        .ok_or((StatusCode::NOT_FOUND, "collection run not found".into()))?;
+    Ok(Json(CollectionRunProgress {
+        run_id: id,
+        completed: slot.completed,
+        total: slot.total,
+        state: slot.state,
+    }))
+}
+
+async fn cancel_collection_run(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    check_protocol_version(&headers)?;
+    let mut runs = state.collection_runs.lock().await;
+    let slot = runs
+        .get_mut(&id)
+        .ok_or((StatusCode::NOT_FOUND, "collection run not found".into()))?;
+    slot.state = "cancelling";
+    slot.cancellation.cancel();
+    Ok(StatusCode::ACCEPTED)
+}
+
+async fn execute_collection_case(
+    state: &AppState,
+    request: RequestEnvelope,
+    scope: VariableScope,
+) -> CollectionCaseOutcome {
+    let mut snapshot = request.clone();
+    if snapshot.auth_ref.is_some() {
+        if let ProtocolPayload::Http(payload) = &mut snapshot.payload {
+            payload
+                .headers
+                .retain(|(name, _)| !name.eq_ignore_ascii_case("Authorization"));
+        }
+    }
+    let result = state
+        .engine
+        .read()
+        .await
+        .execute_collect_with_scope(request, scope)
+        .await;
+    match result {
+        Ok((execution_id, summary, mut events)) => {
+            let failed_assertions = events
+                .iter()
+                .filter_map(|event| match event {
+                    ExecutionEvent::AssertionResult(result) if !result.passed => {
+                        Some(result.name.clone())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let extracted_variables = events
+                .iter()
+                .filter_map(|event| match event {
+                    ExecutionEvent::VariablesExtracted { variables } => Some(variables.clone()),
+                    _ => None,
+                })
+                .fold(HashMap::new(), |mut collected, variables| {
+                    collected.extend(variables);
+                    collected
+                });
+            let preview = events.iter().rev().find_map(|event| match event {
+                ExecutionEvent::ResponseChunk {
+                    preview: Some(preview),
+                    done: true,
+                    ..
+                } => Some(preview.clone()),
+                _ => None,
+            });
+            let response_content_type = events.iter().find_map(|event| match event {
+                ExecutionEvent::ResponseMeta(meta) => meta.content_type.clone(),
+                _ => None,
+            });
+            let mut response_bytes = Vec::new();
+            for event in &mut events {
+                if let ExecutionEvent::ResponseChunk {
+                    data_base64: Some(encoded),
+                    ..
+                } = event
+                {
+                    if let Ok(decoded) = BASE64.decode(encoded) {
+                        let remaining =
+                            MAX_PERSISTED_RESPONSE_BYTES.saturating_sub(response_bytes.len());
+                        response_bytes.extend_from_slice(&decoded[..decoded.len().min(remaining)]);
+                    }
+                }
+            }
+            let store = state.store.lock().await;
+            let response_blob_id = if response_bytes.is_empty() {
+                None
+            } else {
+                store
+                    .put_blob(&response_bytes, response_content_type.as_deref())
+                    .ok()
+                    .map(|blob| blob.id)
+            };
+            let record = ExecutionRecord {
+                id: execution_id.0.to_string(),
+                request_id: snapshot.id.0.to_string(),
+                protocol_id: summary.protocol_id.clone(),
+                state: state_name(summary.state).into(),
+                status: summary.status,
+                duration_ms: summary.duration_ms,
+                bytes_received: summary.bytes_received,
+                started_at: summary.started_at,
+                finished_at: summary.finished_at,
+                request_snapshot: Some(snapshot),
+                preview,
+                response_blob_id,
+            };
+            if let Err(error) = store.record_execution(&record) {
+                warn!(error = %error, "failed to persist collection execution history");
+            }
+            CollectionCaseOutcome {
+                passed: summary.state == ExecutionState::Completed && failed_assertions.is_empty(),
+                status: summary.status,
+                duration_ms: summary.duration_ms,
+                error: None,
+                failed_assertions,
+                extracted_variables,
+            }
+        }
+        Err(error) => CollectionCaseOutcome {
+            error: Some(error.to_string()),
+            ..CollectionCaseOutcome::default()
+        },
+    }
+}
+
 async fn load_latest_request(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -2553,19 +2909,7 @@ async fn start_execution(
         .unwrap_or_else(|| "default-env".into());
     request.environment_ref = Some(env_id.clone());
 
-    let mut scope = VariableScope::default();
-    {
-        let store = state.store.lock().await;
-        if let Ok(Some(env)) = store.get_environment(&env_id) {
-            scope.environment = env.variables;
-            for secret_name in env.secret_refs {
-                if let Ok(value) = state.secrets.resolve(&secret_name) {
-                    scope.secrets.insert(secret_name.clone(), value.clone());
-                    scope.environment.insert(secret_name, value);
-                }
-            }
-        }
-    }
+    let mut scope = load_environment_scope(&state, &env_id).await?;
     scope.request = request.variables.clone();
     if let Some(auth) = &request.auth_ref {
         if let Some(name) = auth.secret_ref.as_deref().filter(|s| !s.is_empty()) {
@@ -2833,5 +3177,18 @@ mod tests {
             HeaderValue::from_static("protovoy, protovoy-ticket.abc123"),
         );
         assert_eq!(tcp_session_ticket_from_headers(&headers), Some("abc123"));
+    }
+
+    #[test]
+    fn collection_run_body_supports_fail_fast_and_environment_override() {
+        let body: RunCollectionBody = serde_json::from_value(serde_json::json!({
+            "failFast": true,
+            "environmentId": "staging",
+            "runId": "run-1"
+        }))
+        .expect("collection run body");
+        assert!(body.fail_fast);
+        assert_eq!(body.environment_id.as_deref(), Some("staging"));
+        assert_eq!(body.run_id.as_deref(), Some("run-1"));
     }
 }

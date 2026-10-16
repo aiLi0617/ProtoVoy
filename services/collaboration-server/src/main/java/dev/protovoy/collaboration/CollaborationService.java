@@ -3,6 +3,8 @@ package dev.protovoy.collaboration;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -10,13 +12,39 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
+import java.security.SecureRandom;
 import java.time.*;
 import java.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 class CollaborationService {
+    private static final Logger LOG = LoggerFactory.getLogger(CollaborationService.class);
+    private static final SecureRandom RANDOM = new SecureRandom();
     private final UserRepository users; private final FederatedIdentityRepository identities; private final OrganizationRepository organizations; private final MembershipRepository memberships; private final SessionRepository sessions; private final WorkspaceRepository workspaces; private final ChangeRepository changes; private final AuditRepository audits; private final CommentRepository comments; private final PasswordEncoder passwords; private final ObjectMapper json; private final WorkspaceEventHub events; private final String bootstrapToken;
-    CollaborationService(UserRepository users, FederatedIdentityRepository identities, OrganizationRepository organizations, MembershipRepository memberships, SessionRepository sessions, WorkspaceRepository workspaces, ChangeRepository changes, AuditRepository audits, CommentRepository comments, PasswordEncoder passwords, ObjectMapper json, WorkspaceEventHub events, @Value("${protovoy.bootstrap-token}") String bootstrapToken) { this.users=users; this.identities=identities; this.organizations=organizations; this.memberships=memberships; this.sessions=sessions; this.workspaces=workspaces; this.changes=changes; this.audits=audits; this.comments=comments; this.passwords=passwords; this.json=json; this.events=events; this.bootstrapToken=bootstrapToken; }
+    private final boolean generatedBootstrapToken;
+    CollaborationService(UserRepository users, FederatedIdentityRepository identities, OrganizationRepository organizations, MembershipRepository memberships, SessionRepository sessions, WorkspaceRepository workspaces, ChangeRepository changes, AuditRepository audits, CommentRepository comments, PasswordEncoder passwords, ObjectMapper json, WorkspaceEventHub events, @Value("${protovoy.bootstrap-token:}") String configuredBootstrapToken) { this.users=users; this.identities=identities; this.organizations=organizations; this.memberships=memberships; this.sessions=sessions; this.workspaces=workspaces; this.changes=changes; this.audits=audits; this.comments=comments; this.passwords=passwords; this.json=json; this.events=events; this.generatedBootstrapToken=isPlaceholderBootstrapToken(configuredBootstrapToken); this.bootstrapToken=this.generatedBootstrapToken?generateBootstrapToken():configuredBootstrapToken.trim(); }
+
+    @EventListener(ApplicationReadyEvent.class)
+    void announceGeneratedBootstrapToken() {
+        if (generatedBootstrapToken && users.count() == 0) {
+            LOG.warn("ProtoVoy first-owner bootstrap token (shown on startup while the user database is empty): {}", bootstrapToken);
+        }
+    }
+
+    BootstrapStatus bootstrapStatus() { return new BootstrapStatus(users.count() == 0, true, generatedBootstrapToken); }
+
+    static boolean isPlaceholderBootstrapToken(String value) {
+        if (value == null || value.isBlank()) return true;
+        String normalized=value.trim().toLowerCase(Locale.ROOT);
+        return normalized.equals("change-me-before-production") || normalized.startsWith("replace-with-");
+    }
+
+    static String generateBootstrapToken() {
+        byte[] bytes=new byte[32]; RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
 
     @Transactional AuthResult bootstrap(String supplied, String email, String password, String displayName, String organizationName, String deviceName) {
         if (!Objects.equals(bootstrapToken, supplied) || users.count() > 0) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "bootstrap is unavailable");
@@ -66,6 +94,7 @@ class CollaborationService {
     private String normalizeEmail(String email){if(email==null||!email.contains("@"))throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"valid email required");return email.trim().toLowerCase(Locale.ROOT);}
     private void validatePassword(String password){if(password==null||password.length()<10)throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"password must contain at least 10 characters");}
     private ResponseStatusException unauthorized(){return new ResponseStatusException(HttpStatus.UNAUTHORIZED,"invalid credentials");}
+    record BootstrapStatus(boolean available, boolean tokenRequired, boolean tokenAutoGenerated) {}
     record AuthResult(String token,Instant expiresAt,UserView user,String organizationId,Role role){} record UserView(String id,String email,String displayName){} record OrganizationView(String id,String name,Role role){} record MemberView(String id,String email,String displayName,Role role){} record WorkspaceView(String workspaceId,long revision,JsonNode document,String updatedBy,Instant updatedAt){} record ChangeView(long revision,JsonNode patch,String actorId,Instant createdAt){} record AuditView(String id,String actorId,String action,String resourceType,String resourceId,JsonNode details,Instant createdAt){} record CommentView(String id,String workspaceId,String actorId,String actorName,String parentId,String body,Instant resolvedAt,String resolvedBy,Instant createdAt,Instant updatedAt){}
 }
 

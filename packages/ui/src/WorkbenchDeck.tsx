@@ -1,5 +1,5 @@
 import { Children, cloneElement, isValidElement, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { Icon, type IconName } from "./Icons";
+import { Icon, workbenchIconName, type IconName } from "./Icons";
 import { ModalFrame } from "./ModalFrame";
 import { useAppStore } from "./appStore";
 import { translateWorkbench, useI18n } from "./i18n";
@@ -65,11 +65,7 @@ export interface WorkbenchDeckProps {
   onDeleteHttpInterface?: (requestId: string) => Promise<void>;
 }
 export const WORKBENCH_LABELS: Record<string, string> = { http:"HTTP", graphql:"GraphQL", grpc:"gRPC", rpc:"SOAP / RPC", websocket:"WebSocket", sse:"SSE", tcp:"TCP", udp:"UDP", mqtt:"MQTT", amqp:"AMQP", kafka:"Kafka", redis:"Redis", sql:"SQL", mock:"Mock", runner:"Runner", gateway:"Gateway", capture:"Capture", plugins:"Plugins", ai:"AI" };
-export const WORKBENCH_ICONS: Record<string, IconName> = {
-  http: "globe", graphql: "code", grpc: "network", rpc: "code", websocket: "activity", sse: "activity", tcp: "network", udp: "network",
-  mqtt: "network", amqp: "network", kafka: "network", redis: "database", sql: "database",
-  mock: "archive", runner: "send", gateway: "globe", capture: "search", plugins: "command", ai: "bolt", __scripts: "code",
-};
+export const WORKBENCH_ICONS: Record<string, IconName> = workbenchIconName;
 export const DEFAULT_WORKBENCH_GROUPS: WorkbenchGroup[] = [
   { id:"api", label:"API", icon:"globe", workbenchIds:["http","grpc"] },
   { id:"realtime", label:"实时通信", icon:"activity", workbenchIds:["websocket","sse","tcp","udp"] },
@@ -434,16 +430,16 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
 
   const renderShortcut = (tab: WorkbenchTab) => (
     <button className="protocol-shortcut" key={tab.id} type="button" aria-label={translateWorkbench(tab.id, tab.label)} onClick={() => activate(tab.id)}>
-      <Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "bolt"}/><span>{translateWorkbench(tab.id, tab.label)}</span>
+      <Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "command"}/><span>{translateWorkbench(tab.id, tab.label)}</span>
     </button>
   );
   const renderTab = (tab: WorkbenchTab) => (
     <div className="protocol-item-wrap" key={tab.id}>
-      <button className="protocol-item" data-testid={`workbench-${tab.id}`} aria-current={tab.id === selected ? "page" : undefined} aria-label={translateWorkbench(tab.id, tab.label)} title={collapsed ? translateWorkbench(tab.id, tab.label) : undefined} onClick={() => activate(tab.id)}>
-        <span className="protocol-glyph" aria-hidden="true"><Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "bolt"} /></span>
+      <button type="button" className="protocol-item" data-testid={`workbench-${tab.id}`} aria-current={tab.id === selected ? "page" : undefined} aria-label={translateWorkbench(tab.id, tab.label)} title={collapsed ? translateWorkbench(tab.id, tab.label) : undefined} onClick={() => activate(tab.id)}>
+        <span className="protocol-glyph" aria-hidden="true"><Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "command"} /></span>
         <span className="protocol-label">{translateWorkbench(tab.id, tab.label)}</span>
       </button>
-      <button className={`favorite-button ${favorites.includes(tab.id) ? "is-favorite" : ""}`} aria-label={favorites.includes(tab.id) ? t("workbench.unfavorite", { name: tab.label }) : t("workbench.favorite", { name: tab.label })} onClick={() => toggleFavorite(tab.id)}><Icon name="star"/></button>
+      <button type="button" className={`favorite-button ${favorites.includes(tab.id) ? "is-favorite" : ""}`} aria-label={favorites.includes(tab.id) ? t("workbench.unfavorite", { name: tab.label }) : t("workbench.favorite", { name: tab.label })} onClick={() => toggleFavorite(tab.id)}><Icon name="star"/></button>
     </div>
   );
   const favoriteTabs = favorites.map((id) => tabMap.get(id)).filter(Boolean) as WorkbenchTab[];
@@ -528,7 +524,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
         </article>)}
         <button type="button" className="project-card project-card-create" onClick={openCreateProject}><span className="project-create-icon"><Icon name="plus"/></span><strong>创建新项目</strong><p>从空项目开始，或导入已有 API 定义</p></button>
       </div>
-      {projectDialogOpen ? <ModalFrame open={projectDialogOpen} onClose={() => !projectCreateBusy && setProjectDialogOpen(false)} closeOnBackdrop={!projectCreateBusy} className="project-create-dialog" ariaLabelledBy="project-create-title"><header><div><h2 id="project-create-title">新建项目</h2><p>项目用于隔离资源、环境和运行配置。</p></div><button type="button" className="ui-icon-button" aria-label="关闭" disabled={projectCreateBusy} onClick={() => setProjectDialogOpen(false)}><Icon name="close"/></button></header><label><span>项目名称</span><input autoFocus value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="请输入项目名称"/></label>{projectCreateError ? <p className="project-create-error" role="alert">{projectCreateError}</p> : null}<footer><button type="button" className="ui-button secondary" disabled={projectCreateBusy} onClick={() => setProjectDialogOpen(false)}>取消</button><button type="button" className="ui-button primary" disabled={projectCreateBusy || !projectName.trim()} onClick={async () => { if (!onCreateProject) return; setProjectCreateBusy(true); setProjectCreateError(""); try { await onCreateProject(projectName.trim()); setProjectDialogOpen(false); setProjectName(""); enterProjectEmptySession(); } catch (error) { setProjectCreateError(error instanceof Error ? error.message : String(error)); } finally { setProjectCreateBusy(false); } }}>{projectCreateBusy ? "创建中…" : "创建项目"}</button></footer></ModalFrame> : null}
+      {projectDialogOpen ? <ModalFrame open={projectDialogOpen} onClose={() => !projectCreateBusy && setProjectDialogOpen(false)} closeOnBackdrop={!projectCreateBusy && !projectName.trim()} closeOnEscape={!projectCreateBusy && !projectName.trim()} className="project-create-dialog" ariaLabelledBy="project-create-title"><header><div><h2 id="project-create-title">新建项目</h2><p>项目用于隔离资源、环境和运行配置。</p></div><button type="button" className="ui-icon-button" aria-label="关闭" disabled={projectCreateBusy} onClick={() => setProjectDialogOpen(false)}><Icon name="close"/></button></header><label><span>项目名称</span><input autoFocus value={projectName} onChange={(event) => setProjectName(event.target.value)} placeholder="请输入项目名称"/></label>{projectCreateError ? <p className="project-create-error" role="alert">{projectCreateError}</p> : null}<footer><button type="button" className="ui-button secondary" disabled={projectCreateBusy} onClick={() => setProjectDialogOpen(false)}>取消</button><button type="button" className="ui-button primary" disabled={projectCreateBusy || !projectName.trim()} onClick={async () => { if (!onCreateProject) return; setProjectCreateBusy(true); setProjectCreateError(""); try { await onCreateProject(projectName.trim()); setProjectDialogOpen(false); setProjectName(""); enterProjectEmptySession(); } catch (error) { setProjectCreateError(error instanceof Error ? error.message : String(error)); } finally { setProjectCreateBusy(false); } }}>{projectCreateBusy ? "创建中…" : "创建项目"}</button></footer></ModalFrame> : null}
       {projectAction ? <ModalFrame open={Boolean(projectAction)} onClose={() => !projectActionBusy && setProjectAction(null)} closeOnBackdrop={!projectActionBusy} className="project-create-dialog" ariaLabelledBy="project-action-title"><header><div><h2 id="project-action-title">{projectAction.kind === "rename" ? "修改项目名称" : projectAction.kind === "clone" ? "克隆项目" : "删除项目"}</h2><p>{projectAction.kind === "delete" ? `删除“${projectAction.originalName}”后，其中的集合和请求也会被删除。` : projectAction.kind === "clone" ? "将复制项目中的集合层级和全部请求。" : "修改后会同步更新项目入口和项目导航。"}</p></div><button type="button" className="ui-icon-button" aria-label="关闭" disabled={projectActionBusy} onClick={() => setProjectAction(null)}><Icon name="close"/></button></header>{projectAction.kind !== "delete" ? <label><span>项目名称</span><input autoFocus value={projectActionName} onChange={(event) => setProjectActionName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && projectActionName.trim()) void runProjectAction(); }}/></label> : null}{projectActionError ? <p className="project-create-error" role="alert">{projectActionError}</p> : null}<footer><button type="button" className="ui-button secondary" disabled={projectActionBusy} onClick={() => setProjectAction(null)}>取消</button><button type="button" className={`ui-button ${projectAction.kind === "delete" ? "danger" : "primary"}`} disabled={projectActionBusy || (projectAction.kind !== "delete" && !projectActionName.trim())} onClick={() => void runProjectAction()}>{projectActionBusy ? "处理中…" : projectAction.kind === "delete" ? "确认删除" : projectAction.kind === "clone" ? "创建副本" : "保存"}</button></footer></ModalFrame> : null}
     </section>;
   }
@@ -562,7 +558,17 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
       const cases = session.requestId ? interfaceCases.filter((item) => item.parentId === session.requestId && item.metadata?.__protovoyCaseType === "test") : [];
       const openCase = onLoadHttpInterface ? async (caseId: string) => {
         const detail = await onLoadHttpInterface(caseId);
-        if (detail) window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: { ...detail, protocolId: "http", metadata: { ...(detail.metadata ?? {}), __protovoyCaseInterfaceName: session.title } } }));
+        if (detail) {
+          const request = { ...detail, metadata: { ...(detail.metadata ?? {}), __protovoyCaseInterfaceName: session.title } };
+          window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: { ...request, protocolId: "http", request } }));
+        }
+      } : undefined;
+      const openInterface = session.caseParentId && onLoadHttpInterface ? async () => {
+        const detail = await onLoadHttpInterface(session.caseParentId!);
+        if (detail) {
+          window.dispatchEvent(new CustomEvent("protovoy-select-request", { detail: { requestId: session.caseParentId } }));
+          window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: { ...detail, protocolId: "http", request: detail } }));
+        }
       } : undefined;
       const saveCase = onLoadHttpInterface && onCreateHttpInterface ? async (caseId: string | null, input: { name: string; group: string; tags: string[]; request?: HttpWorkbenchRequest }) => {
         const source = input.request ?? await onLoadHttpInterface(caseId ?? session.requestId ?? ""); if (!source) return;
@@ -588,7 +594,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
         })));
       } : undefined;
       const deleteCase = onDeleteHttpInterface ?? (async (caseId: string) => { window.dispatchEvent(new CustomEvent("protovoy-delete-test-case", { detail: { caseId } })); });
-      return <InterfaceLifecycleShell workbenchId={session.workbenchId} sessionId={session.id} title={session.title} projectId={selectedProjectId} requestId={session.requestId ?? session.id} isSaved={Boolean(session.requestId)} definitionClient={definitionClient} caseMode={Boolean(session.caseParentId)} caseInterfaceName={session.caseInterfaceName} caseName={caseName} cases={cases} onOpenCase={openCase} onSaveCase={saveCase} onDeleteCase={deleteCase} onDuplicateCase={duplicateCase} onRunCases={runCases} onRunRequest={sendCase} onCopyCurl={copyCurl} onLoadCase={onLoadHttpInterface} mockClient={mockClient} onLoadMockSeed={() => loadInterfaceMockSeed({ workbenchId: session.workbenchId, sessionId: session.id, projectId: selectedProjectId, requestId: session.requestId ?? session.id, title: session.title })}>{content}</InterfaceLifecycleShell>;
+      return <InterfaceLifecycleShell workbenchId={session.workbenchId} sessionId={session.id} title={session.title} projectId={selectedProjectId} requestId={session.requestId ?? session.id} isSaved={Boolean(session.requestId)} definitionClient={definitionClient} caseMode={Boolean(session.caseParentId)} caseInterfaceName={session.caseInterfaceName} caseName={caseName} onOpenInterface={openInterface} cases={cases} onOpenCase={openCase} onSaveCase={saveCase} onDeleteCase={deleteCase} onDuplicateCase={duplicateCase} onRunCases={runCases} onRunRequest={sendCase} onCopyCurl={copyCurl} onLoadCase={onLoadHttpInterface} mockClient={mockClient} onLoadMockSeed={() => loadInterfaceMockSeed({ workbenchId: session.workbenchId, sessionId: session.id, projectId: selectedProjectId, requestId: session.requestId ?? session.id, title: session.title })}>{content}</InterfaceLifecycleShell>;
     };
     const sourceWithSaveIdentity = isValidElement(source) ? (() => {
       const element = source as ReactElement<{ onSave?: (request: Record<string, unknown>) => Promise<void>; onSaveAsCase?: (request: Record<string, unknown>) => Promise<void>; onUpdateInterface?: (request: Record<string, unknown>) => Promise<void> }>;
@@ -614,12 +620,12 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
       <aside className="protocol-nav" aria-label={t("workbench.navigation")}>
         <div className="protocol-nav-header">
           <span>{t("workbench.navigation")}</span>
-          <button className="ui-icon-button compact" onClick={toggleNavigation} aria-label={t("workbench.navigation.toggle")}><Icon name={collapsed ? "chevron" : "menu"}/></button>
+          <button type="button" className="ui-icon-button compact" onClick={toggleNavigation} aria-label={t("workbench.navigation.toggle")}><Icon name={collapsed ? "chevron" : "menu"}/></button>
         </div>
         <div className="workbench-create" ref={pickerRef}>
           <button type="button" className="workbench-create-button" aria-haspopup="menu" aria-expanded={pickerOpen} onClick={() => setPickerOpen((value) => !value)} title="新建工作台"><Icon name="plus"/><span>新建</span></button>
           {pickerOpen ? <div className="workbench-type-picker" role="menu" aria-label="选择工作台类型">
-            {DEFAULT_WORKBENCH_GROUPS.map((group) => { const groupTabs = group.workbenchIds.map((id) => tabMap.get(id)).filter(Boolean) as WorkbenchTab[]; return groupTabs.length ? <section key={group.id}><div className="workbench-picker-group"><Icon name={group.icon}/><span>{group.label}</span></div>{groupTabs.map((tab) => <button key={tab.id} type="button" role="menuitem" onClick={() => createWorkbench(tab.id)}><Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "bolt"}/><span>{translateWorkbench(tab.id, tab.label)}</span></button>)}</section> : null; })}
+            {DEFAULT_WORKBENCH_GROUPS.map((group) => { const groupTabs = group.workbenchIds.map((id) => tabMap.get(id)).filter(Boolean) as WorkbenchTab[]; return groupTabs.length ? <section key={group.id}><div className="workbench-picker-group"><Icon name={group.icon}/><span>{group.label}</span></div>{groupTabs.map((tab) => <button key={tab.id} type="button" role="menuitem" onClick={() => createWorkbench(tab.id)}><Icon name={tab.icon ?? WORKBENCH_ICONS[tab.id] ?? "command"}/><span>{translateWorkbench(tab.id, tab.label)}</span></button>)}</section> : null; })}
           </div> : null}
         </div>
         {selectedTab ? <div className="protocol-list protocol-current"><div className="protocol-group-title"><span>当前工作台</span></div>{renderTab(selectedTab)}</div> : selected === "__scripts" ? <div className="protocol-list protocol-current"><div className="protocol-group-title"><span>当前工作台</span></div><div className="protocol-item-wrap"><button type="button" className="protocol-item" aria-current="page" aria-label="脚本库" onClick={openScriptLibrary}><span className="protocol-glyph" aria-hidden="true"><Icon name="code" /></span><span className="protocol-label">脚本库</span></button></div></div> : null}
@@ -629,7 +635,7 @@ export function WorkbenchDeck({ tabs, children, saveTargetLabel, projects = [], 
       <CurlImportDialog open={curlImportOpen} onClose={() => setCurlImportOpen(false)} onCreate={createCurlRequest}/>
       <div className="workbench-content" data-workbench-label={selectedTab ? translateWorkbench(selectedTab.id, selectedTab.label) : selected === "__scripts" ? "脚本库" : ""}>
         {selected !== "__new" ? <ClosableTabStrip items={sessions.map((session) => ({ id: session.id, title: session.title, icon: session.icon ?? WORKBENCH_ICONS[session.workbenchId] ?? "plus" }))} activeId={activeSessionId} ariaLabel="已打开的工作台" menuLabel="页签列表与操作" menuMode="hover" menuAlign="auto" showItemsInMenu onActivate={(id) => { const session = sessions.find((item) => item.id === id); if (session) activateSession(session); }} onClose={closeSession} onCloseAll={closeAllSessions} onCloseOthers={closeOtherSessions} onCreate={createNewPage}>{sessions.length ? <div className="workbench-context-actions" aria-label="当前工作台选项">{sessions.map((session) => <div id={`workbench-context-${session.id}`} key={session.id} hidden={session.id !== activeSessionId}/>)}</div> : null}</ClosableTabStrip> : null}
-        <div className="workbench-session-stack">{sessions.length ? sessions.map((session) => <div key={session.id} role="tabpanel" aria-label={session.title} hidden={session.id !== activeSessionId} className="workbench-panel">{renderSession(session)}</div>) : <div className="workbench-panel workbench-empty-session">{renderProjectHomePage("empty")}</div>}</div>
+        <div className="workbench-session-stack">{sessions.length ? sessions.map((session) => <div key={session.id} role="tabpanel" aria-label={session.title} data-workbench-id={session.workbenchId} hidden={session.id !== activeSessionId} className="workbench-panel">{renderSession(session)}</div>) : <div className="workbench-panel workbench-empty-session">{renderProjectHomePage("empty")}</div>}</div>
         {items.slice(tabs.length)}
       </div>
     </div>

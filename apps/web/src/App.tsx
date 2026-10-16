@@ -4,6 +4,7 @@ import {
   cancelViaAgent,
   createCollectionViaAgent,
   createModuleViaAgent,
+  renameModuleViaAgent,
   createProjectViaAgent,
   createWorkspaceViaAgent,
   renameWorkspaceViaAgent,
@@ -13,9 +14,7 @@ import {
   deleteCollectionViaAgent,
   deleteProjectViaAgent,
   deleteRequestViaAgent,
-  executeViaAgent,
   executeEnvelopeViaAgent,
-  getEnvironmentViaAgent,
   getHistoryItemViaAgent,
   listHistoryViaAgent,
   getWorkspaceTreeViaAgent,
@@ -25,9 +24,7 @@ import {
   renameCollectionViaAgent,
   updateCollectionTagsViaAgent,
   renameProjectViaAgent,
-  runCollectionViaAgent,
   putSecretViaAgent,
-  saveEnvironmentViaAgent,
   saveRequestViaAgent,
   saveEnvelopeViaAgent,
   agentBaseUrl,
@@ -40,6 +37,7 @@ import {
   stopMockServerViaAgent,
   listPluginsViaAgent,
   installPluginViaAgent,
+  toEnvelope,
   enablePluginViaAgent,
   deletePluginViaAgent,
   invokePluginViaAgent,
@@ -54,11 +52,18 @@ import {
   clearCapturesViaAgent,
   tcpSessionConnectionViaAgent,
 } from "./agentClient";
+import { listCollectionEnvironments } from "./collectionRunApi";
+import { cancelCollectionRun, getCollectionRunProgress, runCollectionWithLifecycle } from "./collectionRunLifecycleApi";
 import { useEffect, useRef, useState } from "react";
 import { describeWorkspaceBootstrapError, getWorkspaceTreeAbortable } from "./workspaceTreeClient";
+import { deleteSecret, getEnvironmentConfig, saveEnvironmentConfig, secretExists } from "./environmentClient";
 
 
 function requestIdentity(request: unknown): string { return (request as { id?: string }).id ?? crypto.randomUUID(); }
+
+function httpEnvelopeWithSelectedEnvironment(request: Parameters<typeof toEnvelope>[0]) {
+  return { ...toEnvelope(request), environmentRef: request.environmentRef ?? "default-env" };
+}
 
 export function App() {
   const initialRoute = new URLSearchParams(window.location.hash.replace(/^#/, ""));
@@ -76,6 +81,18 @@ export function App() {
     window.addEventListener("protovoy-new-workbench", reset);
     return () => window.removeEventListener("protovoy-new-workbench", reset);
   }, []);
+  useEffect(() => {
+    const selectRequest = (event: Event) => {
+      const requestId = (event as CustomEvent<{ requestId?: string }>).detail?.requestId;
+      const request = requestId ? tree?.requests.find((item) => item.id === requestId) : undefined;
+      if (!request) return;
+      setSelectedProjectId(request.projectId);
+      setSelectedCollectionId(request.collectionId);
+      setSelectedRequestId(request.id);
+    };
+    window.addEventListener("protovoy-select-request", selectRequest);
+    return () => window.removeEventListener("protovoy-select-request", selectRequest);
+  }, [tree]);
 
   async function refreshTree() {
     const sequence = ++refreshSequence.current;
@@ -142,11 +159,13 @@ export function App() {
     <AppShell
       channelLabel="Web → Local Agent"
       projectContext={{ projects: tree?.projects ?? [], selectedProjectId, onSelectProject: (projectId) => { setSelectedProjectId(projectId); setSelectedCollectionId(tree?.collections.find((item) => item.projectId === projectId)?.id ?? ""); setSelectedRequestId(null); }, onCloneProject: cloneProject }}
-      requestHistory={{ onList: listHistoryViaAgent, onReplay: getHistoryItemViaAgent, requestEditor: { onSend: executeViaAgent, onSendEnvelope: executeEnvelopeViaAgent, onCancel: cancelViaAgent, onPutSecret: putSecretViaAgent, onListCookies: listCookiesViaAgent, onSetCookie: setCookieViaAgent, onDeleteCookie: deleteCookieViaAgent, onSaveInterface: async (request, collectionId) => { await saveRequestViaAgent(request, selectedProjectId, collectionId); await refreshTree(); }, onSaveEnvelopeInterface: async (request, collectionId) => { await saveEnvelopeViaAgent(request, selectedProjectId, collectionId); await refreshTree(); }, onSaveDebugCase: async (request, parent) => { await saveRequestViaAgent(request, parent.projectId, parent.collectionId); await refreshTree(); }, onSaveEnvelopeDebugCase: async (request, parent) => { await saveEnvelopeViaAgent(request, parent.projectId, parent.collectionId); await refreshTree(); }, onOpenInterface: async (id) => { const record = tree?.requests.find((request) => request.id === id); if (record) { setSelectedProjectId(record.projectId); setSelectedCollectionId(record.collectionId); setSelectedRequestId(id); } const envelope = await loadEnvelopeViaAgent(id); if (envelope) window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: envelope })); }, interfaces: (tree?.requests ?? []).filter((request) => !request.envelope?.variables?.__protovoyCaseOf).map((request) => ({ id: request.id, name: request.name, projectId: request.projectId, collectionId: request.collectionId, method: request.method, protocolId: request.protocolId, target: request.target })), saveCollections: (tree?.collections ?? []).filter((collection) => collection.projectId === selectedProjectId), saveModules: tree?.modules ?? [], defaultSaveCollectionId: selectedCollectionId } }}
+      requestHistory={{ onList: listHistoryViaAgent, onReplay: getHistoryItemViaAgent, requestEditor: { onSend: (request, hooks) => executeEnvelopeViaAgent(httpEnvelopeWithSelectedEnvironment(request), hooks), onSendEnvelope: executeEnvelopeViaAgent, onCancel: cancelViaAgent, onPutSecret: putSecretViaAgent, onListCookies: listCookiesViaAgent, onSetCookie: setCookieViaAgent, onDeleteCookie: deleteCookieViaAgent, onSaveInterface: async (request, collectionId) => { await saveEnvelopeViaAgent(httpEnvelopeWithSelectedEnvironment(request), selectedProjectId, collectionId); await refreshTree(); }, onSaveEnvelopeInterface: async (request, collectionId) => { await saveEnvelopeViaAgent(request, selectedProjectId, collectionId); await refreshTree(); }, onSaveDebugCase: async (request, parent) => { await saveEnvelopeViaAgent(httpEnvelopeWithSelectedEnvironment(request), parent.projectId, parent.collectionId); await refreshTree(); }, onSaveEnvelopeDebugCase: async (request, parent) => { await saveEnvelopeViaAgent(request, parent.projectId, parent.collectionId); await refreshTree(); }, onOpenInterface: async (id) => { const record = tree?.requests.find((request) => request.id === id); if (record) { setSelectedProjectId(record.projectId); setSelectedCollectionId(record.collectionId); setSelectedRequestId(id); } const envelope = await loadEnvelopeViaAgent(id); if (envelope) window.dispatchEvent(new CustomEvent("protovoy-open-request", { detail: envelope })); }, interfaces: (tree?.requests ?? []).filter((request) => !request.envelope?.variables?.__protovoyCaseOf).map((request) => ({ id: request.id, name: request.name, projectId: request.projectId, collectionId: request.collectionId, method: request.method, protocolId: request.protocolId, target: request.target })), saveCollections: (tree?.collections ?? []).filter((collection) => collection.projectId === selectedProjectId), saveModules: tree?.modules ?? [], defaultSaveCollectionId: selectedCollectionId } }}
       connectionStatus={treeLoading ? { label: "正在连接 Local Agent", tone: "warn" } : treeError ? { label: "Local Agent 连接异常", tone: "off" } : { label: "Local Agent 已连接", tone: "ok" }}
       environment={{
-        onLoad: getEnvironmentViaAgent,
-        onSave: async (variables, secretRefs) => { await saveEnvironmentViaAgent(variables, secretRefs); },
+        onLoad: getEnvironmentConfig,
+        onSave: saveEnvironmentConfig,
+        onSecretExists: secretExists,
+        onDeleteSecret: deleteSecret,
         onPutSecret: putSecretViaAgent,
       }}
       collaboration={{
@@ -164,6 +183,7 @@ export function App() {
       onDeleteWorkspace={async (id) => { await deleteWorkspaceViaAgent(id); await refreshTree(); }}
       onCreateProject={async (workspaceId, name) => { await createProjectViaAgent(workspaceId, name); await refreshTree(); }}
       onCreateModule={async (projectId, name) => { await createModuleViaAgent(projectId, name); await refreshTree(); }}
+      onRenameModule={async (id, name) => { await renameModuleViaAgent(id, name); await refreshTree(); }}
       onRenameProject={async (id, name) => { await renameProjectViaAgent(id, name); await refreshTree(); }}
       onDeleteProject={async (id) => { await deleteProjectViaAgent(id); await refreshTree(); }}
       onCreateCollection={async (projectId, parentId, name, moduleId) => { await createCollectionViaAgent(projectId, parentId, name, moduleId); await refreshTree(); }}
@@ -180,15 +200,16 @@ export function App() {
       onDuplicateRequest={async (request) => { const envelope = await loadEnvelopeViaAgent(request.id); if (!envelope) return; await saveEnvelopeViaAgent({ ...envelope, id: crypto.randomUUID(), name: `${envelope.name} 副本`, createdAt: new Date().toISOString() }, request.projectId, request.collectionId); await refreshTree(); }}
       onCopyRequestAsCurl={async (request) => { const saved = await loadRequestViaAgent(request.id); const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`; if (!saved) return `curl --location --request ${request.method ?? "GET"} ${quote(request.target)}`; return [`curl --location --request ${saved.method} ${quote(saved.url)}`, ...saved.headers.map(([key, value]) => `  --header ${quote(`${key}: ${value}`)}`), ...(saved.body ? [`  --data-raw ${quote(saved.body)}`] : [])].join(" \\\n"); }}
     />}>
-      <WorkbenchDeck saveCollections={tree?.collections ?? []} saveModules={tree?.modules ?? []} onCreateSaveCollection={async (projectId, parentId, name, moduleId) => { const created = await createCollectionViaAgent(projectId, parentId, name, moduleId); await refreshTree(); return created; }} interfaceCases={(tree?.requests ?? []).filter((request) => request.envelope?.variables?.__protovoyCaseOf).map((request) => ({ id: request.id, parentId: request.envelope!.variables!.__protovoyCaseOf, name: request.name, method: request.method, target: request.target, metadata: request.envelope?.metadata }))} onLoadHttpInterface={loadRequestViaAgent} onCreateHttpInterface={async (request, projectId, collectionId) => { await saveRequestViaAgent(request, projectId || selectedProjectId, collectionId || selectedCollectionId); await refreshTree(); }} tabs={buildWorkbenchTabs()} projects={(tree?.projects ?? []).map((project) => { const requests = tree?.requests.filter((request) => request.projectId === project.id) ?? []; return { id: project.id, name: project.name, resourceCount: requests.length, protocols: Array.from(new Set(requests.map((request) => request.protocolId ?? request.method ?? "http"))) }; })} selectedProjectId={selectedProjectId} onSelectProject={(projectId) => { setSelectedProjectId(projectId); setSelectedCollectionId(tree?.collections.find((item) => item.projectId === projectId)?.id ?? ""); setSelectedRequestId(null); }} onCreateProject={async (name) => { const created = await createProjectViaAgent(tree?.workspaces[0]?.id ?? "default-workspace", name); setSelectedProjectId(created.id); setSelectedCollectionId(""); await refreshTree(); }} onRenameProject={async (id, name) => { await renameProjectViaAgent(id, name); await refreshTree(); }} onCloneProject={cloneProject} onDeleteProject={async (id) => { await deleteProjectViaAgent(id); if (selectedProjectId === id) { const fallback = tree?.projects.find((project) => project.id !== id); setSelectedProjectId(fallback?.id ?? ""); setSelectedCollectionId(fallback ? tree?.collections.find((item) => item.projectId === fallback.id)?.id ?? "" : ""); setSelectedRequestId(null); } await refreshTree(); }} onOpenProjectInNewWindow={(projectId) => { const params = new URLSearchParams(); params.set("project", projectId); params.set("collection", tree?.collections.find((item) => item.projectId === projectId)?.id ?? ""); params.set("view", "resources"); window.open(`${window.location.pathname}${window.location.search}#${params}`, "_blank", "noopener,noreferrer"); }} saveTargetLabel={saveTargetLabel}>
+      <WorkbenchDeck saveCollections={tree?.collections ?? []} saveModules={tree?.modules ?? []} onCreateSaveCollection={async (projectId, parentId, name, moduleId) => { const created = await createCollectionViaAgent(projectId, parentId, name, moduleId); await refreshTree(); return created; }} interfaceCases={(tree?.requests ?? []).filter((request) => request.envelope?.variables?.__protovoyCaseOf).map((request) => ({ id: request.id, parentId: request.envelope!.variables!.__protovoyCaseOf, name: request.name, method: request.method, target: request.target, metadata: request.envelope?.metadata }))} onLoadHttpInterface={loadRequestViaAgent} onCreateHttpInterface={async (request, projectId, collectionId) => { await saveEnvelopeViaAgent(httpEnvelopeWithSelectedEnvironment(request), projectId || selectedProjectId, collectionId || selectedCollectionId); await refreshTree(); }} tabs={buildWorkbenchTabs()} projects={(tree?.projects ?? []).map((project) => { const requests = tree?.requests.filter((request) => request.projectId === project.id) ?? []; return { id: project.id, name: project.name, resourceCount: requests.length, protocols: Array.from(new Set(requests.map((request) => request.protocolId ?? request.method ?? "http"))) }; })} selectedProjectId={selectedProjectId} onSelectProject={(projectId) => { setSelectedProjectId(projectId); setSelectedCollectionId(tree?.collections.find((item) => item.projectId === projectId)?.id ?? ""); setSelectedRequestId(null); }} onCreateProject={async (name) => { const created = await createProjectViaAgent(tree?.workspaces[0]?.id ?? "default-workspace", name); setSelectedProjectId(created.id); setSelectedCollectionId(""); await refreshTree(); }} onRenameProject={async (id, name) => { await renameProjectViaAgent(id, name); await refreshTree(); }} onCloneProject={cloneProject} onDeleteProject={async (id) => { await deleteProjectViaAgent(id); if (selectedProjectId === id) { const fallback = tree?.projects.find((project) => project.id !== id); setSelectedProjectId(fallback?.id ?? ""); setSelectedCollectionId(fallback ? tree?.collections.find((item) => item.projectId === fallback.id)?.id ?? "" : ""); setSelectedRequestId(null); } await refreshTree(); }} onOpenProjectInNewWindow={(projectId) => { const params = new URLSearchParams(); params.set("project", projectId); params.set("collection", tree?.collections.find((item) => item.projectId === projectId)?.id ?? ""); params.set("view", "resources"); window.open(`${window.location.pathname}${window.location.search}#${params}`, "_blank", "noopener,noreferrer"); }} saveTargetLabel={saveTargetLabel}>
       <HttpWorkbench
-        onSend={executeViaAgent}
+        onSend={(request, hooks) => executeEnvelopeViaAgent(httpEnvelopeWithSelectedEnvironment(request), hooks)}
+        onLoadGlobalParameters={async () => (await getEnvironmentConfig()).globalParameters ?? []}
         onCancel={cancelViaAgent}
         onPutSecret={putSecretViaAgent}
         onListCookies={listCookiesViaAgent}
         onSetCookie={setCookieViaAgent}
         onDeleteCookie={deleteCookieViaAgent}
-        onSave={async (request) => { await saveRequestViaAgent(request, selectedProjectId, selectedCollectionId); await refreshTree(); }}
+        onSave={async (request) => { await saveEnvelopeViaAgent(httpEnvelopeWithSelectedEnvironment(request), selectedProjectId, selectedCollectionId); await refreshTree(); }}
         onListHistory={listHistoryViaAgent}
         onReplayHistory={getHistoryItemViaAgent}
       />
@@ -203,7 +224,7 @@ export function App() {
       <KafkaWorkbench onSend={(request,hooks)=>executeEnvelopeViaAgent(kafkaRequestEnvelope(request),hooks)} onSave={async(request)=>{await saveEnvelopeViaAgent(kafkaRequestEnvelope(request),selectedProjectId,selectedCollectionId);await refreshTree();}} onCancel={cancelViaAgent} />
       <SqlWorkbench onSend={(request,hooks)=>executeEnvelopeViaAgent(sqlRequestEnvelope(request),hooks)} onSave={async(request)=>{await saveEnvelopeViaAgent(sqlRequestEnvelope(request),selectedProjectId,selectedCollectionId);await refreshTree();}} onCancel={cancelViaAgent} />
       <MockWorkbench baseUrl={agentBaseUrl} projectKey={selectedProjectId} serviceKey={selectedMockServiceKey} onList={listMockRulesViaAgent} onCreate={createMockRuleViaAgent} onUpdate={updateMockRuleViaAgent} onDelete={deleteMockRuleViaAgent} onStatus={getMockServerStatusViaAgent} onStart={startMockServerViaAgent} onStop={stopMockServerViaAgent} />
-      <CollectionRunner collectionId={selectedCollectionId} onRun={runCollectionViaAgent} />
+      <CollectionRunner collectionId={selectedCollectionId} environmentScope={selectedProjectId} onRun={runCollectionWithLifecycle} onGetProgress={getCollectionRunProgress} onCancel={cancelCollectionRun} onListEnvironments={() => listCollectionEnvironments(selectedProjectId)} />
       <GatewayWorkbench />
       <CaptureWorkbench onStatus={captureStatusViaAgent} onStart={startCaptureViaAgent} onStop={stopCaptureViaAgent} onList={listCapturesViaAgent} onClear={clearCapturesViaAgent} />
       <PluginCenter onList={listPluginsViaAgent} onInstall={installPluginViaAgent} onEnable={enablePluginViaAgent} onDelete={deletePluginViaAgent} onInvoke={invokePluginViaAgent} />

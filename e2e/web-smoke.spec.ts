@@ -4,7 +4,9 @@ const workbenchIds = ["http", "grpc", "websocket", "sse", "tcp", "udp", "mqtt", 
 
 async function expectActiveWorkbench(page: Page, id: string) {
   await expect(page.getByTestId(`workbench-${id}`).first()).toHaveAttribute("aria-current", "page");
-  const frame = page.locator(".workbench-panel:not([hidden]) .workbench-frame");
+  const activePanel = page.locator(`.workbench-panel[data-workbench-id="${id}"]:not([hidden])`);
+  await expect(activePanel).toBeVisible();
+  const frame = activePanel.locator(".workbench-frame");
   await expect(frame).toBeVisible();
   await expect(frame.locator("h1")).toHaveCount(1);
 }
@@ -14,7 +16,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/#workbench=http");
 });
 
-test("starts with zero tabs and the project overview", async ({ page }) => {
+test("starts with zero tabs and the project overview", { tag: "@app-shell" }, async ({ page }) => {
   await page.goto("/");
   await expect(page.locator(".workbench-tabs")).toHaveCount(0);
   await expect(page.locator(".workbench-tab")).toHaveCount(0);
@@ -24,7 +26,7 @@ test("starts with zero tabs and the project overview", async ({ page }) => {
   await expect(page.getByRole("button", { name: "新建项目" })).toBeVisible();
 });
 
-test("applies saved appearance before the app renders", async ({ page }) => {
+test("applies saved appearance before the app renders", { tag: "@app-shell" }, async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("protovoy:ui-state", JSON.stringify({ state: { themeMode: "light" }, version: 5 }));
     localStorage.setItem("protovoy:locale", "en-US");
@@ -40,7 +42,7 @@ test("applies saved appearance before the app renders", async ({ page }) => {
   expect(await page.evaluate(() => (window as Window & { __themeTransitions?: string[] }).__themeTransitions)).not.toContain("dark");
 });
 
-test("turns Agent bootstrap failures into actionable guidance", async ({ page }) => {
+test("turns Agent bootstrap failures into actionable guidance", { tag: "@app-shell" }, async ({ page }) => {
   const explorerToggle = page.locator(".explorer-edge-toggle");
   if (await explorerToggle.isVisible()) await explorerToggle.click();
   const alert = page.getByRole("alert").filter({ hasText: "无法加载工作区" });
@@ -49,13 +51,13 @@ test("turns Agent bootstrap failures into actionable guidance", async ({ page })
   await expect(alert.getByRole("button", { name: "检查 Local Agent 设置" })).toBeVisible();
 });
 
-test("opens collection automation from the project rail", async ({ page }) => {
+test("opens collection automation from the project rail", { tag: "@app-shell" }, async ({ page }) => {
   await page.getByRole("button", { name: "自动化测试" }).click();
   await expect(page.locator(".collection-runner")).toBeVisible();
   await expect(page).toHaveURL(/view=automation/);
   await expect(page).toHaveURL(/workbench=runner/);
 });
-test("opens the grouped protocol workspace without horizontal overflow", async ({ page }) => {
+test("opens the grouped protocol workspace without horizontal overflow", { tag: "@app-shell" }, async ({ page }) => {
   await expect(page).toHaveTitle("ProtoVoy");
   await expect(page.locator(".workbench-tabs")).toBeVisible();
   await expectActiveWorkbench(page, "http");
@@ -69,7 +71,7 @@ test("opens the grouped protocol workspace without horizontal overflow", async (
   await expect(separator).toHaveAttribute("aria-valuenow", String(initialRatio + 5));
 });
 
-test("tab overflow tools expose every tab and allow closing the final tab", async ({ page }) => {
+test("tab overflow tools expose every tab and allow closing the final tab", { tag: "@app-shell" }, async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 760 });
   const sparseGeometry = await page.locator(".workbench-tabs").evaluate((bar) => {
     const scroll = bar.querySelector(".workbench-tab-scroll")!.getBoundingClientRect();
@@ -143,7 +145,7 @@ test("tab overflow tools expose every tab and allow closing the final tab", asyn
   await expect(page.locator(".workbench-home")).toBeVisible();
 });
 
-test("gRPC response stays bottom-aligned and uses the HTTP split drag bounds", async ({ page }, testInfo) => {
+test("gRPC response stays bottom-aligned and uses the HTTP split drag bounds", { tag: "@protocol-workbenches" }, async ({ page }, testInfo) => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "grpc" })));
   await expectActiveWorkbench(page, "grpc");
 
@@ -177,7 +179,7 @@ test("gRPC response stays bottom-aligned and uses the HTTP split drag bounds", a
   expect(requestSize).toBeCloseTo(160, 0);
 });
 
-test("non-HTTP protocol response workbenches fill tall lifecycle panels", async ({ page }) => {
+test("non-HTTP protocol response workbenches fill tall lifecycle panels", { tag: "@protocol-workbenches" }, async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1200 });
   for (const id of ["grpc", "websocket", "sse", "tcp", "udp", "mqtt", "amqp", "kafka", "redis", "sql"]) {
     await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: workbenchId })), id);
@@ -194,7 +196,7 @@ test("non-HTTP protocol response workbenches fill tall lifecycle panels", async 
   }
 });
 
-test("switches workbenches and preserves URL and stored state", async ({ page }) => {
+test("switches workbenches and preserves URL and stored state", { tag: "@protocol-workbenches" }, async ({ page }) => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "redis" })));
   await expectActiveWorkbench(page, "redis");
   await expect(page).toHaveURL(/#workbench=redis/);
@@ -207,15 +209,46 @@ test("switches workbenches and preserves URL and stored state", async ({ page })
   await expectActiveWorkbench(page, "redis");
 });
 
-test("switches theme and keeps visible keyboard focus", async ({ page }) => {
+test("switches theme and keeps visible keyboard focus", { tag: "@settings" }, async ({ page }) => {
   await page.getByTestId("theme-toggle").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.keyboard.press("Control+K");
   await expect(page.locator(".command-palette")).toBeVisible();
   await expect(page.locator(".command-input-wrap input")).toBeFocused();
 });
+test("shows shortcuts for the current platform", { tag: "@app-shell" }, async ({ page }) => {
+  const modifier = await page.evaluate(() => /mac|iphone|ipad|ipod/i.test(navigator.platform) ? "⌘" : "Ctrl");
+  const commandTrigger = page.getByTestId("command-trigger");
+  await expect(commandTrigger.locator("kbd")).toHaveText(`${modifier} K`);
+  await expect(commandTrigger).toHaveAttribute("aria-label", new RegExp(`${modifier} K`));
+});
 
-test("keeps project settings separate from application settings", async ({ page }) => {
+test("uses one named lifecycle tablist", { tag: "@app-shell" }, async ({ page }) => {
+  await expect(page.getByRole("tablist", { name: "接口生命周期" })).toHaveCount(1);
+});
+
+test("moves project navigation below the workspace on narrow screens", { tag: "@app-shell" }, async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 });
+  const navigation = page.locator(".project-module-nav");
+  const main = page.locator("#protovoy-main");
+  await expect(navigation).toBeVisible();
+  const [navigationBox, mainBox] = await Promise.all([navigation.boundingBox(), main.boundingBox()]);
+  expect(navigationBox).not.toBeNull();
+  expect(mainBox).not.toBeNull();
+  expect(navigationBox!.y).toBeGreaterThanOrEqual(mainBox!.y + mainBox!.height - 1);
+  expect(mainBox!.width).toBeGreaterThanOrEqual(389);
+});
+
+test("keeps capture proxy instructions separated and copyable", { tag: "@protocol-workbenches" }, async ({ page }) => {
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-select-workbench", { detail: "capture" })));
+  const panel = page.locator(".capture-workbench:visible");
+  await expect(panel.getByText("在目标应用中配置", { exact: true })).toBeVisible();
+  await expect(panel.locator(".capture-proxy-instruction code")).toContainText("HTTP_PROXY=http://");
+  await expect(panel.getByRole("button", { name: "复制代理地址" })).toBeVisible();
+  await expect(panel.locator(".capture-control-actions .ui-status-badge")).toHaveText(/抓包中|已停止/);
+});
+
+test("keeps project settings separate from application settings", { tag: "@settings" }, async ({ page }) => {
   await page.evaluate(() => window.dispatchEvent(new CustomEvent("protovoy-open-project-settings")));
   const projectSettings = page.locator(".project-settings-view");
   await expect(projectSettings).toContainText("通用设置");
@@ -238,7 +271,7 @@ test("keeps project settings separate from application settings", async ({ page 
   await expect(applicationSettings).not.toContainText("环境与变量");
 });
 
-test("HTTP target URL has an accessible label and neutral empty state", async ({ page }) => {
+test("HTTP target URL has an accessible label and neutral empty state", { tag: "@http" }, async ({ page }) => {
   const input = page.locator("#http-target-url");
   await expect(input).toHaveAttribute("aria-label");
   await expect(input).toHaveAttribute("placeholder");
@@ -246,7 +279,32 @@ test("HTTP target URL has an accessible label and neutral empty state", async ({
   await expect(input).not.toHaveAttribute("aria-invalid", "true");
 });
 
-test("HTTP save action renders as one control with its dropdown arrow inside", async ({ page }) => {
+test("HTTP parameter entry row keeps the same height as populated rows", { tag: "@http" }, async ({ page }) => {
+  const panel = page.locator(".workbench-panel:not([hidden])");
+  await panel.getByLabel("Param 1 名称").fill("page");
+
+  const rows = panel.locator(".http-param-row");
+  await expect(rows).toHaveCount(2);
+  const heights = await rows.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().height));
+
+  expect(heights[1]).toBeCloseTo(heights[0], 5);
+
+  const entryRow = rows.nth(1);
+  const typeSelect = entryRow.locator(".http-param-type-cell select");
+  const requiredCell = entryRow.locator(".http-required-row");
+  const requiredButton = requiredCell.locator("button");
+  await entryRow.locator(".http-param-name-cell").hover();
+  await expect(typeSelect).toBeHidden();
+  await expect(requiredButton).toHaveCSS("opacity", "0");
+  await entryRow.locator(".http-param-type-cell").hover();
+  await expect(typeSelect).toBeVisible();
+  await expect(requiredButton).toHaveCSS("opacity", "1");
+  await requiredCell.hover();
+  await expect(typeSelect).toBeVisible();
+  await expect(requiredButton).toHaveCSS("opacity", "1");
+});
+
+test("HTTP save action renders as one control with its dropdown arrow inside", { tag: "@http" }, async ({ page }) => {
   const control = page.locator(".workbench-panel:not([hidden]) .http-save-split");
   const save = control.locator(".http-save-button");
   const menuTrigger = control.locator(".http-save-menu-trigger");
@@ -272,7 +330,7 @@ test("HTTP save action renders as one control with its dropdown arrow inside", a
   expect(geometry.children[1].borderRight).toBe("0px");
 });
 
-test("all protocol workbenches keep semantic frame and viewport bounds", async ({ page }) => {
+test("all protocol workbenches keep semantic frame and viewport bounds", { tag: "@protocol-workbenches" }, async ({ page }) => {
   for (const id of workbenchIds) {
     await page.goto(`/#workbench=${id}`);
     await expectActiveWorkbench(page, id);
@@ -281,7 +339,7 @@ test("all protocol workbenches keep semantic frame and viewport bounds", async (
   }
 });
 
-test("all protocol workbenches keep light theme bounds", async ({ page }) => {
+test("all protocol workbenches keep light theme bounds", { tag: "@protocol-workbenches" }, async ({ page }) => {
   await page.getByTestId("theme-toggle").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   for (const id of workbenchIds) {
@@ -292,18 +350,21 @@ test("all protocol workbenches keep light theme bounds", async ({ page }) => {
   }
 });
 
-test("HTTP workbench exposes busy state semantics", async ({ page }) => {
+test("HTTP workbench exposes busy state semantics", { tag: "@http" }, async ({ page }) => {
   const frame = page.locator(".workbench-panel:not([hidden]) .workbench-frame");
   await expect(frame).not.toHaveAttribute("aria-busy", "true");
   await expect(frame).toHaveAttribute("aria-labelledby", /workbench-title-http/);
 });
 
-test("broker and database workbenches keep save action compact and request content visible", async ({ page }) => {
+test("broker and database workbenches keep save action compact and request content visible", { tag: "@protocol-workbenches" }, async ({ page }) => {
   for (const id of ["mqtt", "amqp", "kafka", "redis", "sql"]) {
-    await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: workbenchId })), id);
+    await page.goto(`/?protocol=${id}#workbench=${id}`);
     await expectActiveWorkbench(page, id);
-    const frame = page.locator(".workbench-panel:not([hidden]) .workbench-frame");
-    const save = frame.getByRole("button", { name: "保存", exact: true });
+    const activePanel = page.locator(`.workbench-panel[data-workbench-id="${id}"]:not([hidden])`);
+    await expect(activePanel).toBeVisible();
+    const frame = activePanel.locator(".workbench-frame");
+    const save = frame.locator(".protocol-save-button");
+
     await expect(save).toBeVisible();
     expect((await save.boundingBox())?.height).toBeLessThanOrEqual(40);
     const content = frame.locator(".protocol-request-content");

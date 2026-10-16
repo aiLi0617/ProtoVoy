@@ -23,6 +23,6 @@ export async function getWorkspaceTreeAbortable(signal: AbortSignal): Promise<Wo
   const raw = await response.json() as Omit<WorkspaceTree, "requests"> & { requests: Array<WorkspaceTree["requests"][number] & { envelope?: RequestEnvelope }> };
   return { ...raw, requests: raw.requests.map((item) => ({
     ...item,
-    method: item.envelope?.payload.type === "http" ? item.envelope.payload.method : item.method,
+    method: item.envelope?.payload?.type === "http" ? item.envelope.payload.method : item.method,
   })) };
 }

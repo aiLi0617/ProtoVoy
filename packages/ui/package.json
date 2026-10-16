@@ -8,19 +8,20 @@
   "exports": {
     ".": "./src/index.ts",
     "./components": "./src/Components.tsx",
+    "./code-editor": "./src/CodeEditor.tsx",
     "./styles.css": "./src/styles.css",
     "./curl-import.css": "./src/curl-import.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "test": "tsx src/themeStyles.test.ts && tsx src/MockConditions.test.ts && tsx src/Components.test.tsx && tsx src/SharedPrimitives.test.tsx && tsx src/requestEnvelopeAdapters.test.ts && tsx src/ClosableTabStrip.test.tsx && tsx src/ProtocolCodeGenerator.test.ts && tsx src/MessagePack.test.ts && tsx src/TcpPayloadCodec.test.ts && tsx src/InterfaceLifecycle.test.ts && tsx src/InterfaceLifecycleCounts.test.ts && tsx src/InterfaceLifecycleVisibility.test.ts && tsx src/InterfaceLifecycleError.test.ts && tsx src/requestName.test.ts && tsx src/saveInterfaceDialog.test.ts && tsx src/flattenSaveCollections.test.ts && tsx src/curlImport.test.ts && tsx src/responseComponents.test.ts && tsx src/openRequestPipeline.test.ts && tsx src/WorkbenchDeck.test.ts && tsx src/VirtualList.test.ts && tsx src/workspaceTreeRows.test.ts && tsx src/interfaceStructure.array.test.ts && tsx src/responseValidation.test.ts && tsx src/designedResponseValidation.test.ts && tsx src/HttpLiveRequestView.test.tsx"
+    "test": "node ../../scripts/run-tsx-tests.mjs --cwd packages/ui --concurrency 4"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "@protovoy/design-system": "workspace:*",
     "@protovoy/import-export": "workspace:*",
     "@protovoy/request-model": "workspace:*",
-    "@monaco-editor/react": "^4.7.0",
     "@tanstack/react-query": "^5.104.1",
     "monaco-editor": "^0.57.0",
     "typescript": "^5.8.3",

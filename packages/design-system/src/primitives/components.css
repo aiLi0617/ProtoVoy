@@ -60,7 +60,12 @@
 .ui-switch > input:checked + .ui-switch-track { border-color: var(--protovoy-accent); background: var(--protovoy-accent); }
 .ui-switch > input:checked + .ui-switch-track i { background: white; transform: translateX(13px); }
 .ui-switch > input:focus-visible + .ui-switch-track { outline: 2px solid var(--protovoy-accent); outline-offset: 2px; }
-.ui-choice:has(input:disabled), .ui-switch:has(input:disabled) { opacity: .45; cursor: not-allowed; }
+.ui-choice:has(input:disabled), .ui-switch:has(input:disabled) { color: var(--protovoy-subtle); cursor: not-allowed; }
+.ui-choice:has(input:disabled) input, .ui-switch:has(input:disabled) .ui-switch-track { border-color: var(--protovoy-border); accent-color: var(--protovoy-muted); }
+
+/* Keep disabled labels and icons readable; state is conveyed by semantic color and cursor. */
+button:disabled { opacity: 1 !important; color: var(--protovoy-subtle); cursor: not-allowed; }
+.ui-switch > input:disabled + .ui-switch-track { opacity: 1 !important; border-color: var(--protovoy-border); background: var(--protovoy-bg-elevated); }
 
 .ui-segmented { display: inline-flex; padding: 3px; border: 1px solid var(--protovoy-border); border-radius: 8px; background: var(--protovoy-bg); }
 .ui-segmented button { min-height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--protovoy-muted); font-size: 11px; }

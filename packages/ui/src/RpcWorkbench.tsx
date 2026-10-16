@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useWorkbenchHydration } from "./useWorkbenchHydration";
 import type { HttpRunResult, HttpSendHooks } from "./HttpWorkbench";
 import { Button, SegmentedControl, Select, Textarea, TextInput } from "./Components";
+import { useInterfaceNameTarget } from "./InterfaceNameTarget";
+import { useI18n } from "./i18n";
 
 export type RpcProtocol = "soap" | "jsonrpc";
 
@@ -26,6 +29,8 @@ export interface RpcWorkbenchProps {
 }
 
 export function RpcWorkbench({ onSend, onSave, onCancel }: RpcWorkbenchProps) {
+  const { t } = useI18n();
+  const nameTarget = useInterfaceNameTarget();
   const [protocol, setProtocol] = useState<RpcProtocol>("jsonrpc");
   const [name, setName] = useState("RPC request");
   const [url, setUrl] = useState("https://example.com/rpc");
@@ -96,20 +101,21 @@ export function RpcWorkbench({ onSend, onSave, onCancel }: RpcWorkbenchProps) {
     if (!onSave) return;
     try {
       await onSave(buildRequest());
-      setMessage("已保存到集合");
+      setMessage(t("status.savedToCollection"));
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     }
   }
 
+  const nameInput = <TextInput aria-label="接口名称" value={name} onChange={(event) => setName(event.target.value)} />;
   return (
-    <section className="rpc-workbench">
+    <>{nameTarget ? createPortal(nameInput, nameTarget) : null}<section className="rpc-workbench">
       <header className="rpc-header">
         <div><small>HTTP-BASED RPC</small><h2>SOAP / JSON-RPC</h2></div>
         <SegmentedControl ariaLabel="RPC 协议" value={protocol} onValueChange={setProtocol} items={[{ value: "jsonrpc", label: "JSON-RPC 2.0" }, { value: "soap", label: "SOAP" }]} />
       </header>
       <div className="rpc-target">
-        <TextInput value={name} onChange={(event) => setName(event.target.value)} />
+        {nameTarget ? null : nameInput}
         <TextInput aria-label={protocol === "soap" ? "SOAP 服务地址" : "JSON-RPC 服务地址"} className="rpc-url" value={url} onChange={(event) => setUrl(event.target.value)} />
         <Button variant="primary" loading={loading} onClick={() => void send()}>发送</Button>
         {loading && onCancel && <Button variant="danger" onClick={() => executionId && void onCancel(executionId)}>取消</Button>}
@@ -136,6 +142,6 @@ export function RpcWorkbench({ onSend, onSave, onCancel }: RpcWorkbenchProps) {
         </div>
       </div>
       {message && <div className="rpc-notice" role="status">{message}</div>}
-    </section>
+    </section></>
   );
 }

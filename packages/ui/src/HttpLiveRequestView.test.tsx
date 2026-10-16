@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { HttpLiveRequestView, type HttpWorkbenchRequest } from "./HttpWorkbench";
+import type { HttpWorkbenchRequest } from "./HttpWorkbench";
+import { HttpLiveRequestView } from "./HttpLiveRequestView";
 
 const request: HttpWorkbenchRequest = {
   name: "Not found",
