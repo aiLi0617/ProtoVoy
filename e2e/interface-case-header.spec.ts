@@ -10,7 +10,7 @@ function envelope(id: string, name: string, variables: Record<string, string> = 
   };
 }
 
-test("edits only the case name and selects the parent interface after navigation", async ({ page }) => {
+test("edits only the case name and selects the parent interface after navigation", async ({ page, isMobile }) => {
   const parent = envelope("quote-interface", "提交报价");
   const debugCase = envelope("quote-case", "直接提交", { __protovoyCaseOf: "quote-interface" });
   await page.addInitScript(() => localStorage.clear());
@@ -38,12 +38,16 @@ test("edits only the case name and selects the parent interface after navigation
 
   const debugCaseTreeItem = page.locator('[data-request-id="quote-case"] .tree-request-main');
   const explorerToggle = page.locator(".explorer-edge-toggle");
-  await expect(debugCaseTreeItem.or(explorerToggle)).toBeVisible();
-  if (await explorerToggle.isVisible()) await explorerToggle.click();
+  if (isMobile) {
+    await expect(explorerToggle).toBeVisible();
+    await explorerToggle.click();
+  }
   await expect(debugCaseTreeItem).toBeVisible();
   await debugCaseTreeItem.click();
-  const explorerBackdrop = page.locator(".explorer-backdrop");
-  if (await explorerBackdrop.isVisible()) await explorerBackdrop.click();
+  if (isMobile) {
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".resource-explorer")).toBeHidden();
+  }
   const header = page.locator(".interface-case-header");
   const interfaceLink = header.getByRole("button", { name: "提交报价" });
   const caseName = header.getByRole("textbox", { name: "用例名称" });

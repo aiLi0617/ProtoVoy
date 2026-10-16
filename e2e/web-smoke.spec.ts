@@ -358,7 +358,7 @@ test("HTTP workbench exposes busy state semantics", { tag: "@http" }, async ({ p
 
 test("broker and database workbenches keep save action compact and request content visible", { tag: "@protocol-workbenches" }, async ({ page }) => {
   for (const id of ["mqtt", "amqp", "kafka", "redis", "sql"]) {
-    await page.evaluate((workbenchId) => window.dispatchEvent(new CustomEvent("protovoy-create-workbench", { detail: workbenchId })), id);
+    await page.goto(`/?protocol=${id}#workbench=${id}`);
     await expectActiveWorkbench(page, id);
     const activePanel = page.locator(`.workbench-panel[data-workbench-id="${id}"]:not([hidden])`);
     await expect(activePanel).toBeVisible();
