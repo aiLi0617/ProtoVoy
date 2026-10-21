@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { environmentOptionLabel, LOCAL_ENVIRONMENT_NAME } from "./environmentPresentation";
 
-test("labels the persisted local environment as the default environment", () => {
+test("labels the persisted local environment without a default suffix", () => {
   assert.equal(
     environmentOptionLabel({ id: "local-env", name: "Local" }),
-    `${LOCAL_ENVIRONMENT_NAME} \u00b7 \u9ed8\u8ba4`,
+    LOCAL_ENVIRONMENT_NAME,
   );
 });
 

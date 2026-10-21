@@ -373,9 +373,8 @@ export function InterfaceLifecycleShell({
           <span className="interface-case-header-icon" aria-hidden="true"><Icon name="bolt" /></span>
           <div className="interface-case-name-composer" aria-label={`${caseInterfaceName || "所属接口"}，用例名称 ${caseName || "用例详情"}`}>
             {onOpenInterface ? <button type="button" className="interface-case-parent-link" title={`打开接口 ${caseInterfaceName || "所属接口"}`} onClick={onOpenInterface}>{caseInterfaceName || "所属接口"}</button> : <span className="interface-case-parent-name">{caseInterfaceName || "所属接口"}</span>}
-            <span aria-hidden="true">（</span>
+            <Icon name="chevron" className="interface-case-name-separator" />
             <div ref={setNameTarget} className="interface-case-name-control" />
-            <span aria-hidden="true">）</span>
           </div>
           <span className="interface-case-badge"><i aria-hidden="true" />已关联接口</span>
         </header>
