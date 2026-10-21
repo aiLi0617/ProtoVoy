@@ -265,7 +265,6 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret, onSecretExists,
         await onSave(defaultVariables, defaultSecretRefs, parameters);
         setGlobalParameters(parameters);
         setSavedGlobalParameters(parameters);
-        window.dispatchEvent(new CustomEvent("protovoy-environment-updated"));
       } else if (active === "vault") {
         const refs = parseSecretRefs(secretRefs);
         await onSave(defaultVariables, refs, globalParameters);
@@ -285,6 +284,7 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret, onSecretExists,
         await onSave(values, defaultSecretRefs, globalParameters);
         setDefaultVariables(values);
       }
+      window.dispatchEvent(new CustomEvent("protovoy-environment-updated"));
       setMessage("配置已保存");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
@@ -312,6 +312,7 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret, onSecretExists,
       const created = await onCreateEnvironment({ ...selectedEnvironment, id: undefined, name: `${selectedEnvironment.name} 副本` });
       setEnvironments((items) => [...items, created]);
       setActive(created.id);
+      window.dispatchEvent(new CustomEvent("protovoy-environment-updated"));
     } finally { setBusy(false); }
   }
 
@@ -333,6 +334,7 @@ export function EnvironmentEditor({ onLoad, onSave, onPutSecret, onSecretExists,
       await onDeleteEnvironment(selectedEnvironment.id);
       setEnvironments((items) => items.filter((item) => item.id !== selectedEnvironment.id));
       setActive("global-variables");
+      window.dispatchEvent(new CustomEvent("protovoy-environment-updated"));
     } finally { setBusy(false); }
   }
 

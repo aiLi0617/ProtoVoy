@@ -31,11 +31,11 @@ import { useI18n } from "./i18n";
 import { alignRequestToInterface, captureHttpInterfaceStructure, diffHttpInterfaceStructure, INTERFACE_STRUCTURE_METADATA_KEY, readInterfaceStructureMetadata } from "./interfaceStructureV2";
 import { DEFAULT_RESPONSE_VALIDATION_SETTINGS, readResponseValidationSettings, RESPONSE_VALIDATION_SETTINGS_EVENT, type ProjectResponseValidationSettings } from "./responseValidationSettings";
 import { validateDesignedResponse, type DesignedResponse } from "./designedResponseValidator";
-import { KeyValueRows, cookieRowsFromHeaders, createHeaderRow, createQueryRow, headerRowsFromPairs, keyValueRowHasContent, queryRowsFromUrl, urlEncodedRows, urlWithQueryRows, type HeaderRow, type RowValueType } from "./KeyValueEditor";
+import { KeyValueRows, cookieRowsFromHeaders, createHeaderRow, createQueryRow, headerRowsFromPairs, keyValueRowHasContent, pathRowsFromUrl, queryRowsFromUrl, urlEncodedRows, urlWithPathRows, urlWithQueryRows, type HeaderRow, type RowValueType } from "./KeyValueEditor";
 import { useInterfaceNameTarget } from "./InterfaceNameTarget";
 import { Button, IconButton } from "./Components";
 
-export { KeyValueRows, createQueryRow, queryRowsFromUrl, urlWithQueryRows } from "./KeyValueEditor";
+export { KeyValueRows, createQueryRow, pathRowsFromUrl, queryRowsFromUrl, urlWithPathRows, urlWithQueryRows } from "./KeyValueEditor";
 export type { HeaderRow, RowValueType } from "./KeyValueEditor";
 export { HttpLiveRequestView } from "./HttpLiveRequestView";
 
@@ -79,6 +79,33 @@ export interface HttpGlobalParameter {
 }
 
 export const GLOBAL_PARAMETER_OVERRIDES_METADATA_KEY = "__protovoyGlobalParameterOverrides";
+export const PATH_PARAMETERS_METADATA_KEY = "__protovoyPathParameters";
+
+type PersistedPathParameter = Pick<HeaderRow, "key" | "value" | "valueType" | "typeSelected" | "description">;
+const PATH_PARAMETER_VALUE_TYPES = new Set<RowValueType>(["string", "integer", "number", "boolean", "array", "object", "null"]);
+
+export function pathParameterRowsFromRequest(url: string, metadata: Record<string, unknown> = {}): HeaderRow[] {
+  const saved = metadata[PATH_PARAMETERS_METADATA_KEY];
+  const rows = Array.isArray(saved) ? saved.flatMap((item): HeaderRow[] => {
+    if (!item || typeof item !== "object") return [];
+    const parameter = item as Partial<PersistedPathParameter>;
+    if (typeof parameter.key !== "string" || typeof parameter.value !== "string") return [];
+    const valueType = PATH_PARAMETER_VALUE_TYPES.has(parameter.valueType as RowValueType) ? parameter.valueType as RowValueType : "string";
+    const row = createQueryRow(parameter.key, parameter.value, valueType, typeof parameter.description === "string" ? parameter.description : "");
+    return [{ ...row, enabled: true, required: true, typeSelected: parameter.typeSelected === true || row.typeSelected }];
+  }) : [];
+  return pathRowsFromUrl(url, rows);
+}
+
+function metadataWithPathParameters(metadata: Record<string, unknown>, rows: HeaderRow[]): Record<string, unknown> {
+  const next = { ...metadata };
+  if (rows.length) {
+    next[PATH_PARAMETERS_METADATA_KEY] = rows.map(({ key, value, valueType, typeSelected, description }): PersistedPathParameter => ({ key, value, valueType, typeSelected, description }));
+  } else {
+    delete next[PATH_PARAMETERS_METADATA_KEY];
+  }
+  return next;
+}
 
 export function globalParameterOverrideKey(parameter: Pick<HttpGlobalParameter, "location" | "name">): string {
   return `${parameter.location}:${parameter.name.trim().toLocaleLowerCase()}`;
@@ -441,7 +468,7 @@ export function generatedRequestHeaders(url: string, headers: Array<[string, str
 }
 
 export function defaultRequestTab(request: Pick<HttpWorkbenchRequest, "url" | "body" | "bodySource" | "multipart">): "params" | "body" {
-  if (queryRowsFromUrl(request.url).some(keyValueRowHasContent)) return "params";
+  if (pathRowsFromUrl(request.url).length || queryRowsFromUrl(request.url).some(keyValueRowHasContent)) return "params";
   const hasMultipartContent = request.multipart?.some((part) => Boolean(part.name.trim() || part.value || part.fileName));
   if (request.body?.trim() || request.bodySource?.trim() || hasMultipartContent) return "body";
   return "params";
@@ -494,6 +521,15 @@ function responseHeaderSize(meta: ResponseMeta | null | undefined): number {
   return meta?.headers.reduce((size, [name, value]) => size + new TextEncoder().encode(`${name}: ${value}\r\n`).length, 0) ?? 0;
 }
 
+export function responseErrorGuidance(error: string): string {
+  const normalized = error.toLocaleLowerCase();
+  if (/timed?\s*out|timeout/.test(normalized)) return "请求在超时时间内未完成。请检查服务状态，或在设置中适当延长 Timeout。";
+  if (/certificate|tls|ssl/.test(normalized)) return "TLS 连接未能建立。请检查证书、主机名和当前请求的 TLS 设置。";
+  if (/dns|resolve|lookup|name or service not known/.test(normalized)) return "无法解析目标主机。请检查请求地址、网络连接和代理配置。";
+  if (/refused|failed to connect|failed to fetch|network\s*error|connection reset|connection closed/.test(normalized)) return "无法连接到目标服务。请确认服务已启动，并检查地址、端口和代理配置。";
+  return "请求未完成，因此没有可展示的 HTTP 响应。请检查请求配置后重试。";
+}
+
 export interface HttpWorkbenchProps {
   onSend: (request: HttpWorkbenchRequest, hooks?: HttpSendHooks) => Promise<HttpRunResult>;
   onTitleChange?: (title: string) => void;
@@ -519,6 +555,7 @@ export interface HttpWorkbenchProps {
   onOpenHistoryInterface?: () => void;
   saveActionLabel?: string;
   environments?: Array<{ id: string; name: string }>;
+  onListEnvironments?: () => Promise<Array<{ id: string; name: string }>>;
   defaultEnvironmentId?: string;
   onLoadGlobalParameters?: () => Promise<HttpGlobalParameter[]>;
   toolbarTargetId?: string;
@@ -719,6 +756,7 @@ export function HttpWorkbench({
   onOpenHistoryInterface,
   saveActionLabel,
   environments = DEFAULT_ENVIRONMENTS,
+  onListEnvironments = listEnvironmentResources,
   defaultEnvironmentId = LOCAL_ENVIRONMENT_ID,
   onLoadGlobalParameters,
   toolbarTargetId,
@@ -745,6 +783,7 @@ export function HttpWorkbench({
   const [url, setUrl] = useState("");
   const [headerRows, setHeaderRows] = useState<HeaderRow[]>(() => [createHeaderRow()]);
   const [queryRows, setQueryRows] = useState<HeaderRow[]>(() => [createQueryRow()]);
+  const [pathRows, setPathRows] = useState<HeaderRow[]>([]);
   const [body, setBody] = useState("");
   const [bodyMode, setBodyMode] = useState<BodyMode>("none");
   const [multipart, setMultipart] = useState<MultipartEditorPart[]>(() => [createMultipartEditorPart()]);
@@ -775,7 +814,25 @@ export function HttpWorkbench({
     return () => observer.disconnect();
   }, [commandbarTarget]);
   const [environmentOptions,setEnvironmentOptions]=useState(() => selectableEnvironmentOptions(environments));
-  useEffect(()=>{listEnvironmentResources().then((items)=>{const next=selectableEnvironmentOptions(items.map(({id,name})=>({id,name})));setEnvironmentOptions(next.length?next:DEFAULT_ENVIRONMENTS)}).catch(()=>{const fallback=selectableEnvironmentOptions(environments);setEnvironmentOptions(fallback.length?fallback:DEFAULT_ENVIRONMENTS)})},[environments]);
+  useEffect(() => {
+    let active = true;
+    const load = () => {
+      void onListEnvironments().then((items) => {
+        if (!active) return;
+        const next = selectableEnvironmentOptions(items.map(({ id, name }) => ({ id, name })));
+        const options = next.length ? next : DEFAULT_ENVIRONMENTS;
+        setEnvironmentOptions(options);
+        setEnvironmentRef((current) => options.some((environment) => environment.id === current) ? current : options[0]?.id ?? defaultEnvironmentId);
+      }).catch(() => {
+        if (!active) return;
+        const fallback = selectableEnvironmentOptions(environments);
+        setEnvironmentOptions(fallback.length ? fallback : DEFAULT_ENVIRONMENTS);
+      });
+    };
+    load();
+    window.addEventListener("protovoy-environment-updated", load);
+    return () => { active = false; window.removeEventListener("protovoy-environment-updated", load); };
+  }, [defaultEnvironmentId, environments, onListEnvironments]);
   const [globalParameters, setGlobalParameters] = useState<HttpGlobalParameter[]>([]);
   useEffect(() => {
     if (!onLoadGlobalParameters) {
@@ -990,6 +1047,7 @@ export function HttpWorkbench({
 
   function validateParameterNames(): boolean {
     const groups = [
+      { tab: "params" as const, label: "Path 参数", rows: pathRows.map((row) => ({ enabled: row.enabled, hasContent: true, name: row.key, value: row.value, required: true })) },
       { tab: "params" as const, label: "Query 参数", rows: queryRows.map((row) => ({ enabled: row.enabled, hasContent: keyValueRowHasContent(row), name: row.key, value: row.value, required: row.required })) },
       { tab: "headers" as const, label: "Header", rows: headerRows.map((row) => ({ enabled: row.enabled, hasContent: keyValueRowHasContent(row), name: row.key, value: row.value, required: row.required })) },
       { tab: "cookies" as const, label: "Cookie", rows: cookieRows.map((row) => ({ enabled: row.enabled, hasContent: keyValueRowHasContent(row), name: row.key, value: row.value, required: row.required })) },
@@ -1013,7 +1071,7 @@ export function HttpWorkbench({
     return true;
   }
 
-  function buildRequest(): HttpWorkbenchRequest {
+  function buildRequest(resolvePathParameters = false): HttpWorkbenchRequest {
     const headers = headerRows
       .filter((row) => row.enabled && row.key.trim())
       .map((row) => [row.key.trim(), row.value.trim()] as [string, string]);
@@ -1033,7 +1091,7 @@ export function HttpWorkbench({
     return {
       id: requestId,
       name: name.trim() || requestNameFromUrl(url),
-      url: url.trim(),
+      url: resolvePathParameters ? urlWithPathRows(url.trim(), pathRows) : url.trim(),
       method,
       headers,
       body: method === "GET" || method === "HEAD" || bodyMode === "none" || bodyMode === "multipart"
@@ -1051,7 +1109,7 @@ export function HttpWorkbench({
       bodySource: bodyMode === "msgpack" ? messagePackJson : bodyMode === "graphql" ? JSON.stringify({ type: "graphql", query: graphqlQuery, variables: JSON.parse(graphqlVariables || "{}"), operationName: graphqlOperationName.trim() || null }) : bodyMode === "jsonrpc" ? JSON.stringify({ type: "jsonrpc", method: rpcMethod, params: JSON.parse(rpcParams || "{}"), id: rpcId }) : undefined,
       multipart: bodyMode === "multipart" ? multipart.filter((part) => part.enabled && part.name.trim()).map(({ id: _id, enabled: _enabled, description: _description, kind: _kind, valueType: _valueType, typeSelected: _typeSelected, required: _required, ...part }) => part) : [],
       timeoutMs,
-      metadata: { ...requestMetadata, [DISABLED_GENERATED_HEADERS_KEY]: [...disabledGeneratedHeaders], __protovoyAssertionSchemaVersion: ASSERTION_SCHEMA_VERSION, __protovoyAssertionsEnabled: assertionsEnabled },
+      metadata: { ...metadataWithPathParameters(requestMetadata, pathRows), [DISABLED_GENERATED_HEADERS_KEY]: [...disabledGeneratedHeaders], __protovoyAssertionSchemaVersion: ASSERTION_SCHEMA_VERSION, __protovoyAssertionsEnabled: assertionsEnabled },
       variables: parseKv(variablesText),
       assertions: assertionRules,
       auth: buildAuth(authKind, bearerTokenSource, bearerToken, authSecretRef, authUsername, authHeaderName, oauthTokenUrl, oauthScope, oauthAudience, oauthAuthorizationUrl, oauthRedirectUri, oauthCodeRef, oauthVerifierRef),
@@ -1137,6 +1195,7 @@ export function HttpWorkbench({
     setMethod(loaded.method);
     setUrl(loaded.url);
     setQueryRows(queryRowsFromUrl(loaded.url));
+    setPathRows(pathParameterRowsFromRequest(loaded.url, loaded.metadata));
     setHeaderRows(headerRowsFromPairs(loaded.headers.filter(([key]) => key.toLowerCase() !== "cookie")));
     setCookieRows(cookieRowsFromHeaders(loaded.headers));
     const contentType = loaded.headers.find(([key]) => key.toLowerCase() === "content-type")?.[1].toLowerCase() ?? "";
@@ -1291,7 +1350,7 @@ export function HttpWorkbench({
     if (!url.trim()) { setGraphqlSchemaState({ status: "error", message: "请先填写 GraphQL 地址" }); return; }
     setGraphqlSchemaState({ status: "loading" });
     try {
-      const request = buildRequest();
+      const request = buildRequest(true);
       const introspectionQuery = "query ProtoVoySchemaIntrospection { __schema { queryType { name } mutationType { name } subscriptionType { name } types { name kind } } }";
       const schemaHeaders = request.headers.some(([key]) => key.toLowerCase() === "content-type") ? request.headers : [["Content-Type", "application/json"], ...request.headers] as Array<[string, string]>;
       const schemaRequest: HttpWorkbenchRequest = { ...request, name: "GraphQL Schema Introspection", method: "POST", headers: schemaHeaders, body: JSON.stringify({ query: introspectionQuery, operationName: "ProtoVoySchemaIntrospection", variables: {} }) };
@@ -1340,7 +1399,7 @@ export function HttpWorkbench({
         if (!onPutSecret) throw new Error("当前执行端未提供安全密钥存储，无法保存短期授权码");
         await onPutSecret(oauthCodeRef, oauthAuthorizationCode.trim());
       }
-      const request = buildRequest();
+      const request = buildRequest(true);
       setLastRequest(request);
       const validationContext = request.metadata?.__protovoyCaseType === "test" ? "singleCase" : "interfaceRun";
       const validationEnabled = assertionsEnabled && responseValidationSettings[validationContext];
@@ -1728,7 +1787,7 @@ export function HttpWorkbench({
       <select aria-label="HTTP 方法" style={styles.select} value={method} onChange={(e) => setMethod(e.target.value)} disabled={loading}>
         {METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
       </select>
-      <label className="http-target-field"><input id="http-target-url" aria-label="目标 URL" style={styles.input} value={url} onChange={(e) => setUrl(e.target.value)} onBlur={(e) => setQueryRows(queryRowsFromUrl(e.target.value))} placeholder="接口路径" spellCheck={false} disabled={loading} /></label>
+      <label className="http-target-field"><input id="http-target-url" aria-label="目标 URL" style={styles.input} value={url} onChange={(event) => { const nextUrl = event.target.value; setUrl(nextUrl); setPathRows((current) => pathRowsFromUrl(nextUrl, current)); }} onBlur={(event) => { setQueryRows(queryRowsFromUrl(event.target.value)); setPathRows((current) => pathRowsFromUrl(event.target.value, current)); }} placeholder="接口路径" spellCheck={false} disabled={loading} /></label>
       {lifecycleTab === "definition" ? <>
         <Button variant="primary" className="http-send-button" disabled={loading} onClick={() => void handleSave(true)}><Icon name="archive"/>保存</Button>
         <Button className="http-save-button" onClick={() => window.dispatchEvent(new CustomEvent("protovoy-open-lifecycle-tab", { detail: { sessionId: workbenchSessionId, tab: "debug" } }))}><Icon name="send"/>调试</Button>
@@ -1778,7 +1837,7 @@ export function HttpWorkbench({
       {historyStartedAt ? <div className="http-history-sent-at">{historyInterfaceName && onOpenHistoryInterface ? <button type="button" className="http-history-interface-link" aria-label={"\u6253\u5f00\u63a5\u53e3 " + historyInterfaceName} onClick={onOpenHistoryInterface}><Icon name="folder"/><span>{historyInterfaceName}</span></button> : null}<span className="http-history-time"><Icon name="activity"/><span>{"\u5386\u53f2\u53d1\u9001\u65f6\u95f4"}</span><time dateTime={historyStartedAt}>{new Date(historyStartedAt).toLocaleString("zh-CN", { hour12: false })}</time></span></div> : null}
       <div className={`http-workbench-split${responseValidationActive && result ? " has-response-validation" : ""}`}>
       <SplitPane id={embeddedPreview ? "http-test-case-preview" : "http-workbench"} direction="vertical" fixedDirection={fixedSplitDirection ?? (embeddedPreview ? "horizontal" : undefined)} minPrimary={160} minSecondary={160} primaryLabel="请求配置" secondaryLabel="响应检查器" secondaryActions={responseHeaderActions} primary={<div className="protovoy-workbench http-request-pane" style={styles.section}>
-      <div className="request-interaction-content http-request-interaction-content" inert={loading ? true : undefined}>
+      <div className={`request-interaction-content http-request-interaction-content${requestTab === "body" && bodyMode === "json" ? " is-body" : ""}`} inert={loading ? true : undefined}>
       {(() => {
         const paramDifferenceCount = caseStructureState?.differences.filter((item) => item.field.location === "query").length ?? 0;
         const bodyFieldCount = bodyMode === "none"
@@ -1797,7 +1856,7 @@ export function HttpWorkbench({
                       ? Number(Boolean(soapEnvelope.trim()))
                       : bodyPayloadCount(bodyMode === "msgpack" ? messagePackJson : body);
         const requestTabs = [
-          { id: "params" as const, label: "Params", hint: queryRows.filter((row) => row.key.trim()).length || undefined },
+          { id: "params" as const, label: "Params", hint: queryRows.filter((row) => row.key.trim()).length + pathRows.length || undefined },
           { id: "body" as const, label: "Body", hint: bodyFieldCount || undefined },
           { id: "headers" as const, label: "Headers", hint: headerRows.filter((row) => row.key.trim()).length || undefined },
           { id: "cookies" as const, label: "Cookies", hint: cookieRows.filter((row) => row.key.trim()).length || undefined },
@@ -1818,30 +1877,34 @@ export function HttpWorkbench({
               </div> : null}
             </div> : null}
           </RovingTabList>
-          <div className="http-request-tab-panel" role="tabpanel" id={`http-request-panel-${activeTab}`} aria-labelledby={`http-request-tab-${activeTab}`}>
+          <div className={`http-request-tab-panel${activeTab === "body" && bodyMode === "json" ? " is-body" : ""}`} role="tabpanel" id={`http-request-panel-${activeTab}`} aria-labelledby={`http-request-tab-${activeTab}`}>
             {activeTab === "params" && <div className="http-kv-editor" aria-label="URL Query Params">
               <div className="http-section-heading">Query 参数</div>
               <KeyValueRows rows={queryRows} setRows={setQueryRows} kind="Param" nameLabel="参数名" valueLabel="参数值" addPlaceholder="添加参数" loading={loading} inconsistentNames={caseStructureState?.differences.filter((item) => item.field.location === "query").map((item) => item.field.name)} onRowsChange={(rows) => setUrl((current) => urlWithQueryRows(current, rows))}/>
+              {pathRows.length ? <>
+                <div className="http-section-heading http-path-parameter-heading">Path 参数</div>
+                <KeyValueRows rows={pathRows} setRows={setPathRows} kind="Path 参数" nameLabel="参数名" valueLabel="参数值" addPlaceholder="" loading={loading} fixed/>
+              </> : null}
             </div>}
             {activeTab === "headers" && <div className="http-kv-editor" aria-label="请求 Headers">
               <div className="http-section-heading http-headers-heading"><span>请求 Headers</span>{generatedHeaders.length ? <button type="button" className={`http-generated-headers-toggle${generatedHeadersVisible ? " is-expanded" : ""}`} aria-controls="http-generated-headers" aria-expanded={generatedHeadersVisible} onClick={() => setGeneratedHeadersVisible((visible) => !visible)}><Icon name="chevron"/>{generatedHeadersVisible ? `隐藏自动生成的 ${generatedHeaders.length} 个` : `已隐藏 ${generatedHeaders.length} 个`}</button> : null}</div>
+              <KeyValueRows rows={headerRows} setRows={setHeaderRows} kind="Header" nameLabel="Header 名称" valueLabel="Header 值" addPlaceholder="例如 Content-Type" loading={loading} inconsistentNames={caseStructureState?.differences.filter((item) => item.field.location === "header").map((item) => item.field.name)} beforeRows={<div id="http-generated-headers" className={`http-generated-headers${generatedHeadersVisible ? " is-visible" : ""}`} aria-hidden={!generatedHeadersVisible}>{generatedHeaders.map((header) => { const enabled = header.locked || !disabledGeneratedHeaders.has(header.name.toLowerCase()); return <div className={`http-generated-header-row${enabled ? " is-enabled" : ""}`} key={header.name}><input className="http-row-enabled" type="checkbox" checked={enabled} disabled={header.locked || loading} aria-label={header.locked ? `${header.name} 固定自动生成，无法停用` : `${enabled ? "停用" : "启用"}自动 Header ${header.name}`} title={header.locked ? "固定自动生成，无法停用" : undefined} onChange={(event) => setDisabledGeneratedHeaders((current) => { const next = new Set(current); const key = header.name.toLowerCase(); event.target.checked ? next.delete(key) : next.add(key); return next; })}/><code>{header.name}</code><span>{header.value}</span><span aria-hidden="true"/><span aria-hidden="true"/><span className="http-generated-header-description"><Icon name="info"/><span>{header.description}</span></span><span aria-hidden="true"/></div>; })}</div>}/>
               {globalHeaderParameters.length ? <section className="http-global-parameters" aria-label="全局 Header 参数">
-                <div className="http-global-parameter-title"><strong>全局 Header 参数</strong><span>继承环境配置；此处开关仅影响当前请求</span></div>
-                <div className="http-global-parameter-header" aria-hidden="true"><span>参数名</span><span/><span>类型</span><span>参数值</span><span>说明</span><span>启用</span></div>
+                <div className="http-global-parameter-title"><strong>全局 Header 参数</strong></div>
+                <div className="http-global-parameter-header" aria-hidden="true"><span>参数名</span><span>类型</span><span>参数值</span><span>说明</span><span>启用</span></div>
                 {globalHeaderParameters.map((parameter) => {
                   const key = globalParameterOverrideKey(parameter);
                   const overrides = readGlobalParameterOverrides(requestMetadata);
                   const overridden = Object.hasOwn(overrides, key);
                   const enabled = overrides[key] ?? parameter.enabled;
                   return <div className={`http-global-parameter-row${enabled ? " is-enabled" : ""}`} key={key}>
-                    <code title={parameter.name}>{parameter.name}</code><span aria-hidden="true">=</span><span className="http-global-parameter-type">{parameter.parameterType ?? "string"}</span><code title={parameter.value}>{parameter.value}</code><span title={parameter.description}>{parameter.description || "—"}</span>
+                    <code title={parameter.name}>{parameter.name}</code><span className="http-global-parameter-type">{parameter.parameterType ?? "string"}</span><code title={parameter.value}>{parameter.value}</code><span title={parameter.description}>{parameter.description || "—"}</span>
                     <div className="http-global-parameter-actions"><button type="button" role="switch" className="http-global-parameter-switch" aria-checked={enabled} aria-label={`${enabled ? "停用" : "启用"}当前请求的全局 Header ${parameter.name}`} onClick={() => setRequestMetadata((current) => withGlobalParameterOverride(current, parameter, !globalParameterEnabled(parameter, current)))} disabled={loading}><span/></button>{overridden ? <button type="button" className="http-global-parameter-reset" onClick={() => setRequestMetadata((current) => withGlobalParameterOverride(current, parameter, undefined))} disabled={loading}>恢复默认</button> : <span className="http-global-parameter-default">全局默认</span>}</div>
                   </div>;
                 })}
               </section> : null}
-              <KeyValueRows rows={headerRows} setRows={setHeaderRows} kind="Header" nameLabel="Header 名称" valueLabel="Header 值" addPlaceholder="例如 Content-Type" loading={loading} inconsistentNames={caseStructureState?.differences.filter((item) => item.field.location === "header").map((item) => item.field.name)} beforeRows={<div id="http-generated-headers" className={`http-generated-headers${generatedHeadersVisible ? " is-visible" : ""}`} aria-hidden={!generatedHeadersVisible}>{generatedHeaders.map((header) => { const enabled = header.locked || !disabledGeneratedHeaders.has(header.name.toLowerCase()); return <div className={`http-generated-header-row${enabled ? " is-enabled" : ""}`} key={header.name}><input className="http-row-enabled" type="checkbox" checked={enabled} disabled={header.locked || loading} aria-label={header.locked ? `${header.name} 固定自动生成，无法停用` : `${enabled ? "停用" : "启用"}自动 Header ${header.name}`} title={header.locked ? "固定自动生成，无法停用" : undefined} onChange={(event) => setDisabledGeneratedHeaders((current) => { const next = new Set(current); const key = header.name.toLowerCase(); event.target.checked ? next.delete(key) : next.add(key); return next; })}/><code>{header.name}</code><span>{header.value}</span><span aria-hidden="true"/><span aria-hidden="true"/><span className="http-generated-header-description"><Icon name="info"/><span>{header.description}</span></span><span aria-hidden="true"/></div>; })}</div>}/>
             </div>}
-            {activeTab === "body" && <div style={styles.label}>
+            {activeTab === "body" && <div className="http-body-panel" style={styles.label}>
               <div className="http-body-toolbar" style={{ minWidth: 0, display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid var(--protovoy-border)" }}>
                 <RovingTabList className="http-body-mode-tabs" ariaLabel="请求体类型" style={{ minWidth: 0, flex: "1 1 auto" }}>
                   {BODY_MODES.map((mode) => <button key={mode.id} type="button" role="tab" tabIndex={bodyMode === mode.id ? 0 : -1} aria-selected={bodyMode === mode.id} className={bodyMode === mode.id ? "is-active" : ""} onClick={() => selectBodyMode(mode.id)} disabled={loading}>{mode.label}</button>)}
@@ -1856,10 +1919,10 @@ export function HttpWorkbench({
                 </label> : null}
               </div>
               {bodyMode === "none" && <div className="http-body-empty">当前请求不发送 Body。选择上方类型开始编辑。</div>}
-              {bodyMode === "json" && <>
+              {bodyMode === "json" && <div className="http-body-json-editor">
                 <div className="http-body-editor-heading"><span className="http-body-editor-label">请求内容</span><span className="http-body-editor-actions"><button type="button" className="http-body-icon-action" onClick={formatBodyJson} disabled={loading || !body.trim()} title="格式化 JSON" aria-label="格式化 JSON Body"><Icon name="code"/></button><button type="button" className="http-body-icon-action" onClick={() => setBody("")} disabled={loading || !body} title="清除 JSON" aria-label="清除 JSON Body"><Icon name="broom"/></button></span></div>
-                <CodeEditor value={body} onChange={setBody} language="json" height={260} readOnly={loading} />
-              </>}
+                <CodeEditor value={body} onChange={setBody} language="json" height="100%" readOnly={loading} />
+              </div>}
               {bodyMode !== "none" && bodyMode !== "multipart" && bodyMode !== "urlencoded" && bodyMode !== "json" && !["graphql", "jsonrpc", "soap", "binary", "msgpack"].includes(bodyMode) && <>
                 <div className="http-body-editor-label">请求内容</div>
                 <CodeEditor value={body} onChange={setBody} language={bodyMode === "xml" ? "xml" : "plaintext"} height={260} readOnly={loading} />
@@ -2053,7 +2116,15 @@ export function HttpWorkbench({
         <div className="http-response-content">
           {!result.error && <div className="http-response-inline-metrics">{responseMetrics}</div>}
           {result.error ? (
-            <div style={styles.error}>{result.error}</div>
+            <div className="http-response-error" role="alert">
+              <div className="http-response-error-icon" aria-hidden="true"><Icon name="triangle"/></div>
+              <div className="http-response-error-content">
+                <strong>请求失败</strong>
+                <p>{responseErrorGuidance(result.error)}</p>
+                <pre>{result.error}</pre>
+                <button type="button" onClick={() => void copyText(result.error ?? "", "错误信息已复制")}><Icon name="copy"/>复制错误信息</button>
+              </div>
+            </div>
           ) : (
             <>
               <RovingTabList style={styles.responseTabs} ariaLabel="响应内容视图">

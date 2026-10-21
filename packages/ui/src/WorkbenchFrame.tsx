@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { useAppStore, type WorkbenchLayoutPreference } from "./appStore";
+import { Icon } from "./Icons";
 
 function SplitLayoutIcon({ direction = "vertical" }: { direction?: "vertical" | "horizontal" }) {
   return <svg className="split-layout-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -43,12 +44,17 @@ export function SplitPane({ id, primary, secondary, primaryActions, secondaryAct
     window.addEventListener("resize", constrainWorkspaceCreateMenu);
     return () => { observer.disconnect(); window.removeEventListener("resize", constrainWorkspaceCreateMenu); };
   }, []);
-  function persist(nextDirection: WorkbenchLayoutPreference, nextRatio: number) {
-    const value = Math.min(.99, Math.max(.25, nextRatio));
+  function persist(nextDirection: WorkbenchLayoutPreference, nextRatio: number, minimumRatio = .25) {
+    const value = Math.min(.99, Math.max(minimumRatio, nextRatio));
     setRatio(value);
     setPreference(id, { direction: nextDirection, ratio: value });
   }
-  function update(next: number) { if (next < .94) expandedRatioRef.current = next; persist(actualDirection, next); }
+  function update(next: number, minimumRatio = .25) { if (next < .94) expandedRatioRef.current = next; persist(actualDirection, next, minimumRatio); }
+  function primaryMinimumRatio(root: HTMLDivElement) {
+    const bounds = root.getBoundingClientRect();
+    const total = actualDirection === "horizontal" ? bounds.width : bounds.height;
+    return total > 0 ? Math.min(.99, minPrimary / total) : .25;
+  }
   function collapseThreshold(root: HTMLDivElement) {
     const bounds = root.getBoundingClientRect();
     const total = actualDirection === "horizontal" ? bounds.width : bounds.height;
@@ -83,7 +89,7 @@ export function SplitPane({ id, primary, secondary, primaryActions, secondaryAct
       const next = vertical ? (moveEvent.clientY - bounds.top) / bounds.height : (moveEvent.clientX - bounds.left) / bounds.width;
       if (next >= collapseThreshold(root)) { if (!dragCollapsed) { if (ratio < .94) expandedRatioRef.current = ratio; dragCollapsed = true; setCollapsedPanel("secondary"); } return; }
       if (dragCollapsed) { dragCollapsed = false; setCollapsedPanel(null); }
-      update(next);
+      update(next, primaryMinimumRatio(root));
     };
     const stop = (stopEvent: globalThis.PointerEvent) => {
       if (stopEvent.pointerId !== pointerId) return;
@@ -97,7 +103,7 @@ export function SplitPane({ id, primary, secondary, primaryActions, secondaryAct
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
   }
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) { const root = rootRef.current; if (["ArrowLeft","ArrowUp"].includes(event.key)) { event.preventDefault(); if (collapsedPanel === "secondary") toggleSecondary(); else update(ratio - .05); } if (["ArrowRight","ArrowDown"].includes(event.key)) { event.preventDefault(); if (root && collapsedPanel !== "secondary") resize(ratio + .05, root); } if (event.key === "Home") update(.25); if (event.key === "End" && collapsible) { expandedRatioRef.current = ratio < .94 ? ratio : expandedRatioRef.current; setCollapsedPanel("secondary"); } }
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) { const root = rootRef.current; if (["ArrowLeft","ArrowUp"].includes(event.key)) { event.preventDefault(); if (collapsedPanel === "secondary") toggleSecondary(); else update(ratio - .05, root ? primaryMinimumRatio(root) : .25); } if (["ArrowRight","ArrowDown"].includes(event.key)) { event.preventDefault(); if (root && collapsedPanel !== "secondary") resize(ratio + .05, root); } if (event.key === "Home") { const minimum = root ? primaryMinimumRatio(root) : .25; update(minimum, minimum); } if (event.key === "End" && collapsible) { expandedRatioRef.current = ratio < .94 ? ratio : expandedRatioRef.current; setCollapsedPanel("secondary"); } }
   const layouts: Array<{ id: "vertical" | "horizontal"; label: string; title: string }> = [
     { id: "vertical", label: "上下", title: "请求在上、响应在下（适合阅读正文）" },
     { id: "horizontal", label: "左右", title: "请求在左、响应在右" },
@@ -105,8 +111,8 @@ export function SplitPane({ id, primary, secondary, primaryActions, secondaryAct
   return <div className="split-pane-shell">
     <div ref={rootRef} className={`split-pane split-${actualDirection}${collapsedPanel ? ` split-${collapsedPanel}-collapsed` : ""}`} style={{ "--split-ratio": `${ratio * 100}%`, "--split-min-primary": `${minPrimary}px`, "--split-min-secondary": `${minSecondary}px` } as React.CSSProperties}>
       <section className={`split-panel${primaryActions ? " split-primary-with-header" : ""}`} aria-label={primaryLabel}>{primaryActions ? <><div className="split-primary-horizontal-header"><strong className="split-primary-header-heading">{primaryLabel}</strong>{primaryActions}</div><div className="split-primary-content">{primary}</div></> : primary}</section>
-      <div className={`split-handle${dragging ? " is-dragging" : ""}`} role="separator" tabIndex={0} aria-label={`调整${primaryLabel}和${secondaryLabel}区域大小`} aria-orientation={actualDirection === "horizontal" ? "vertical" : "horizontal"} aria-valuemin={25} aria-valuemax={99} aria-valuenow={collapsedPanel === "secondary" ? 99 : Math.round(ratio * 100)} onPointerDown={onPointerDown} onKeyDown={onKeyDown} onDoubleClick={() => { setCollapsedPanel(null); update(.42); }}><span/>{collapsible ? <div className="split-response-heading">{showCollapseControl || collapsedPanel === "secondary" ? <button type="button" className="split-response-toggle" aria-label={collapsedPanel === "secondary" ? `展开${secondaryLabel}` : `收起${secondaryLabel}`} aria-expanded={collapsedPanel !== "secondary"} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggleSecondary(); }}><span className="split-response-toggle-icon" aria-hidden="true"/></button> : null}<span className="split-response-toggle-label">{secondaryLabel === "响应检查器" ? "返回响应" : secondaryLabel}</span>{secondaryCollapsedMeta ? <span className="split-response-collapsed-meta">{secondaryCollapsedMeta}</span> : null}</div> : null}{secondaryActions ? <div className="split-secondary-actions" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>{secondaryActions}</div> : null}</div>
-      <section className="split-panel split-secondary-panel" aria-label={secondaryLabel}><div className="split-secondary-horizontal-header"><div className="split-secondary-header-heading">{showCollapseControl ? <button type="button" className="split-secondary-header-toggle" aria-label={collapsedPanel === "secondary" ? `展开${secondaryLabel}` : `收起${secondaryLabel}`} aria-expanded={collapsedPanel !== "secondary"} onClick={toggleSecondary}><span className="split-response-toggle-icon" aria-hidden="true"/></button> : null}<span>{secondaryLabel === "响应检查器" ? "返回响应" : secondaryLabel}</span></div>{secondaryActions ? <div className="split-secondary-header-actions">{secondaryActions}</div> : null}</div><div className="split-secondary-content">{secondary}</div>{!fixedDirection ? <div className="split-layout-flyout"><div className="split-layout-popover" role="group" aria-label="选择分栏布局">{layouts.map((layout) => <button key={layout.id} type="button" className={actualDirection === layout.id ? "is-active" : ""} aria-pressed={actualDirection === layout.id} title={layout.title} onClick={() => setDirection(layout.id)}><SplitLayoutIcon direction={layout.id}/><span>{layout.label}分屏</span></button>)}</div><button type="button" className="split-layout-trigger" aria-label="切换分栏布局" title="切换分栏布局"><SplitLayoutIcon direction={actualDirection}/></button></div> : null}</section>
+      <div className={`split-handle${dragging ? " is-dragging" : ""}`} role="separator" tabIndex={0} aria-label={`调整${primaryLabel}和${secondaryLabel}区域大小`} aria-orientation={actualDirection === "horizontal" ? "vertical" : "horizontal"} aria-valuemin={25} aria-valuemax={99} aria-valuenow={collapsedPanel === "secondary" ? 99 : Math.round(ratio * 100)} onPointerDown={onPointerDown} onKeyDown={onKeyDown} onDoubleClick={() => { setCollapsedPanel(null); update(.42); }}><span/>{collapsible ? <button type="button" className="split-response-heading" aria-label={collapsedPanel === "secondary" ? `展开${secondaryLabel}` : `收起${secondaryLabel}`} aria-expanded={collapsedPanel !== "secondary"} onDoubleClick={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggleSecondary(); }}>{showCollapseControl || collapsedPanel === "secondary" ? <Icon name={collapsedPanel === "secondary" ? "expand-all" : "collapse-all"} className="split-response-toggle-icon" /> : null}<span className="split-response-toggle-label">{secondaryLabel === "响应检查器" ? "返回响应" : secondaryLabel}</span>{secondaryCollapsedMeta ? <span className="split-response-collapsed-meta">{secondaryCollapsedMeta}</span> : null}</button> : null}{secondaryActions ? <div className="split-secondary-actions" onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>{secondaryActions}</div> : null}</div>
+      <section className="split-panel split-secondary-panel" aria-label={secondaryLabel}><div className="split-secondary-horizontal-header"><button type="button" className="split-secondary-header-heading" aria-label={collapsedPanel === "secondary" ? `展开${secondaryLabel}` : `收起${secondaryLabel}`} aria-expanded={collapsedPanel !== "secondary"} onClick={toggleSecondary}>{showCollapseControl ? <Icon name={collapsedPanel === "secondary" ? "expand-all" : "collapse-all"} className="split-response-toggle-icon" /> : null}<span>{secondaryLabel === "响应检查器" ? "返回响应" : secondaryLabel}</span></button>{secondaryActions ? <div className="split-secondary-header-actions" onClick={(event) => event.stopPropagation()}>{secondaryActions}</div> : null}</div><div className="split-secondary-content">{secondary}</div>{!fixedDirection ? <div className="split-layout-flyout"><div className="split-layout-popover" role="group" aria-label="选择分栏布局">{layouts.map((layout) => <button key={layout.id} type="button" className={actualDirection === layout.id ? "is-active" : ""} aria-pressed={actualDirection === layout.id} title={layout.title} onClick={() => setDirection(layout.id)}><SplitLayoutIcon direction={layout.id}/><span>{layout.label}分屏</span></button>)}</div><button type="button" className="split-layout-trigger" aria-label="切换分栏布局" title="切换分栏布局"><SplitLayoutIcon direction={actualDirection}/></button></div> : null}</section>
     </div>
   </div>;
 }
