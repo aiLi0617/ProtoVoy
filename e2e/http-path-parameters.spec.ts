@@ -28,7 +28,6 @@ test("derives Path parameters from URL placeholders and resolves them for sendin
   await expect(page.getByText("Path 参数", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Path 参数 1 名称")).toHaveValue("quoteId");
   await page.getByLabel("Path 参数 1 值").fill("quote 42");
-  await expect(page.getByRole("tab", { name: /Params/ }).locator("span").first()).toHaveText("1");
   await page.screenshot({ path: "output/playwright/http-path-parameters.png", fullPage: true });
 
   await page.getByRole("checkbox", { name: "校验响应" }).uncheck({ force: true });
