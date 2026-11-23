@@ -174,7 +174,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Restore content validation cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: node_modules/.cache/protovoy
           key: ${{ runner.os }}-node22-js-validation-v3-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'apps/web/**', 'apps/desktop/**', 'packages/**', 'scripts/validate-changed.mjs', 'scripts/test-changed-ui.mjs', 'scripts/run-tsx-tests.mjs', 'scripts/register-test-css.mjs', 'scripts/validation-cache.mjs') }}
@@ -204,14 +204,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Restore browser validation cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: node_modules/.cache/protovoy
           key: ${{ runner.os }}-node22-e2e-validation-v3-${{ hashFiles('package.json', 'pnpm-lock.yaml', 'apps/web/**', 'packages/ui/**', 'packages/request-model/**', 'e2e/**', 'playwright*.ts', 'scripts/e2e-server.mjs', 'scripts/e2e-smoke-tags.mjs', 'scripts/run-e2e.mjs', 'scripts/test-changed-e2e.mjs', 'scripts/validation-cache.mjs') }}
           restore-keys: |
             ${{ runner.os }}-node22-e2e-validation-v3-
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
@@ -253,7 +253,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Restore Rust validation result cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: node_modules/.cache/protovoy
           key: ${{ runner.os }}-rust-validation-v3-${{ hashFiles('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', '.cargo/**', 'crates/**', 'apps/*/Cargo.toml', 'apps/*/src-tauri/**', 'scripts/validate-changed.mjs', 'scripts/validation-cache.mjs') }}
