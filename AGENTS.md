@@ -15,6 +15,10 @@ During implementation:
   plus their in-repository dependents. Use `--base <git-ref>` to validate a branch.
   JavaScript workspace scripts run directly with concurrency four, so
   `npm run validate:changed` remains available when Corepack is offline.
+- Go source, module, Viva configuration, or GraphQL fixture changes select
+  native Go tests and the Viva WebAssembly compile check. Use
+  `pnpm validate:changed --go` to run only that module's checks. CI runs
+  native Go tests on Linux, Windows and macOS and builds the Viva web distribution.
 - `pnpm validate:staged` limits validation to staged paths. `pnpm validate:since`
   validates dirty files whose contents changed since the last successful matching run.
 - `pnpm test:e2e:changed` runs browser specs mapped to changed UI features. It

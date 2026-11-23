@@ -3,6 +3,12 @@ param(
     [ValidateSet("Dev", "Release")]
     [string]$Mode = "Dev",
 
+    [ValidateSet("Viva", "Tauri")]
+    [string]$Stack = "Viva",
+
+    [ValidateSet("Desktop", "Web")]
+    [string]$Surface = "Desktop",
+
     [switch]$SkipInstall
 )
 
@@ -23,7 +29,7 @@ function Get-RequiredCommand {
 function Invoke-CheckedCommand {
     param(
         [Parameter(Mandatory)][string]$FilePath,
-        [Parameter(Mandatory)][string[]]$ArgumentList
+        [Parameter(Mandatory)][AllowEmptyCollection()][string[]]$ArgumentList
     )
 
     Write-Host "> $FilePath $($ArgumentList -join ' ')" -ForegroundColor Cyan
@@ -49,6 +55,38 @@ function Get-CheckedCommandOutput {
 
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 
+if ($Stack -eq "Viva") {
+    $go = Get-RequiredCommand "go"
+    $module = Join-Path $repositoryRoot "apps/protovoy-go"
+    if ($Surface -eq "Web") {
+        $web = Join-Path $module "build/web"
+        Invoke-CheckedCommand $go @("-C", $module, "tool", "viva", "build", "--target", "web", "-o", $web)
+        if ($Mode -eq "Dev") {
+            Invoke-CheckedCommand $go @("-C", $module, "run", "-mod=readonly", "./cmd/server", "-web", $web)
+            return
+        }
+
+        Invoke-CheckedCommand $go @("-C", $module, "build", "-mod=readonly", "-trimpath", "-o", "build/native/", "./cmd/server")
+        $serverName = if ($env:OS -eq "Windows_NT") { "server.exe" } else { "server" }
+        Invoke-CheckedCommand (Join-Path $module "build/native/$serverName") @("-web", $web)
+        return
+    }
+
+    if ($Mode -eq "Dev") {
+        Invoke-CheckedCommand $go @("-C", $module, "run", "-mod=readonly", "./cmd/workbench")
+        return
+    }
+
+    Invoke-CheckedCommand $go @("-C", $module, "build", "-mod=readonly", "-trimpath", "-o", "build/native/", "./cmd/workbench", "./cmd/protovoy", "./cmd/agent", "./cmd/server", "./cmd/mock")
+    $executableName = if ($env:OS -eq "Windows_NT") { "workbench.exe" } else { "workbench" }
+    Invoke-CheckedCommand (Join-Path $module "build/native/$executableName") @()
+    return
+}
+
+if ($Surface -eq "Web") {
+    throw "-Surface Web requires -Stack Viva."
+}
+
 # rustup installs here by default. Add it only to this process when a new shell
 # has not picked up rustup's PATH update yet.
 $defaultCargoBin = Join-Path $env:USERPROFILE ".cargo\bin"
@@ -71,7 +109,7 @@ if ($nodeMajor -lt 22) {
 $pnpmVersion = Get-CheckedCommandOutput $pnpm @("--version")
 $rustVersion = Get-CheckedCommandOutput $rustc @("--version")
 
-Write-Host "ApiVoy bootstrap" -ForegroundColor Green
+Write-Host "ProtoVoy Tauri bootstrap" -ForegroundColor Green
 Write-Host "  Mode:  $Mode"
 Write-Host "  Node:  $nodeVersion"
 Write-Host "  pnpm:  $pnpmVersion"
@@ -86,12 +124,12 @@ try {
     if ($Mode -eq "Dev") {
         Write-Host "Compiling and starting the Tauri desktop app..." -ForegroundColor Green
         Write-Host "Keep this terminal open; press Ctrl+C to stop the development process."
-        Invoke-CheckedCommand $pnpm @("dev:desktop")
+        Invoke-CheckedCommand $pnpm @("dev:desktop:tauri")
         return
     }
 
     Write-Host "Building the release desktop app and Local Agent sidecar..." -ForegroundColor Green
-    Invoke-CheckedCommand $pnpm @("build:desktop")
+    Invoke-CheckedCommand $pnpm @("build:desktop:tauri")
 
     $metadataJson = & $cargo metadata --format-version 1 --no-deps
     if ($LASTEXITCODE -ne 0) {

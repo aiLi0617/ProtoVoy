@@ -64,7 +64,7 @@ function parseArguments(argv) {
     else if (argument === "--file") options.files.push(argv[++index]);
     else if (argument === "--staged") options.staged = true;
     else if (argument === "--since-last-run") options.sinceLastRun = true;
-    else if (["--js", "--rust", "--java"].includes(argument)) options.scopes.add(argument.slice(2));
+    else if (["--js", "--rust", "--java", "--go"].includes(argument)) options.scopes.add(argument.slice(2));
     else throw new Error(`Unknown argument: ${argument}`);
   }
   if (options.base === undefined && argv.includes("--base")) {
@@ -73,7 +73,7 @@ function parseArguments(argv) {
   if (options.files.includes(undefined)) throw new Error("--file requires a repository-relative path");
   const selectors = [Boolean(options.base), options.files.length > 0, options.staged, options.sinceLastRun].filter(Boolean).length;
   if (selectors > 1) throw new Error("Use only one of --base, --file, --staged, or --since-last-run");
-  if (options.scopes.size === 0) options.scopes = new Set(["js", "rust", "java"]);
+  if (options.scopes.size === 0) options.scopes = new Set(["js", "rust", "java", "go"]);
   return options;
 }
 
@@ -611,6 +611,7 @@ async function main() {
   const currentValidationKey = validationKey(options);
   const jsFailureKey = `validate:${currentValidationKey}:js`;
   const rustFailureKey = `validate:${currentValidationKey}:rust`;
+  const goFailureKey = `validate:${currentValidationKey}:go`;
   const javaFailureKey = `validate:${currentValidationKey}:java`;
   const tracksSnapshot = !options.base && options.files.length === 0 && !options.staged;
   const dirtyFiles = tracksSnapshot ? changedFiles(undefined) : [];
@@ -710,7 +711,33 @@ async function main() {
     if (!runRecoverableTasks([javaTask], options, javaFailureKey, files)) process.exit(1);
   }
 
-  if (js.affected.size === 0 && rust.affected.size === 0 && !javaChanged) {
+  const goChanged = options.scopes.has("go") && files.some((file) =>
+    (file.startsWith("apps/protovoy-go/") && /(?:\.go|\/go\.mod|\/go\.sum|\/viva\.toml)$/.test(file)) ||
+    file === "examples/graphql/typename.query.json" || file === "scripts/validate-changed.mjs" ||
+    file === "package.json" || file === "scripts/start.ps1" ||
+    file === ".github/workflows/viva-bundle.yml" ||
+    file === "apps/protovoy-go/BUNDLE.md" || file === "apps/protovoy-go/scripts/smoke-web.mjs" ||
+    file === "apps/protovoy-go/Dockerfile" || file === "apps/protovoy-go/.dockerignore" ||
+    file === "deploy/viva.compose.yaml",
+  );
+  if (goChanged) {
+    const cwd = join(repoRoot, "apps", "protovoy-go");
+    const goTasks = [{
+      label: "protovoy-go -> native tests",
+      command: "go",
+      args: ["test", "-mod=readonly", ...(!options.cache ? ["-count=1"] : []), "./..."],
+      cwd,
+    }, {
+      label: "protovoy-go -> Viva WebAssembly build",
+      command: "go",
+      args: ["build", "-mod=readonly", "./cmd/workbench", "./internal/project"],
+      cwd,
+      env: { ...process.env, GOOS: "js", GOARCH: "wasm", CGO_ENABLED: "0" },
+    }];
+    if (!runRecoverableTasks(goTasks, options, goFailureKey, files)) process.exit(1);
+  }
+
+  if (js.affected.size === 0 && rust.affected.size === 0 && !javaChanged && !goChanged) {
     console.log("[validate:changed] No code validation is required for these files.");
   }
   if (!options.dryRun && tracksSnapshot) {

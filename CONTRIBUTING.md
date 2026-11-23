@@ -13,6 +13,10 @@ Thank you for your interest in contributing to ProtoVoy.
 
 ### Requirements
 
+Viva desktop, Web, CLI, and Local Agent development uses **Go 1.26+**.
+Building the native macOS workbench also requires the Xcode command-line tools.
+The Vite, Tauri, and collaboration applications use the following toolchains.
+
 - **Node.js** 22+
 - **pnpm** 10.27+
 - **Rust** stable (with platform-specific [Tauri dependencies](https://v2.tauri.app/start/prerequisites/))
@@ -21,17 +25,28 @@ Thank you for your interest in contributing to ProtoVoy.
 ### Clone and run
 
 ```bash
+go -C apps/protovoy-go run ./cmd/workbench
+go -C apps/protovoy-go tool viva build --target web -o build/web
+go -C apps/protovoy-go run ./cmd/server
+```
+
+Open `http://127.0.0.1:39300/` for the Web workbench and pair a Go Local
+Agent using the [Viva + Go guide](apps/protovoy-go/README.md#go-local-agent).
+
+### Vite and Tauri development
+
+```bash
 git clone https://github.com/aiLi0617/ProtoVoy.git
 cd ProtoVoy
 pnpm install
 cargo check --workspace
 
 # Desktop
-pnpm dev:desktop
+pnpm dev:desktop:tauri
 
 # Web (requires Local Agent in another terminal)
 cargo run -p protovoy-local-agent
-pnpm dev:web
+pnpm dev:web:vite
 
 # CLI smoke test
 cargo run -p protovoy-cli -- http-get https://httpbin.org/get

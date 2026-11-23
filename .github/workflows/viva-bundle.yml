@@ -1,0 +1,90 @@
+name: Viva bundles
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  viva-go:
+    name: Package Viva and Go
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x64
+          - os: macos-14
+            platform: macos-arm64
+          - os: windows-2025
+            platform: windows-x64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/protovoy-go
+    env:
+      BUILD_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('dev-{0}', github.sha) }}
+      ARCHIVE: protovoy-viva-${{ github.ref_type == 'tag' && github.ref_name || github.sha }}-${{ matrix.platform }}.tar.gz
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/protovoy-go/go.mod
+          cache-dependency-path: apps/protovoy-go/go.sum
+      - run: go test -mod=readonly ./...
+      - name: Build native ProtoVoy executables
+        shell: bash
+        run: go build -mod=readonly -trimpath -ldflags "-X protovoy.dev/protovoy/internal/buildinfo.Version=$BUILD_VERSION" -o build/native/ ./cmd/protovoy ./cmd/agent ./cmd/server ./cmd/mock
+      - name: Build the native desktop workbench
+        if: runner.os != 'macOS'
+        run: go build -mod=readonly -trimpath -o build/native/ ./cmd/workbench
+      - name: Package the macOS desktop workbench
+        if: runner.os == 'macOS'
+        run: |
+          go tool viva package --target darwin --format app --no-sign -o build/native/ProtoVoy.app
+      - run: go tool viva build --target web -o build/native/web
+      - name: Archive Viva workbench and Go executables
+        shell: bash
+        run: |
+          cp BUNDLE.md build/native/README.md
+          tar -czf "build/$ARCHIVE" -C build/native .
+      - uses: actions/setup-node@v7
+        if: runner.os == 'Linux'
+        with:
+          node-version: 22
+      - name: Verify the extracted release archive
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          bundle="$(mktemp -d)"
+          trap 'rm -rf -- "$bundle"' EXIT
+          tar -xzf "build/$ARCHIVE" -C "$bundle"
+          suffix=""
+          if [ "$RUNNER_OS" = "Windows" ]; then suffix=".exe"; fi
+          test "$("$bundle/protovoy$suffix" -version)" = "ProtoVoy CLI $BUILD_VERSION"
+          test "$("$bundle/agent$suffix" -version)" = "ProtoVoy Local Agent $BUILD_VERSION"
+          test "$("$bundle/server$suffix" -version)" = "ProtoVoy Web server $BUILD_VERSION"
+          test "$("$bundle/mock$suffix" -version)" = "ProtoVoy Mock Server $BUILD_VERSION"
+          test -s "$bundle/README.md"
+          test -s "$bundle/web/index.html"
+          test -s "$bundle/web/protovoy.wasm"
+          test -s "$bundle/web/wasm_exec.js"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            plutil -lint "$bundle/ProtoVoy.app/Contents/Info.plist"
+            test -x "$bundle/ProtoVoy.app/Contents/MacOS/protovoy"
+          else
+            test -x "$bundle/workbench$suffix"
+          fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            node scripts/smoke-web.mjs "$bundle"
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: protovoy-viva-${{ matrix.platform }}
+          path: apps/protovoy-go/build/${{ env.ARCHIVE }}
+          if-no-files-found: error

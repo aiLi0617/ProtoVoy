@@ -1,0 +1,12 @@
+**
+!go.mod
+!go.sum
+!viva.toml
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+**/.env
+**/.env.*
+**/*.pem
+**/*.key

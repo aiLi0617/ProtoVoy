@@ -8,11 +8,17 @@ on:
     branches: [main]
     paths:
       - "apps/**"
+      - "examples/graphql/typename.query.json"
+      - "deploy/viva.compose.yaml"
+      - "deploy/viva.redis-ca.compose.yaml"
+      - "deploy/viva.env.example"
       - "crates/**"
       - "packages/**"
       - "services/collaboration-server/**"
       - "e2e/**"
       - "scripts/prepare-sidecar.mjs"
+      - "scripts/start.ps1"
+      - ".github/workflows/viva-bundle.yml"
       - "scripts/e2e-server.mjs"
       - "scripts/e2e-smoke-tags.mjs"
       - "scripts/run-e2e.mjs"
@@ -37,11 +43,17 @@ on:
   pull_request:
     paths:
       - "apps/**"
+      - "examples/graphql/typename.query.json"
+      - "deploy/viva.compose.yaml"
+      - "deploy/viva.redis-ca.compose.yaml"
+      - "deploy/viva.env.example"
       - "crates/**"
       - "packages/**"
       - "services/collaboration-server/**"
       - "e2e/**"
       - "scripts/prepare-sidecar.mjs"
+      - "scripts/start.ps1"
+      - ".github/workflows/viva-bundle.yml"
       - "scripts/e2e-server.mjs"
       - "scripts/e2e-smoke-tags.mjs"
       - "scripts/run-e2e.mjs"
@@ -78,6 +90,7 @@ jobs:
     outputs:
       ts: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.ts }}
       rust: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.rust }}
+      go: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.go }}
       e2e: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.e2e }}
       desktop: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.desktop }}
       desktop_pr: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.desktop_pr }}
@@ -116,6 +129,24 @@ jobs:
               - 'apps/local-agent/**'
               - 'apps/protocol-gateway/**'
               - 'apps/desktop/src-tauri/**'
+            go:
+              - 'package.json'
+              - 'scripts/start.ps1'
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/viva-bundle.yml'
+              - 'apps/protovoy-go/**/*.go'
+              - 'apps/protovoy-go/go.mod'
+              - 'apps/protovoy-go/go.sum'
+              - 'apps/protovoy-go/viva.toml'
+              - 'apps/protovoy-go/Dockerfile'
+              - 'apps/protovoy-go/.dockerignore'
+              - 'apps/protovoy-go/scripts/smoke-web.mjs'
+              - 'apps/protovoy-go/BUNDLE.md'
+              - 'deploy/viva.compose.yaml'
+              - 'deploy/viva.redis-ca.compose.yaml'
+              - 'deploy/viva.env.example'
+              - 'examples/graphql/typename.query.json'
+              - 'scripts/validate-changed.mjs'
             e2e:
               - 'package.json'
               - 'pnpm-lock.yaml'
@@ -186,6 +217,323 @@ jobs:
       - name: Run full JavaScript and TypeScript validation
         if: github.event_name != 'pull_request' || needs.changes.outputs.workflow == 'true'
         run: pnpm typecheck && pnpm test
+
+  test-go:
+    needs: changes
+    if: needs.changes.outputs.go == 'true' || needs.changes.outputs.workflow == 'true'
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/protovoy-go
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/protovoy-go/go.mod
+          cache-dependency-path: apps/protovoy-go/go.sum
+      - run: go test -mod=readonly ./...
+      - name: Check the Windows launcher syntax
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ../../scripts/start.ps1), [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count -gt 0) { throw ($parseErrors.Message -join [Environment]::NewLine) }
+      - name: Build native ProtoVoy executables
+        run: go build -mod=readonly -trimpath -o build/native/ ./cmd/protovoy ./cmd/agent ./cmd/server ./cmd/mock
+      - name: Build the native desktop workbench
+        if: runner.os != 'macOS'
+        run: go build -mod=readonly -trimpath -o build/native/ ./cmd/workbench
+      - name: Package the macOS desktop workbench
+        if: runner.os == 'macOS'
+        run: |
+          go tool viva package --target darwin --format app --no-sign -o build/native/ProtoVoy.app
+          plutil -lint build/native/ProtoVoy.app/Contents/Info.plist
+          test -x build/native/ProtoVoy.app/Contents/MacOS/protovoy
+      - name: Build the Viva web distribution
+        run: go tool viva build --target web -o build/native/web
+      - uses: actions/setup-node@v7
+        if: runner.os == 'Linux'
+        with:
+          node-version: 22
+      - name: Test collection assertions in Chrome
+        if: runner.os == 'Linux'
+        timeout-minutes: 3
+        run: node scripts/smoke-web.mjs
+      - name: Test recurring schedules in Chrome
+        if: runner.os == 'Linux'
+        timeout-minutes: 2
+        run: node scripts/smoke-schedules.mjs
+      - name: Archive ProtoVoy executables and web assets
+        shell: bash
+        run: |
+          cp BUNDLE.md build/native/README.md
+          tar -czf build/protovoy-native.tar.gz -C build/native .
+      - name: Smoke test the Viva HTTPS deployment
+        if: runner.os == 'Linux'
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          fixture=$(mktemp -d)
+          compose=(docker compose --project-name protovoy-viva-ci
+            --env-file ../../deploy/viva.env.example -f ../../deploy/viva.compose.yaml)
+          cleanup() {
+            local result=$?
+            if [ "$result" -ne 0 ]; then
+              "${compose[@]}" ps --all || true
+              "${compose[@]}" logs --no-color --tail 80 || true
+            fi
+            "${compose[@]}" down --volumes || true
+            rm -r -- "$fixture"
+            return "$result"
+          }
+          trap cleanup EXIT
+          export PROTOVOY_WEB_USER=fixture
+          export PROTOVOY_VIVA_PASSWORD_FILE="$fixture/web-password"
+          password="$(openssl rand -hex 24)"
+          printf '%s\n' "$password" > "$PROTOVOY_VIVA_PASSWORD_FILE"
+          export PROTOVOY_VIVA_PORT=18443
+          export PROTOVOY_VERSION="ci-$GITHUB_SHA"
+          export PROTOVOY_VIVA_ORIGIN="https://127.0.0.1:$PROTOVOY_VIVA_PORT"
+          export PROTOVOY_VIVA_TLS_CERT="$fixture/cert.pem"
+          export PROTOVOY_VIVA_TLS_KEY="$fixture/key.pem"
+          export PROTOVOY_VIVA_TEAM_DB=/var/lib/protovoy/team.db
+          export PROTOVOY_VIVA_SCHEDULE_DB=/var/lib/protovoy/schedules.db
+          export PROTOVOY_VIVA_SQL_TARGET='sqlite:/var/lib/protovoy/jobs.db?mode=rwc'
+          export PROTOVOY_TEAM_BOOTSTRAP_TOKEN="$(openssl rand -hex 24)"
+          team_password="$(openssl rand -hex 24)"
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
+            -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1 \
+            -keyout "$PROTOVOY_VIVA_TLS_KEY" -out "$PROTOVOY_VIVA_TLS_CERT"
+          # Allow the container UID to read the temporary fixture credentials.
+          chmod 0644 "$PROTOVOY_VIVA_TLS_KEY" "$PROTOVOY_VIVA_PASSWORD_FILE"
+          PROTOVOY_VIVA_REDIS_CA_HOST_FILE="$PROTOVOY_VIVA_TLS_CERT" \
+            "${compose[@]}" -f ../../deploy/viva.redis-ca.compose.yaml config --quiet
+          "${compose[@]}" up --build -d
+          test "$("${compose[@]}" exec -T web /app/protovoy-web -version)" = "ProtoVoy Web server $PROTOVOY_VERSION"
+          curl_tls=(curl --silent --show-error --connect-timeout 3 --max-time 15 --cacert "$PROTOVOY_VIVA_TLS_CERT")
+          request=("${curl_tls[@]}")
+          status=$("${request[@]}" --retry 10 --retry-connrefused --output /dev/null \
+            --write-out '%{http_code}' "$PROTOVOY_VIVA_ORIGIN/protovoy.wasm")
+          test "$status" = 401
+          preview=(--request POST --header 'X-ProtoVoy-Preview: 1' --output /dev/null
+            --write-out '%{http_code}' "$PROTOVOY_VIVA_ORIGIN/api/preview")
+          auth=(--user "$PROTOVOY_WEB_USER:$password")
+          same_origin=(--header "Origin: $PROTOVOY_VIVA_ORIGIN")
+          status=$("${request[@]}" "${preview[@]}" "${same_origin[@]}")
+          test "$status" = 401
+          status=$("${request[@]}" "${preview[@]}" "${auth[@]}")
+          test "$status" = 403
+          status=$("${request[@]}" "${preview[@]}" "${auth[@]}" "${same_origin[@]}")
+          test "$status" = 503
+          request+=(--fail "${auth[@]}")
+          health=$("${request[@]}" --output /dev/null --write-out '%{http_code}' "$PROTOVOY_VIVA_ORIGIN/healthz")
+          test "$health" = 204
+          "${request[@]}" --output "$fixture/index.html" "$PROTOVOY_VIVA_ORIGIN/"
+          grep -q wasm_exec.js "$fixture/index.html"
+          "${request[@]}" --output "$fixture/wasm_exec.js" "$PROTOVOY_VIVA_ORIGIN/wasm_exec.js"
+          test -s "$fixture/wasm_exec.js"
+          mime=$("${request[@]}" --output "$fixture/protovoy.wasm" --write-out '%{content_type}' \
+            "$PROTOVOY_VIVA_ORIGIN/protovoy.wasm")
+          test "$mime" = application/wasm
+          test "$(od -An -tx1 -N4 "$fixture/protovoy.wasm" | tr -d ' \n')" = 0061736d
+          team_api="$PROTOVOY_VIVA_ORIGIN/api/team/v1/auth"
+          team_post=("${curl_tls[@]}" --fail
+            "${same_origin[@]}" --header 'Content-Type: application/json')
+          "${team_post[@]}" --header "X-ProtoVoy-Bootstrap-Token: $PROTOVOY_TEAM_BOOTSTRAP_TOKEN" \
+            --data "{\"email\":\"owner@example.test\",\"password\":\"$team_password\",\"displayName\":\"Owner\",\"organizationName\":\"Team\"}" \
+            --output "$fixture/bootstrap.json" "$team_api/bootstrap"
+          organization=$(jq -er '.organizationId | strings | select(length > 0)' "$fixture/bootstrap.json")
+          sql_request=("${request[@]}" "${same_origin[@]}" --header 'X-ProtoVoy-Preview: 1'
+            --header 'Content-Type: application/json' "$PROTOVOY_VIVA_ORIGIN/api/sql")
+          "${sql_request[@]}" --data '{"sql":"CREATE TABLE jobs (id INTEGER PRIMARY KEY)"}' \
+            --output "$fixture/sql-create.ndjson"
+          grep -q '"type":"completed"' "$fixture/sql-create.ndjson"
+          "${sql_request[@]}" --data '{"sql":"INSERT INTO jobs (id) VALUES (?)","parameters":[42],"transactional":true}' \
+            --output "$fixture/sql-insert.ndjson"
+          grep -q '"lastInsertId":42' "$fixture/sql-insert.ndjson"
+          grep -q '"type":"completed"' "$fixture/sql-insert.ndjson"
+          schedule_request=("${request[@]}" "${same_origin[@]}"
+            --header 'X-ProtoVoy-Scheduler: 1' --header 'Content-Type: application/json')
+          status=$("${curl_tls[@]}" "${same_origin[@]}" --header 'X-ProtoVoy-Scheduler: 1' \
+            --output /dev/null --write-out '%{http_code}' "$PROTOVOY_VIVA_ORIGIN/v1/jobs")
+          test "$status" = 401
+          status=$("${curl_tls[@]}" "${auth[@]}" --header 'Origin: https://other.example.test' \
+            --header 'X-ProtoVoy-Scheduler: 1' --output /dev/null --write-out '%{http_code}' \
+            "$PROTOVOY_VIVA_ORIGIN/v1/jobs")
+          test "$status" = 403
+          jq -n --arg target "$PROTOVOY_VIVA_SQL_TARGET" \
+            '{name:"Persisted SQL schedule",intervalSeconds:10,enabled:false,request:{name:"Scheduled read",url:$target,body:"SELECT id FROM jobs",sql:{rowLimit:100,timeoutMs:2000}}}' \
+            > "$fixture/schedule-create.json"
+          "${schedule_request[@]}" --data-binary "@$fixture/schedule-create.json" \
+            --output "$fixture/schedule-created.json" "$PROTOVOY_VIVA_ORIGIN/v1/jobs"
+          schedule_id=$(jq -er '.id | strings | select(length > 0)' "$fixture/schedule-created.json")
+          jq -e '.enabled == false and .intervalSeconds == 10' "$fixture/schedule-created.json" >/dev/null
+          container=$("${compose[@]}" ps -q web)
+          test -n "$container"
+          "${compose[@]}" stop web
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$container")" = 0
+
+          # Start a fixture on the Compose network, then reuse the built Web image.
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
+            -subj /CN=upstream -addext subjectAltName=DNS:upstream \
+            -keyout "$fixture/redis-key.pem" -out "$fixture/redis-cert.pem"
+          cat > "$fixture/upstream.yaml" <<'EOF'
+          services:
+            upstream:
+              image: python:3.13-alpine
+              environment:
+                REDIS_FIXTURE_PASSWORD: ${REDIS_FIXTURE_PASSWORD:-}
+              volumes:
+                - ${PROTOVOY_VIVA_REDIS_CA_HOST_FILE}:/tls/redis-cert.pem:ro
+                - ${REDIS_FIXTURE_KEY}:/tls/redis-key.pem:ro
+              command:
+                - python
+                - -c
+                - |
+                  from http.server import BaseHTTPRequestHandler, HTTPServer
+                  from socketserver import BaseRequestHandler, ThreadingTCPServer, ThreadingUDPServer
+                  from threading import Thread
+                  import ssl
+                  import os
+                  class TCPEcho(BaseRequestHandler):
+                      def handle(self):
+                          with self.request.makefile("rb") as stream:
+                              self.request.sendall(stream.read(3))
+                  class UDPEcho(BaseRequestHandler):
+                      def handle(self):
+                          data, sock = self.request
+                          sock.sendto(data, self.client_address)
+                  class RedisFixture(BaseRequestHandler):
+                      def handle(self):
+                          self.request.settimeout(5)
+                          self.request.do_handshake()
+                          with self.request.makefile("rb") as stream:
+                              password = os.environ["REDIS_FIXTURE_PASSWORD"].encode("ascii")
+                              expected = [b"*3\r\n", b"$4\r\n", b"AUTH\r\n", b"$6\r\n", b"reader\r\n",
+                                          b"$$" + str(len(password)).encode("ascii") + b"\r\n", password + b"\r\n"]
+                              if [stream.readline(128) for _ in expected] != expected:
+                                  self.request.sendall(b"-WRONGPASS invalid fixture credentials\r\n")
+                                  return
+                              self.request.sendall(b"+OK\r\n")
+                              if [stream.readline(32) for _ in range(5)] != [b"*2\r\n", b"$6\r\n", b"SELECT\r\n", b"$1\r\n", b"2\r\n"]:
+                                  self.request.sendall(b"-ERR expected fixture database\r\n")
+                                  return
+                              self.request.sendall(b"+OK\r\n")
+                              if [stream.readline(32) for _ in range(3)] == [b"*1\r\n", b"$4\r\n", b"PING\r\n"]:
+                                  self.request.sendall(b"+PONG\r\n")
+                  tcp = ThreadingTCPServer(("0.0.0.0", 9001), TCPEcho)
+                  udp = ThreadingUDPServer(("0.0.0.0", 9002), UDPEcho)
+                  redis = ThreadingTCPServer(("0.0.0.0", 6379), RedisFixture)
+                  tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                  tls.load_cert_chain("/tls/redis-cert.pem", "/tls/redis-key.pem")
+                  redis.socket = tls.wrap_socket(redis.socket, server_side=True, do_handshake_on_connect=False)
+                  for server in (tcp, udp, redis):
+                      Thread(target=server.serve_forever, daemon=True).start()
+                  class Fixture(BaseHTTPRequestHandler):
+                      def do_GET(self):
+                          self.send_response(200)
+                          self.end_headers()
+                          self.wfile.write(("upstream received " + self.path).encode())
+                  HTTPServer(("0.0.0.0", 8080), Fixture).serve_forever()
+          EOF
+          export PROTOVOY_VIVA_REDIS_CA_HOST_FILE="$fixture/redis-cert.pem"
+          export REDIS_FIXTURE_KEY="$fixture/redis-key.pem"
+          compose+=(-f ../../deploy/viva.redis-ca.compose.yaml -f "$fixture/upstream.yaml")
+          export PROTOVOY_VIVA_HTTP_TARGET=http://upstream:8080/
+          export PROTOVOY_VIVA_TCP_TARGET=upstream:9001
+          export PROTOVOY_VIVA_UDP_TARGET=upstream:9002
+          export PROTOVOY_VIVA_REDIS_TARGET=upstream:6379
+          export PROTOVOY_VIVA_REDIS_TLS=true
+          export PROTOVOY_VIVA_REDIS_USERNAME=reader
+          export PROTOVOY_VIVA_REDIS_DB=2
+          export PROTOVOY_REDIS_PASSWORD_REF=fixture-redis
+          export REDIS_FIXTURE_PASSWORD="$(openssl rand -hex 24)"
+          export PROTOVOY_REDIS_PASSWORD="$REDIS_FIXTURE_PASSWORD"
+          export PROTOVOY_HTTP_ALLOWED_TARGETS=$'http://upstream:8080/one\nhttp://upstream:8080/two?items=1,2'
+          unset PROTOVOY_TEAM_BOOTSTRAP_TOKEN
+          "${compose[@]}" up -d --force-recreate upstream web
+          test "$("${compose[@]}" ps -q web)" != "$container"
+          "${team_post[@]}" --retry 10 --retry-connrefused \
+            --data "{\"email\":\"owner@example.test\",\"password\":\"$team_password\"}" \
+            --output "$fixture/login.json" "$team_api/login"
+          jq -e --arg organization "$organization" \
+            '.organizationId == $organization and .user.email == "owner@example.test" and (.token | strings | length > 0)' \
+            "$fixture/login.json" >/dev/null
+          "${sql_request[@]}" --data '{"sql":"SELECT id FROM jobs"}' --output "$fixture/sql-read.ndjson"
+          grep -Fq '"rows":[{"id":42}]' "$fixture/sql-read.ndjson"
+          grep -q '"type":"completed"' "$fixture/sql-read.ndjson"
+          "${schedule_request[@]}" --output "$fixture/schedules-restored.json" "$PROTOVOY_VIVA_ORIGIN/v1/jobs"
+          jq -e --arg id "$schedule_id" \
+            'any(.[]; .id == $id and .enabled == false and .name == "Persisted SQL schedule")' \
+            "$fixture/schedules-restored.json" >/dev/null
+          "${schedule_request[@]}" --request PATCH --data '{"enabled":true}' \
+            --output "$fixture/schedule-enabled.json" "$PROTOVOY_VIVA_ORIGIN/v1/jobs/$schedule_id"
+          jq -e '.enabled == true' "$fixture/schedule-enabled.json" >/dev/null
+          for attempt in {1..20}; do
+            "${schedule_request[@]}" --output "$fixture/schedule-results.json" "$PROTOVOY_VIVA_ORIGIN/v1/executions"
+            if jq -e --arg id "$schedule_id" 'any(.[]; .jobId == $id and .success == true)' \
+              "$fixture/schedule-results.json" >/dev/null; then break; fi
+            sleep 1
+          done
+          jq -e --arg id "$schedule_id" 'any(.[]; .jobId == $id and .success == true)' \
+            "$fixture/schedule-results.json" >/dev/null
+          "${schedule_request[@]}" --output "$fixture/schedules-completed.json" "$PROTOVOY_VIVA_ORIGIN/v1/jobs"
+          jq -e --arg id "$schedule_id" \
+            'any(.[]; .id == $id and (.lastExecutionId | strings | length > 0))' \
+            "$fixture/schedules-completed.json" >/dev/null
+          "${schedule_request[@]}" --request PATCH --data '{"enabled":false}' \
+            --output "$fixture/schedule-disabled.json" "$PROTOVOY_VIVA_ORIGIN/v1/jobs/$schedule_id"
+          jq -e '.enabled == false' "$fixture/schedule-disabled.json" >/dev/null
+          status=$("${schedule_request[@]}" --request DELETE --output /dev/null --write-out '%{http_code}' \
+            "$PROTOVOY_VIVA_ORIGIN/v1/jobs/$schedule_id")
+          test "$status" = 204
+          "${schedule_request[@]}" --output "$fixture/schedules-deleted.json" "$PROTOVOY_VIVA_ORIGIN/v1/jobs"
+          jq -e --arg id "$schedule_id" 'all(.[]; .id != $id)' "$fixture/schedules-deleted.json" >/dev/null
+          for attempt in {1..10}; do
+            status=$("${request[@]}" --retry 10 --retry-connrefused --output /dev/null --write-out '%{http_code}' "$PROTOVOY_VIVA_ORIGIN/healthz")
+            test "$status" = 204
+            "${request[@]}" "${same_origin[@]}" --header 'X-ProtoVoy-Preview: 1' \
+              --header 'Content-Type: application/json' \
+              --data '{"method":"GET","expectedTarget":"http://upstream:8080/two?items=1,2"}' \
+              --dump-header "$fixture/upstream-headers" --output "$fixture/upstream-body" "$PROTOVOY_VIVA_ORIGIN/api/preview" && break
+            sleep 1
+          done
+          grep -qi '^X-ProtoVoy-Status: 200' "$fixture/upstream-headers"
+          test "$(cat "$fixture/upstream-body")" = 'upstream received /two?items=1,2'
+          for network in tcp udp; do
+            port=9001
+            if [ "$network" = udp ]; then port=9002; fi
+            body=$(jq -nc --arg network "$network" --arg target "upstream:$port" \
+              '{network:$network,expectedTarget:$target,data:"0001ff",encoding:"hex"} +
+                (if $network == "tcp" then {framing:"fixed",fixedLength:3} else {} end)')
+            "${request[@]}" "${same_origin[@]}" --header 'X-ProtoVoy-Preview: 1' \
+              --header 'Content-Type: application/json' --data "$body" \
+              "$PROTOVOY_VIVA_ORIGIN/api/socket" | jq -e '.dataBase64 == "AAH/"' >/dev/null
+          done
+          "${request[@]}" "${same_origin[@]}" --header 'X-ProtoVoy-Preview: 1' \
+            --header 'Content-Type: application/json' \
+            --data '{"expectedTarget":"upstream:6379","expectedPasswordRef":"fixture-redis","expectedUsername":"reader","expectedDatabase":"2","commands":[["PING"]]}' \
+            "$PROTOVOY_VIVA_ORIGIN/api/redis" | jq -e 'length == 1 and .[0].text == "PONG"' >/dev/null
+          redis_status=$("${curl_tls[@]}" "${auth[@]}" "${same_origin[@]}" \
+            --header 'X-ProtoVoy-Preview: 1' --header 'Content-Type: application/json' \
+            --data '{"expectedTarget":"upstream:6379","expectedPasswordRef":"wrong-ref","commands":[["PING"]]}' \
+            --output /dev/null --write-out '%{http_code}' "$PROTOVOY_VIVA_ORIGIN/api/redis")
+          test "$redis_status" = 400
+          status=$("${curl_tls[@]}" "${auth[@]}" "${same_origin[@]}" \
+            "${preview[@]}" --header 'Content-Type: application/json' \
+            --data '{"method":"GET","expectedTarget":"http://upstream:8080/two?items=3"}')
+          test "$status" = 409
+      - uses: actions/upload-artifact@v7
+        with:
+          name: protovoy-go-native-${{ runner.os }}-${{ runner.arch }}
+          path: apps/protovoy-go/build/protovoy-native.tar.gz
+          if-no-files-found: error
 
   test-e2e:
     needs: changes
@@ -343,6 +691,7 @@ jobs:
     needs:
       - changes
       - test-js
+      - test-go
       - test-e2e
       - test-rust
       - desktop-check

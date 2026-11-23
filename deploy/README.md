@@ -1,5 +1,62 @@
 ﻿# ProtoVoy private deployment
 
+## Viva + Go
+
+Use [viva.compose.yaml](viva.compose.yaml) to serve the browser workbench
+over HTTPS. Copy [viva.env.example](viva.env.example) to `deploy/.env.viva`
+and fill in the HTTPS origin, password file, and certificate paths. From
+the repository root:
+
+```bash
+docker compose --env-file deploy/.env.viva -f deploy/viva.compose.yaml config --quiet
+docker compose --env-file deploy/.env.viva -f deploy/viva.compose.yaml up --build -d
+curl --fail --user operator --output /dev/null --write-out '%{http_code}\n' https://localhost:8443/healthz
+```
+
+Use your configured origin and username in the health check. Curl prompts
+for the password. A ready server returns HTTP 204.
+
+Set `PROTOVOY_VIVA_TEAM_DB=/var/lib/protovoy/team.db` to enable collaboration.
+For SQL request testing with a writable SQLite file, set
+`PROTOVOY_VIVA_SQL_TARGET=sqlite:/var/lib/protovoy/jobs.db?mode=rwc`.
+Use separate files for collaboration and SQL requests. At startup, the
+server rejects overlaps between a file-backed SQLite target and `-team-db`,
+including their SQLite log and shared-memory files. The
+`team-data` volume keeps both files across container replacements.
+See the [Viva deployment guide](../apps/protovoy-go/README.md#docker-compose-deployment)
+for initial team setup, protocol targets, and private CA configuration.
+
+Set `PROTOVOY_VIVA_SCHEDULE_DB=/var/lib/protovoy/schedules.db` to enable
+recurring jobs. `PROTOVOY_VIVA_SCHEDULE_TIMEOUT` defaults to `30s` and accepts
+positive Go durations up to `1h`. The existing `team-data` volume persists the
+schedule database across container replacements. Keep it separate from the
+team database and SQL execution database, including their SQLite sidecars.
+Scheduling remains disabled when the path is empty.
+
+The Go server exposes `GET/POST /v1/jobs`, `PATCH/DELETE /v1/jobs/{id}` and
+`GET /v1/executions`. Requests require the configured HTTPS login and
+`X-ProtoVoy-Scheduler: 1` header. Mutations require the exact configured Origin;
+browser GET requests may instead carry `Sec-Fetch-Site: same-origin` when Origin
+is absent. For example, after setting an
+allowed HTTP target, create a disabled job for review:
+
+```bash
+curl --fail --user operator https://localhost:8443/v1/jobs \
+  -H 'Origin: https://localhost:8443' -H 'X-ProtoVoy-Scheduler: 1' \
+  -H 'Content-Type: application/json' \
+  --data '{"name":"Health check","intervalSeconds":60,"enabled":false,"request":{"method":"GET","url":"https://api.example.com/health"}}'
+```
+
+Replace the URL with an exact configured endpoint. Enable the returned job ID
+with `PATCH /v1/jobs/{id}` and `{"enabled":true}` using the same headers.
+Execution history retains the latest 500 summaries without response contents.
+The Viva **Schedules** panel supports connection, creation from a selected saved
+request, enable/disable, deletion and recent execution summaries. New jobs start
+disabled for review. Desktop users enter the server origin and hosted login;
+browser users connect to the current server using their existing browser login.
+
+## Existing Web stack
+
 This deployment runs the complete Web stack behind one Nginx entry point:
 
 - Web UI at `/`

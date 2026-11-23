@@ -1,0 +1,116 @@
+name: protovoy-viva
+services:
+  web:
+    stop_grace_period: 12s
+    read_only: true
+    build:
+      context: ../apps/protovoy-go
+      args:
+        PROTOVOY_VERSION: ${PROTOVOY_VERSION:-0.1.0-dev}
+    environment:
+      PROTOVOY_HTTP_ALLOWED_TARGETS: ${PROTOVOY_HTTP_ALLOWED_TARGETS:-}
+      PROTOVOY_REDIS_PASSWORD: ${PROTOVOY_REDIS_PASSWORD:-}
+      PROTOVOY_REDIS_PASSWORD_REF: ${PROTOVOY_REDIS_PASSWORD_REF:-}
+      PROTOVOY_MQTT_PASSWORD: ${PROTOVOY_MQTT_PASSWORD:-}
+      PROTOVOY_MQTT_PASSWORD_REF: ${PROTOVOY_MQTT_PASSWORD_REF:-}
+      PROTOVOY_AMQP_PASSWORD: ${PROTOVOY_AMQP_PASSWORD:-}
+      PROTOVOY_AMQP_PASSWORD_REF: ${PROTOVOY_AMQP_PASSWORD_REF:-}
+      PROTOVOY_KAFKA_PASSWORD: ${PROTOVOY_KAFKA_PASSWORD:-}
+      PROTOVOY_KAFKA_PASSWORD_REF: ${PROTOVOY_KAFKA_PASSWORD_REF:-}
+      PROTOVOY_SQL_PASSWORD: ${PROTOVOY_SQL_PASSWORD:-}
+      PROTOVOY_SQL_PASSWORD_REF: ${PROTOVOY_SQL_PASSWORD_REF:-}
+      PROTOVOY_WEB_USER: ${PROTOVOY_WEB_USER:?set PROTOVOY_WEB_USER}
+      PROTOVOY_TEAM_BOOTSTRAP_TOKEN: ${PROTOVOY_TEAM_BOOTSTRAP_TOKEN:-}
+      PROTOVOY_TEAM_OIDC_ISSUER: ${PROTOVOY_TEAM_OIDC_ISSUER:-}
+      PROTOVOY_TEAM_OIDC_CLIENT_ID: ${PROTOVOY_TEAM_OIDC_CLIENT_ID:-}
+      PROTOVOY_TEAM_OIDC_CLIENT_SECRET: ${PROTOVOY_TEAM_OIDC_CLIENT_SECRET:-}
+      PROTOVOY_TEAM_OIDC_ORGANIZATION_ID: ${PROTOVOY_TEAM_OIDC_ORGANIZATION_ID:-}
+      PROTOVOY_TEAM_OIDC_DEFAULT_ROLE: ${PROTOVOY_TEAM_OIDC_DEFAULT_ROLE:-}
+    command:
+      - -listen
+      - 0.0.0.0
+      - -port
+      - "8443"
+      - -public-origin
+      - ${PROTOVOY_VIVA_ORIGIN:?set PROTOVOY_VIVA_ORIGIN}
+      - -tls-cert
+      - /tls/cert.pem
+      - -tls-key
+      - /tls/key.pem
+      - -web-password-file
+      - /run/secrets/web-password
+      - -target
+      - ${PROTOVOY_VIVA_HTTP_TARGET:-}
+      - -websocket-target
+      - ${PROTOVOY_VIVA_WEBSOCKET_TARGET:-}
+      - -tcp-target
+      - ${PROTOVOY_VIVA_TCP_TARGET:-}
+      - -udp-target
+      - ${PROTOVOY_VIVA_UDP_TARGET:-}
+      - -grpc-target
+      - ${PROTOVOY_VIVA_GRPC_TARGET:-}
+      - -redis-target
+      - ${PROTOVOY_VIVA_REDIS_TARGET:-}
+      - -redis-username
+      - ${PROTOVOY_VIVA_REDIS_USERNAME:-}
+      - -redis-db
+      - ${PROTOVOY_VIVA_REDIS_DB:-}
+      - -redis-tls=${PROTOVOY_VIVA_REDIS_TLS:-true}
+      - -redis-server-name
+      - ${PROTOVOY_VIVA_REDIS_SERVER_NAME:-}
+      - -mqtt-target
+      - ${PROTOVOY_VIVA_MQTT_TARGET:-}
+      - -mqtt-username
+      - ${PROTOVOY_VIVA_MQTT_USERNAME:-}
+      - -mqtt-server-name
+      - ${PROTOVOY_VIVA_MQTT_SERVER_NAME:-}
+      - -amqp-target
+      - ${PROTOVOY_VIVA_AMQP_TARGET:-}
+      - -amqp-username
+      - ${PROTOVOY_VIVA_AMQP_USERNAME:-}
+      - -amqp-server-name
+      - ${PROTOVOY_VIVA_AMQP_SERVER_NAME:-}
+      - -kafka-target
+      - ${PROTOVOY_VIVA_KAFKA_TARGET:-}
+      - -kafka-security
+      - ${PROTOVOY_VIVA_KAFKA_SECURITY:-SSL}
+      - -kafka-sasl
+      - ${PROTOVOY_VIVA_KAFKA_SASL:-}
+      - -kafka-username
+      - ${PROTOVOY_VIVA_KAFKA_USERNAME:-}
+      - -sql-target
+      - ${PROTOVOY_VIVA_SQL_TARGET:-}
+      - -sql-username
+      - ${PROTOVOY_VIVA_SQL_USERNAME:-}
+      - -team-db
+      - ${PROTOVOY_VIVA_TEAM_DB:-}
+      - -schedule-db
+      - ${PROTOVOY_VIVA_SCHEDULE_DB:-}
+      - -schedule-timeout
+      - ${PROTOVOY_VIVA_SCHEDULE_TIMEOUT:-30s}
+    ports:
+      - target: 8443
+        published: "${PROTOVOY_VIVA_PORT:-8443}"
+        host_ip: "${PROTOVOY_VIVA_BIND:-127.0.0.1}"
+    volumes:
+      - team-data:/var/lib/protovoy
+      - type: bind
+        source: ${PROTOVOY_VIVA_PASSWORD_FILE:?set PROTOVOY_VIVA_PASSWORD_FILE}
+        target: /run/secrets/web-password
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PROTOVOY_VIVA_TLS_CERT:?set PROTOVOY_VIVA_TLS_CERT}
+        target: /tls/cert.pem
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PROTOVOY_VIVA_TLS_KEY:?set PROTOVOY_VIVA_TLS_KEY}
+        target: /tls/key.pem
+        read_only: true
+        bind:
+          create_host_path: false
+volumes:
+  team-data:

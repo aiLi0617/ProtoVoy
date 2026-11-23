@@ -60,7 +60,15 @@ GraphQL is available via the HTTP workbench GraphQL body mode and a dedicated dr
 
 ## Quick start
 
-### Install the desktop application
+### Run the Viva workbench
+
+The [Viva bundles workflow](.github/workflows/viva-bundle.yml) builds
+`protovoy-viva-<tag>-<platform>.tar.gz` for Windows x64, Linux x64 and macOS arm64.
+Look for the archive and `SHA256SUMS.txt` in releases produced by that workflow.
+Extract it and follow the included README to start the desktop workbench,
+Web server, CLI or Local Agent.
+
+### Tauri installers
 
 Releases are built as GitHub Drafts first, then published after maintainer verification.
 
@@ -84,7 +92,38 @@ For the Web workbench, start the Local Agent (`protovoy-agent`) and pair it from
 
 ## Development
 
+### Viva + Go workbench
+
+Use Go 1.26 or newer. Run these commands from the repository root.
+
+On Windows, `.\scripts\start.ps1` starts the Viva desktop workbench.
+Use `.\scripts\start.ps1 -Mode Release` to build the Go executables into
+`apps/protovoy-go/build/native` and start the compiled workbench.
+Use `.\scripts\start.ps1 -Surface Web` to build and serve the browser
+workbench at `http://127.0.0.1:39300/`. Add `-Mode Release` to run the
+compiled Go server.
+
+```sh
+# Desktop workbench
+go -C apps/protovoy-go run ./cmd/workbench
+
+# Browser workbench
+go -C apps/protovoy-go tool viva build --target web -o build/web
+go -C apps/protovoy-go run ./cmd/server -target http://127.0.0.1:8080/
+```
+
+For the browser example, start your HTTP service on port 8080 and open
+`http://127.0.0.1:39300/`. The Go server forwards requests to the configured
+target. See the [Viva + Go guide](apps/protovoy-go/README.md) for the CLI,
+Local Agent pairing, and [HTTPS deployment](apps/protovoy-go/README.md#docker-compose-deployment).
+
+The root `pnpm dev:desktop` and `pnpm dev:web` scripts also start Viva.
+The Web script serves the workbench on loopback. Pair a Go Local Agent
+or pass the server a fixed execution target.
+
 ### Requirements
+
+The existing TypeScript, Rust and Java applications use the following tools.
 
 - Node.js 22+
 - pnpm 10.27+
@@ -97,22 +136,21 @@ git clone https://github.com/aiLi0617/ProtoVoy.git
 cd ProtoVoy
 pnpm install
 cargo check --workspace
-pnpm dev:desktop
+pnpm dev:desktop:tauri
 ```
 
-On Windows, the repository also includes a one-command bootstrap script. It
-checks the required tools, installs the locked dependencies, compiles the
-desktop application, and starts it:
+On Windows, use the Tauri option of the bootstrap script to develop that
+desktop application:
 
 ```powershell
-powershell -NoProfile -File .\scripts\start.ps1
+powershell -NoProfile -File .\scripts\start.ps1 -Stack Tauri
 ```
 
 To build the release application (including the Local Agent sidecar and the
 Tauri installer) and then launch the release executable:
 
 ```powershell
-powershell -NoProfile -File .\scripts\start.ps1 -Mode Release
+powershell -NoProfile -File .\scripts\start.ps1 -Stack Tauri -Mode Release
 ```
 
 Pass `-SkipInstall` on later runs when the dependencies are already installed.
@@ -120,6 +158,11 @@ Pass `-SkipInstall` on later runs when the dependencies are already installed.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for validation commands and pull request expectations.
 
 ## Downloads
+
+The Viva bundle includes `workbench` or `ProtoVoy.app`, `protovoy`, `agent`,
+`server` and the browser assets under `web/`.
+
+The Tauri and Rust artifacts use these executable names.
 
 | Artifact | Binary | Description |
 |----------|--------|-------------|

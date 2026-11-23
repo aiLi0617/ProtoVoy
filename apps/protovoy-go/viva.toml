@@ -1,0 +1,7 @@
+[app]
+name = "ProtoVoy"
+id = "dev.protovoy.workbench"
+package = "./cmd/workbench"
+
+[web]
+package = "./cmd/workbench"

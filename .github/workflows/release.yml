@@ -186,9 +186,14 @@ jobs:
             dist/protovoy-tools-*.zip
             dist/protovoy-tools-*.tar.gz
 
+  viva-go:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/viva-bundle.yml
+
   publish:
     name: Attach release assets
-    needs: [prepare-release, desktop, agent-cli]
+    needs: [prepare-release, desktop, agent-cli, viva-go]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7

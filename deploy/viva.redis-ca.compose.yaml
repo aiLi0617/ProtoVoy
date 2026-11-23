@@ -1,0 +1,11 @@
+services:
+  web:
+    environment:
+      PROTOVOY_VIVA_REDIS_CA_FILE: /tls/redis-ca.pem
+    volumes:
+      - type: bind
+        source: ${PROTOVOY_VIVA_REDIS_CA_HOST_FILE:?set PROTOVOY_VIVA_REDIS_CA_HOST_FILE}
+        target: /tls/redis-ca.pem
+        read_only: true
+        bind:
+          create_host_path: false
